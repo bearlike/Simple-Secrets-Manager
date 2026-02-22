@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from datetime import datetime, timezone
 
+from Api.serialization import to_iso
 from Engines.common import is_valid_slug
 
 
@@ -27,4 +28,7 @@ class Projects:
         return self._projects.find_one({"slug": slug})
 
     def list(self):
-        return list(self._projects.find({}, {"_id": 0}))
+        docs = list(self._projects.find({}, {"_id": 0}).sort("slug", 1))
+        for doc in docs:
+            doc["created_at"] = to_iso(doc.get("created_at"))
+        return docs

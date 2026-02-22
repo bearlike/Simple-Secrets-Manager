@@ -5,6 +5,10 @@ import hashlib
 import os
 import secrets
 
+from bson import ObjectId
+
+from Api.serialization import oid_to_str, sanitize_doc, to_iso
+
 
 class Tokens:
     def __init__(self, token_auth_col):
@@ -51,11 +55,22 @@ class Tokens:
             "revoked_at": None,
         }
         self._tokens.insert_one(doc)
-        return {"token": plain, "status": "OK", "expires_at": expires_at, "type": token_type}
+        return {"token": plain, "status": "OK", "expires_at": to_iso(expires_at), "type": token_type}
 
-    def revoke(self, token, username=None):
-        token_hash = self._hash_token(token)
-        finder = self._tokens.find_one({"token_hash": token_hash})
+    def _resolve_token_doc(self, token=None, token_id=None):
+        if token_id:
+            try:
+                finder = self._tokens.find_one({"_id": ObjectId(token_id)})
+            except Exception:
+                finder = self._tokens.find_one({"_id": token_id})
+            return finder
+        if token:
+            token_hash = self._hash_token(token)
+            return self._tokens.find_one({"token_hash": token_hash})
+        return None
+
+    def revoke(self, token=None, username=None, token_id=None):
+        finder = self._resolve_token_doc(token=token, token_id=token_id)
         if not finder:
             return {"status": "Token not found"}, 404
         if username and finder.get("subject_user") not in (None, username) and finder.get("created_by") != username:
@@ -64,6 +79,24 @@ class Tokens:
             {"_id": finder["_id"]}, {"$set": {"revoked_at": dt.datetime.utcnow()}}
         )
         return {"status": "OK"}, 200
+
+    def _serialize_token_metadata(self, doc):
+        return {
+            "token_id": oid_to_str(doc.get("_id")),
+            "type": doc.get("type"),
+            "subject_user": doc.get("subject_user"),
+            "subject_service_name": doc.get("subject_service_name"),
+            "scopes": sanitize_doc(doc.get("scopes", [])),
+            "expires_at": to_iso(doc.get("expires_at")),
+            "last_used_at": to_iso(doc.get("last_used_at")),
+            "revoked_at": to_iso(doc.get("revoked_at")),
+            "created_at": to_iso(doc.get("created_at")),
+            "created_by": doc.get("created_by"),
+        }
+
+    def list_tokens(self):
+        cursor = self._tokens.find({}).sort("created_at", -1)
+        return [self._serialize_token_metadata(doc) for doc in cursor]
 
     def authenticate(self, token):
         token_hash = self._hash_token(token)
@@ -78,12 +111,12 @@ class Tokens:
         self._tokens.update_one({"_id": doc["_id"]}, {"$set": {"last_used_at": dt.datetime.utcnow()}})
         actor = {
             "type": "token",
-            "token_id": str(doc["_id"]),
+            "token_id": oid_to_str(doc.get("_id")),
             "token_type": doc.get("type"),
             "subject_user": doc.get("subject_user"),
             "subject_service_name": doc.get("subject_service_name"),
             "scopes": doc.get("scopes", []),
-            "id": str(doc["_id"]),
+            "id": oid_to_str(doc.get("_id")),
         }
         return actor, None
 

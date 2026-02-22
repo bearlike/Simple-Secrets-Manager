@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
+import os
+
 from connection import Connection
-from flask_restx import Api
 from flask import Flask, Blueprint
+from flask_cors import CORS
+from flask_restx import Api
 
 authorizations = {
     "Token": {"type": "apiKey", "in": "header", "name": "X-API-KEY"},
@@ -21,10 +24,18 @@ api = Api(
 app = Flask(__name__)
 app.register_blueprint(api_v1)
 
+cors_origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip()]
+CORS(
+    app,
+    resources={r"/api/*": {"origins": cors_origins or "*"}},
+    allow_headers=["Authorization", "Content-Type", "X-API-KEY"],
+)
+
 if True:
     from Api.resources.secrets.kv_resource import Engine_KV  # noqa: F401
     from Api.resources.auth.tokens_resource import Auth_Tokens  # noqa: F401
     from Api.resources.auth.tokens_v2_resource import (  # noqa: F401
+        ListTokensResource,
         ServiceTokenResource,
         PersonalTokenResource,
         RevokeTokenResource,

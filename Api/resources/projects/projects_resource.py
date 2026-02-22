@@ -40,7 +40,7 @@ class ProjectsResource(Resource):
                 "actor_id": g.actor.get("id"),
                 "token_id": g.actor.get("token_id"),
                 "action": "projects.write",
-                "project_id": str(result.get("_id", "")),
+                "project_slug": result.get("slug"),
                 "method": "POST",
                 "path": "/api/projects",
                 "status_code": 201,

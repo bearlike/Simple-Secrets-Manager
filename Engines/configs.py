@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 
+from Api.serialization import to_iso
 from Engines.common import is_valid_slug
 
 
@@ -43,4 +44,26 @@ class Configs:
         return self._configs.find_one({"_id": config_id})
 
     def list(self, project_id):
-        return list(self._configs.find({"project_id": project_id}, {"_id": 0, "project_id": 0}))
+        docs = list(
+            self._configs.find(
+                {"project_id": project_id},
+                {"_id": 1, "slug": 1, "name": 1, "parent_config_id": 1, "created_at": 1},
+            ).sort("slug", 1)
+        )
+        slug_by_id = {doc["_id"]: doc["slug"] for doc in docs}
+        configs = []
+        for doc in docs:
+            parent_id = doc.get("parent_config_id")
+            parent_slug = slug_by_id.get(parent_id)
+            if parent_id is not None and parent_slug is None:
+                parent_doc = self._configs.find_one({"_id": parent_id, "project_id": project_id}, {"slug": 1})
+                parent_slug = parent_doc.get("slug") if parent_doc else None
+            configs.append(
+                {
+                    "slug": doc["slug"],
+                    "name": doc.get("name") or doc["slug"],
+                    "parentSlug": parent_slug,
+                    "createdAt": to_iso(doc.get("created_at")),
+                }
+            )
+        return configs

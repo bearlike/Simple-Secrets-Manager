@@ -55,10 +55,14 @@ Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was 
    cd simple-secrets-manager
    ```
 
-2. Create a `.env` file in the project root to configure MongoDB connection.
+2. Create a `.env` file in the project root.
 
    ```sh
    CONNECTION_STRING=mongodb://username:password@mongo.hostname:27017
+   TOKEN_SALT=change-me
+   CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+   BIND_HOST=0.0.0.0
+   PORT=5000
    ```
 
 3. **Install dependencies**
@@ -78,3 +82,73 @@ Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was 
 5. **Access the application**: Browse to `http://server_hostname:5000/api` to access the Swagger UI
 
 For user creation and initial setup, see the [First-Time Usage Guide](https://github.com/bearlike/simple-secrets-manager/wiki/First%E2%80%90Time-Usage).
+
+## Environment variables
+
+- `CONNECTION_STRING`: MongoDB connection string.
+- `TOKEN_SALT`: Salt used before hashing API tokens.
+- `CORS_ORIGINS`: Comma-separated list of allowed origins for `/api/*`.
+- `BIND_HOST`: Host interface used by Flask (default `0.0.0.0`).
+- `PORT`: HTTP port used by Flask (default `5000`).
+
+## API examples
+
+Set these first:
+
+```bash
+export BASE_URL="http://localhost:5000/api"
+export TOKEN="<api-token>"
+```
+
+List projects:
+
+```bash
+curl -sS "$BASE_URL/projects" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+List configs in a project:
+
+```bash
+curl -sS "$BASE_URL/projects/my-project/configs" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Export secrets as JSON (with inherited values and metadata):
+
+```bash
+curl -sS "$BASE_URL/projects/my-project/configs/dev/secrets?format=json&include_parent=true&include_meta=true" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+List scoped tokens metadata:
+
+```bash
+curl -sS "$BASE_URL/auth/tokens/v2" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Revoke token by `token_id` (preferred):
+
+```bash
+curl -sS -X POST "$BASE_URL/auth/tokens/v2/revoke" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"token_id":"<token-id>"}'
+```
+
+Revoke token by plaintext token (compatibility):
+
+```bash
+curl -sS -X POST "$BASE_URL/auth/tokens/v2/revoke" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"token":"<plaintext-token>"}'
+```
+
+Read audit events filtered by project/config slugs:
+
+```bash
+curl -sS "$BASE_URL/audit/events?project=my-project&config=dev&since=2026-01-01T00:00:00Z&limit=50" \
+  -H "Authorization: Bearer $TOKEN"
+```

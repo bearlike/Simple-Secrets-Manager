@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from datetime import datetime, timedelta
 
+from flask import g
 from flask_restx import Resource
 
 from Api.api import api, conn
@@ -23,7 +24,8 @@ personal_parser.add_argument("config", type=str, required=False, location="json"
 personal_parser.add_argument("ttl_seconds", type=int, required=False, default=86400, location="json")
 
 revoke_parser = api.parser()
-revoke_parser.add_argument("token", type=str, required=True, location="json")
+revoke_parser.add_argument("token_id", type=str, required=False, location="json")
+revoke_parser.add_argument("token", type=str, required=False, location="json")
 
 
 def _scope_from_request(project_slug, config_slug, actions):
@@ -47,7 +49,7 @@ class ServiceTokenResource(Resource):
         expires_at = datetime.utcnow() + timedelta(seconds=args["ttl_seconds"])
         result = conn.tokens.create_token(
             token_type="service",
-            created_by="system",
+            created_by=g.actor.get("subject_user") or g.actor.get("subject_service_name") or "system",
             subject_service_name=args["service_name"],
             scopes=scopes,
             expires_at=expires_at,
@@ -67,13 +69,22 @@ class PersonalTokenResource(Resource):
         expires_at = datetime.utcnow() + timedelta(seconds=args["ttl_seconds"])
         result = conn.tokens.create_token(
             token_type="personal",
-            created_by="system",
-            subject_user="managed-user",
+            created_by=g.actor.get("subject_user") or g.actor.get("subject_service_name") or "system",
+            subject_user=g.actor.get("subject_user") or "managed-user",
             scopes=scopes,
             expires_at=expires_at,
         )
         audit_event("tokens.create", status_code=201)
         return result, 201
+
+
+@tokens_v2_ns.route("")
+class ListTokensResource(Resource):
+    @api.doc(security=["Bearer", "Token"])
+    @with_token
+    def get(self):
+        require_scope("tokens:manage")
+        return {"tokens": conn.tokens.list_tokens(), "status": "OK"}, 200
 
 
 @tokens_v2_ns.route("/revoke")
@@ -83,8 +94,12 @@ class RevokeTokenResource(Resource):
     def post(self):
         require_scope("tokens:manage")
         args = revoke_parser.parse_args()
-        result, code = conn.tokens.revoke(args["token"])
-        audit_event("tokens.revoke", status_code=code)
+        token = args.get("token")
+        token_id = args.get("token_id")
+        if not token and not token_id:
+            api.abort(400, "Either token_id or token is required")
+        result, code = conn.tokens.revoke(token=token, token_id=token_id)
+        audit_event("tokens.revoke", status_code=code, token_id=token_id)
         if code >= 400:
             api.abort(code, result.get("status"))
         return result, code

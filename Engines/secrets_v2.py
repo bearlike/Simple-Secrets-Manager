@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from datetime import datetime, timezone
 
+from Api.serialization import to_iso
 from Engines.common import is_valid_env_key
 
 
@@ -70,20 +71,26 @@ class SecretsV2:
         chain.reverse()
         return chain, None, None
 
-    def export_config(self, config_id, include_parent=True):
+    def export_config(self, config_id, include_parent=True, include_metadata=False):
         chain = [self._configs.get_by_id(config_id)]
         if chain[0] is None:
-            return None, "Config not found", 404
+            return None, None, "Config not found", 404
         if include_parent:
             chain, err, code = self._resolve_chain(config_id)
             if err:
-                return None, err, code
+                return None, None, err, code
         merged = {}
+        meta = {}
         for cfg in chain:
             cursor = self._secrets.find({"config_id": cfg["_id"]})
             for item in cursor:
                 merged[item["key"]] = SecretCodec.decrypt(item["value_enc"])
-        return merged, "OK", 200
+                if include_metadata:
+                    meta[item["key"]] = {
+                        "updatedAt": to_iso(item.get("updated_at")),
+                        "updatedBy": item.get("updated_by"),
+                    }
+        return merged, meta if include_metadata else None, "OK", 200
 
     @staticmethod
     def to_env(data):

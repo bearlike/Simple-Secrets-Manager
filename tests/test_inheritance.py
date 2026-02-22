@@ -32,7 +32,8 @@ def test_export_merge_child_overrides_parent():
         {"config_id": "child", "key": "C", "value_enc": "3"},
     ]
     engine = SecretsV2(FakeSecrets(docs), FakeConfigs(cfgs))
-    data, msg, code = engine.export_config("child", include_parent=True)
+    data, meta, msg, code = engine.export_config("child", include_parent=True, include_metadata=True)
     assert code == 200
     assert msg == "OK"
     assert data == {"A": "1", "B": "20", "C": "3"}
+    assert meta["B"]["updatedAt"] is None
