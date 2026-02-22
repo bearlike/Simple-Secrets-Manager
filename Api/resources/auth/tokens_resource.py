@@ -35,7 +35,7 @@ tokens_parser.add_argument(
 @tokens_ns.route("/")
 @api.doc(responses={}, params={})
 class Auth_Tokens(Resource):
-    """Token operations"""
+    """Token operations (legacy endpoint, deprecated)"""
 
     @api.doc(
         description="Revoke a given API token",
@@ -49,7 +49,10 @@ class Auth_Tokens(Resource):
         """Revoke a given API token"""
         # TODO: Add support for userpass
         args = tokens_parser.parse_args()
-        return conn.tokens.revoke(username=userpass.current_user(), token=args["token"])
+        result, code = conn.tokens.revoke(username=userpass.current_user(), token=args["token"])
+        if code != 200:
+            api.abort(code, result.get("status"))
+        return result
 
     @api.doc(
         description="Generate a new API token.",
