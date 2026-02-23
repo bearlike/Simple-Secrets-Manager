@@ -11,9 +11,7 @@ Simple Secrets Manager is a lightweight, self-hosted secret manager for teams th
 
 <img height="720" alt="image" src="https://github.com/user-attachments/assets/539016cb-9428-4b3d-8704-31dc474caf65" />
 
-## Product
-
-### What it is for
+## What it is for?
 
 - Store secrets by `project` and `config` (`dev`, `staging`, `prod`, etc.).
 - Inherit values across configs and override only where needed.
@@ -55,31 +53,33 @@ After `uv sync`, the CLI entrypoint is available at `.venv/bin/ssm`.
 Configure base URL and set a token:
 
 ```bash
-.venv/bin/ssm configure --base-url http://localhost:8080/api --profile dev
-.venv/bin/ssm auth set-token --token "<service-or-personal-token>" --profile dev
+uv run ssm configure --base-url http://localhost:8080/api --profile dev
+uv run ssm auth set-token --token "<service-or-personal-token>" --profile dev
 ```
 
 Set directory defaults:
 
 ```bash
-.venv/bin/ssm setup --project my-project --config dev --profile dev
+uv run ssm setup --project my-project --config dev --profile dev
 ```
 
 Run commands with injected secrets:
 
 ```bash
-.venv/bin/ssm run --profile dev -- python app.py
+uv run ssm run --profile dev -- python app.py
 ```
 
 Other useful commands:
 
 ```bash
-.venv/bin/ssm whoami --profile dev
-.venv/bin/ssm secrets download --profile dev --format json
-.venv/bin/ssm secrets mount --profile dev --path /tmp/ssm-secrets.fifo --format json
+uv run ssm whoami --profile dev
+uv run ssm secrets download --profile dev --format json
+uv run ssm secrets mount --profile dev --path /tmp/ssm-secrets.fifo --format json
 ```
 
 Command reference and detailed CLI behavior are documented in [`docs/CLI.md`](docs/CLI.md).
+
+---
 
 ## Contributing
 
