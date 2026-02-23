@@ -57,7 +57,8 @@ Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was 
 
 2. Open:
    - Frontend: `http://localhost:8080`
-   - Backend Swagger: `http://localhost:5000/api`
+   - Backend API (via reverse proxy): `http://localhost:8080/api`
+   - Backend API (direct): `http://localhost:5000/api`
 
 ### Manual Installation
 
@@ -92,7 +93,9 @@ Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was 
    uv run python3 server.py
    ```
 
-5. **Access the application**: Browse to `http://server_hostname:5000/api` to access the Swagger UI
+5. **Access the application**:
+   - Frontend UI: `http://server_hostname:8080`
+   - Backend Swagger UI: `http://server_hostname:5000/api` (or `http://server_hostname:8080/api`)
 
 #### Frontend setup
 
@@ -106,7 +109,7 @@ Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was 
 2. Optionally override API base URL:
 
    ```bash
-   echo "VITE_API_BASE_URL=http://localhost:5000/api" > .env.local
+   echo "VITE_API_BASE_URL=/api" > .env.local
    ```
 
 3. Start frontend dev server:
@@ -149,10 +152,10 @@ For user creation and initial setup, see the [First-Time Usage Guide](https://gi
 
 - `CONNECTION_STRING`: MongoDB connection string.
 - `TOKEN_SALT`: Salt used before hashing API tokens.
-- `CORS_ORIGINS`: Comma-separated list of allowed origins for `/api/*`.
+- `CORS_ORIGINS`: Comma-separated list of allowed origins for `/api/*` when calling backend directly on port `5000`.
 - `BIND_HOST`: Host interface used by Flask (default `0.0.0.0`).
 - `PORT`: HTTP port used by Flask (default `5000`).
-- `VITE_API_BASE_URL`: Frontend API base URL override (`frontend/.env.local`), defaults to `http://localhost:5000/api`.
+- `VITE_API_BASE_URL`: Frontend API base URL override (`frontend/.env.local`), defaults to `/api`.
 
 ## Developer docs
 

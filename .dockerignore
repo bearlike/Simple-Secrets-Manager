@@ -141,6 +141,8 @@ build.sh
 docker-compose.yml
 Dockerfile
 
-# Frontend source is built by its own Dockerfile.
-frontend/
-
+# Frontend build artifacts and local env files
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*

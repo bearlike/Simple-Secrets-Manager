@@ -15,5 +15,5 @@ This folder contains the SSM Admin Console (Vite + React).
 ## Backend integration
 
 - API base URL is controlled by `VITE_API_BASE_URL`.
-- Default API base is `http://localhost:5000/api`.
+- Default API base is `/api`.
 - Auth header expected by backend: `Authorization: Bearer <token>`.

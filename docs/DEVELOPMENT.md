@@ -45,7 +45,7 @@ After completion, onboarding is marked complete in MongoDB and first-time bootst
 ```bash
 cd frontend
 npm install
-echo "VITE_API_BASE_URL=http://localhost:5000/api" > .env.local
+echo "VITE_API_BASE_URL=/api" > .env.local
 npm run dev
 ```
 
@@ -58,7 +58,8 @@ docker compose up -d --build
 ```
 
 - Frontend: `http://localhost:8080`
-- Backend Swagger UI: `http://localhost:5000/api`
+- Backend API via reverse proxy: `http://localhost:8080/api`
+- Backend API direct: `http://localhost:5000/api`
 - MongoDB: `localhost:27017`
 
 Stop:

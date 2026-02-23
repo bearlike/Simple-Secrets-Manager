@@ -3,8 +3,8 @@
 # You have to be logged in to dockerhub before running this script
 # $ docker login -u <username>
 #
-# This script builds and pushes the backend image.
-# Frontend image build script: ./frontend/build.sh
+# This script builds and pushes the unified image
+# (backend API + frontend admin console in one container).
 #
 # We try to follow [SemVer v2.0.0](https://semver.org/)
 VERSION="1.2.1"

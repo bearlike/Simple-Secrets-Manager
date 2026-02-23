@@ -18,10 +18,11 @@ This is a monorepo with:
 - Run frontend checks with:
   - `cd frontend && npm run lint`
   - `cd frontend && npm run build`
-- Frontend talks to backend using `VITE_API_BASE_URL` (defaults to `http://localhost:5000/api`).
+- Frontend talks to backend using `VITE_API_BASE_URL` (defaults to `/api`).
 
 ## Docker workflows
 
 - Full stack: `docker compose up -d --build`
 - Frontend: `http://localhost:8080`
-- Backend Swagger: `http://localhost:5000/api`
+- Backend API via proxy: `http://localhost:8080/api`
+- Backend API direct: `http://localhost:5000/api`

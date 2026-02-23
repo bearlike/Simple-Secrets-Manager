@@ -10,9 +10,9 @@ This app is vendored into the `Simple-Secrets-Manager` monorepo under `frontend/
    ```bash
    npm install
    ```
-2. Set backend API base URL (optional if backend runs on `http://localhost:5000/api`):
+2. Set backend API base URL (optional):
    ```bash
-   echo "VITE_API_BASE_URL=http://localhost:5000/api" > .env.local
+   echo "VITE_API_BASE_URL=/api" > .env.local
    ```
 3. Start the frontend:
    ```bash
@@ -41,7 +41,7 @@ docker run --rm -p 8080:80 ssm-admin-console:local
 The frontend API client uses:
 
 - `VITE_API_BASE_URL` when set
-- otherwise defaults to `http://localhost:5000/api`
+- otherwise defaults to `/api` (same-origin reverse proxy)
 
 All API calls are made relative to that base and include `Authorization: Bearer <token>` when logged in.
 
