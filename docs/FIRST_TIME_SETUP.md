@@ -40,20 +40,20 @@ This creates the first admin account and marks onboarding complete.
 ### Option A: Login from CLI with username/password
 
 ```bash
-uv run ssm configure --base-url http://localhost:8080/api --profile dev
-uv run ssm login --profile dev
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm configure --base-url http://localhost:8080/api --profile dev
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm login --profile dev
 ```
 
 ### Option B: Set existing token
 
 ```bash
-uv run ssm auth set-token --profile dev --token "<token>"
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm auth set-token --profile dev --token "<token>"
 ```
 
 ## Step 5: Verify access
 
 ```bash
-uv run ssm whoami --profile dev
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm whoami --profile dev
 ```
 
 ## Common issues

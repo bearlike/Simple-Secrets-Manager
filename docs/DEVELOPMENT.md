@@ -1,4 +1,8 @@
-# Development Guide
+# Development Details
+
+This document is a deeper engineering reference.
+
+For day-to-day developer onboarding, use [`docs/DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) first.
 
 ## Monorepo overview
 
@@ -92,6 +96,12 @@ uv run ssm --help
 ```
 
 Detailed CLI usage is documented in [`docs/CLI.md`](CLI.md).
+
+UVX distribution smoke check (outside repository path):
+
+```bash
+uvx --from /absolute/path/to/Simple-Secrets-Manager ssm --help
+```
 
 ## Integration smoke checks
 

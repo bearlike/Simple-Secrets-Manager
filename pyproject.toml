@@ -55,4 +55,8 @@ select = ["E", "F"]
 [tool.mypy]
 python_version = "3.9"
 ignore_missing_imports = true
-exclude = ["^\\.venv/"]
+exclude = [
+    "^\\.venv/",
+    "^build/",
+    "^simple_secrets_manager\\.egg-info/",
+]
