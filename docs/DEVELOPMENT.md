@@ -30,6 +30,16 @@ uv run python3 server.py
 curl -sS http://localhost:5000/api
 ```
 
+4. First-time bootstrap (deterministic DB-stamped onboarding):
+
+```bash
+curl -sS -X POST "http://localhost:5000/api/onboarding/bootstrap" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"Str0ng!Passw0rd"}'
+```
+
+After completion, onboarding is marked complete in MongoDB and first-time bootstrap is blocked.
+
 ## Local frontend only
 
 ```bash

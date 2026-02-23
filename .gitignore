@@ -150,3 +150,7 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.env.local
+
+# Frontend source files under src/lib must be versioned.
+!frontend/src/lib/
+!frontend/src/lib/**

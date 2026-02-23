@@ -40,6 +40,10 @@ if True:
         PersonalTokenResource,
         RevokeTokenResource,
     )
+    from Api.resources.auth.onboarding_resource import (  # noqa: F401
+        OnboardingStatusResource,
+        OnboardingBootstrapResource,
+    )
     from Api.resources.projects.projects_resource import ProjectsResource  # noqa: F401
     from Api.resources.configs.configs_resource import ConfigsResource  # noqa: F401
     from Api.resources.secrets.secrets_resource import (  # noqa: F401

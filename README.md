@@ -117,6 +117,14 @@ Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was 
 
 4. Open `http://localhost:5173`.
 
+### First-time setup (deterministic DB-stamped onboarding)
+
+- Open frontend login (`http://localhost:5173` for dev or `http://localhost:8080` for Docker).
+- If the system is not initialized, the login screen automatically switches to an **Initial Setup** wizard.
+- Submit admin username/password once. Backend stamps onboarding state in MongoDB and returns a bootstrap API token.
+- Frontend logs in automatically with that token.
+- On subsequent launches, only token login is shown.
+
 ### Development quality checks
 
 ```bash
@@ -212,4 +220,18 @@ Read audit events filtered by project/config slugs:
 ```bash
 curl -sS "$BASE_URL/audit/events?project=my-project&config=dev&since=2026-01-01T00:00:00Z&limit=50" \
   -H "Authorization: Bearer $TOKEN"
+```
+
+Check onboarding status (no auth):
+
+```bash
+curl -sS "$BASE_URL/onboarding/status"
+```
+
+Bootstrap first admin and token (no auth, first-time only):
+
+```bash
+curl -sS -X POST "$BASE_URL/onboarding/bootstrap" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"Str0ng!Passw0rd"}'
 ```

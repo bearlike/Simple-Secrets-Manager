@@ -14,6 +14,7 @@ from Engines.audit import AuditEvents as _AuditEvents
 
 from Access.tokens import Tokens as _Tokens
 from Access.userpass import User_Pass as _User_Pass
+from Access.onboarding import Onboarding as _Onboarding
 
 
 class __connection:
@@ -33,6 +34,7 @@ class __connection:
 
         self.tokens = _Tokens(self.__auth["tokens"])
         self.userpass = _User_Pass(self.__auth["userpass"])
+        self.onboarding = _Onboarding(self.__auth["system_state"], self.userpass, self.tokens)
 
 
 class Connection(__connection):

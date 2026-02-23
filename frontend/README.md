@@ -20,6 +20,8 @@ This app is vendored into the `Simple-Secrets-Manager` monorepo under `frontend/
    ```
 4. Open the app and sign in with a backend token.
 
+On a fresh backend, the login screen switches to an **Initial Setup** wizard that creates the first admin user and bootstrap token through `/api/onboarding/bootstrap`.
+
 ## Docker
 
 Build image:

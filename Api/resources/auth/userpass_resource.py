@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-import os
-
 from flask_restx import fields, Resource
 
 from Api.api import api, conn
@@ -44,12 +42,20 @@ class Auth_Userpass_register(Resource):
     @api.doc(parser=post_userpass_parser, security=["Bearer", "Token"])
     @api.marshal_with(userpass_model)
     def post(self):
-        open_registration = os.getenv("ALLOW_OPEN_REGISTRATION", "false").lower() == "true"
-        if not open_registration:
+        # Keep legacy endpoint behavior: allow exactly one unauthenticated first-user registration.
+        if conn.onboarding.is_initialized():
             require_token()
             require_scope("users:manage")
         args = post_userpass_parser.parse_args()
-        status, code = conn.userpass.register(username=args["username"], password=args["password"])
+        if conn.onboarding.is_initialized():
+            status, code = conn.userpass.register(username=args["username"], password=args["password"])
+        else:
+            result, code = conn.onboarding.bootstrap(
+                username=args["username"],
+                password=args["password"],
+                issue_token=False,
+            )
+            status = {"status": result.get("status", "OK")}
         if code != 200:
-            api.abort(code, status)
+            api.abort(code, status.get("status") if isinstance(status, dict) else status)
         return status
