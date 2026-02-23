@@ -1,6 +1,13 @@
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRightIcon, DownloadIcon, SettingsIcon } from 'lucide-react';
+import {
+  ChevronRightIcon,
+  DownloadIcon,
+  GithubIcon,
+  MoonIcon,
+  SettingsIcon,
+  SunIcon
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +27,9 @@ import { getProjects } from '../../lib/api/projects';
 import { getConfigs } from '../../lib/api/configs';
 import { bulkExport } from '../../lib/api/secrets';
 import { queryKeys } from '../../lib/api/queryKeys';
+import { useTheme } from '../../lib/theme';
+
+const REPOSITORY_URL = 'https://github.com/bearlike/Simple-Secrets-Manager';
 
 function downloadFile(content: string, filename: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -37,6 +47,7 @@ export function TopBar() {
     configSlug?: string;
   }>();
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
 
   const { data: projects = [] } = useQuery({
     queryKey: queryKeys.projects(),
@@ -122,6 +133,28 @@ export function TopBar() {
           </SelectContent>
         </Select>
       )}
+
+      <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs" asChild>
+        <a
+          href={REPOSITORY_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Open repository on GitHub"
+        >
+          <GithubIcon className="h-3.5 w-3.5" />
+          GitHub
+        </a>
+      </Button>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 p-0 text-muted-foreground"
+        onClick={toggleTheme}
+        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      >
+        {theme === 'dark' ? <SunIcon className="h-3.5 w-3.5" /> : <MoonIcon className="h-3.5 w-3.5" />}
+      </Button>
 
       {projectSlug && (
         <Button

@@ -61,8 +61,8 @@ export function TokensTable({ tokens, onRevoke, revoking, isLoading }: TokensTab
           variant="outline"
           className={
             row.original.type === 'service'
-              ? 'bg-blue-50 text-blue-700 border-blue-200 text-xs'
-              : 'bg-zinc-100 text-zinc-700 border-zinc-200 text-xs'
+              ? 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800 text-xs'
+              : 'bg-secondary text-secondary-foreground border-border text-xs'
           }
         >
           {row.original.type}

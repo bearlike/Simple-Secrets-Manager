@@ -76,8 +76,8 @@ export function TokensPage() {
       )}
 
       {hasListError && (
-        <Alert className="mb-4 border-red-200 bg-red-50">
-          <AlertDescription className="text-red-700">
+        <Alert className="mb-4 border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800">
+          <AlertDescription className="text-red-700 dark:text-red-300">
             Failed to load tokens. You can still create a new token.
           </AlertDescription>
         </Alert>

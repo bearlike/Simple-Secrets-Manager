@@ -144,9 +144,9 @@ export function CreateTokenDialog({ open, onOpenChange, projects }: CreateTokenD
 
         {plaintext ? (
           <div className="space-y-4 pt-2">
-            <Alert className="border-yellow-200 bg-yellow-50">
-              <AlertTriangleIcon className="h-4 w-4 text-yellow-600" />
-              <AlertDescription className="text-yellow-800 text-sm">
+            <Alert className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800">
+              <AlertTriangleIcon className="h-4 w-4 text-yellow-600 dark:text-yellow-300" />
+              <AlertDescription className="text-yellow-800 dark:text-yellow-200 text-sm">
                 This token will only be shown once. Copy it now.
               </AlertDescription>
             </Alert>
@@ -157,7 +157,7 @@ export function CreateTokenDialog({ open, onOpenChange, projects }: CreateTokenD
                 <code className="flex-1 font-mono text-xs break-all text-foreground">{plaintext}</code>
                 <Button variant="outline" size="sm" className="shrink-0 h-7 gap-1.5" onClick={handleCopy}>
                   {copied ? (
-                    <CheckIcon className="h-3.5 w-3.5 text-green-600" />
+                    <CheckIcon className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
                   ) : (
                     <ClipboardIcon className="h-3.5 w-3.5" />
                   )}
