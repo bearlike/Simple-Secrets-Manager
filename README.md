@@ -52,6 +52,18 @@ If `ssm-cli` is not found, ensure uv's tool bin is on `PATH`:
 export PATH="$(uv tool dir --bin):$PATH"
 ```
 
+Already installed? Update to latest:
+
+```bash
+uv tool upgrade simple-secrets-manager
+```
+
+If you installed from Git and want a fresh reinstall:
+
+```bash
+uv tool install --force git+https://github.com/bearlike/Simple-Secrets-Manager.git
+```
+
 ## Authenticate CLI to Your Backend
 
 Set backend URL and token:
@@ -93,3 +105,19 @@ ssm-cli whoami --profile dev
 - First-time setup: [`docs/FIRST_TIME_SETUP.md`](docs/FIRST_TIME_SETUP.md)
 - Container runtime reference: [`docs/README_dockerhub.md`](docs/README_dockerhub.md)
 - Developer docs: [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md)
+
+## Update Existing Deployment
+
+If you run from this repository source:
+
+```bash
+git pull
+docker compose up -d --build
+```
+
+If you run prebuilt images only:
+
+```bash
+docker compose pull
+docker compose up -d
+```

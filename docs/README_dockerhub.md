@@ -40,6 +40,22 @@ Open:
 - backend via proxy: `http://localhost:8080/api`
 - backend direct: `http://localhost:5000/api`
 
+## Update Existing Docker Deployment
+
+If using prebuilt images:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+If running from source and rebuilding locally:
+
+```bash
+git pull
+docker compose up -d --build
+```
+
 CLI from anywhere:
 
 ```bash

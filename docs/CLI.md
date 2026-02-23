@@ -24,6 +24,12 @@ Upgrade later:
 uv tool upgrade simple-secrets-manager
 ```
 
+If installed from Git and you want a fresh reinstall:
+
+```bash
+uv tool install --force git+https://github.com/bearlike/Simple-Secrets-Manager.git
+```
+
 Uninstall:
 
 ```bash

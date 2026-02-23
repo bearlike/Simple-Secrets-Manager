@@ -42,6 +42,12 @@ uv tool update-shell
 ssm-cli --help
 ```
 
+If already installed, update:
+
+```bash
+uv tool upgrade simple-secrets-manager
+```
+
 If needed:
 
 ```bash
