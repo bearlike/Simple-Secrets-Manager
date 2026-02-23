@@ -1,11 +1,12 @@
 # First-Time Setup Guide
 
-This guide walks you through initializing a fresh Simple Secrets Manager deployment using only the API. You’ll skip the front-end completely. We usually recommend the first-time user wizard in the UI, so stick to these instructions only if you're deploying in a restrictive environment where browser access isn't an option.
+This guide initializes a fresh Simple Secrets Manager deployment.
 
 ## Prerequisites
 
-- Backend reachable at `http://localhost:5000/api` or via proxy at `http://localhost:8080/api`
-- MongoDB configured and reachable by the backend
+- Backend reachable at `http://localhost:5000/api` or `http://localhost:8080/api`
+- MongoDB configured and reachable by backend
+- `uv` installed if you want CLI access
 
 ## Step 1: Check onboarding state
 
@@ -13,7 +14,7 @@ This guide walks you through initializing a fresh Simple Secrets Manager deploym
 curl -sS http://localhost:5000/api/onboarding/status
 ```
 
-Expected on a fresh install:
+Expected on fresh install:
 
 ```json
 {"isInitialized": false, "state": "not_initialized"}
@@ -27,44 +28,56 @@ curl -sS -X POST "http://localhost:5000/api/onboarding/bootstrap" \
   -d '{"username":"admin","password":"Str0ng!Passw0rd","issueToken":true}'
 ```
 
-This creates the first admin account and marks onboarding complete.
-
-## Step 3: Sign in from UI (or use the API)
+## Step 3: Sign in from UI
 
 - Open `http://localhost:8080`
-- Use the created username/password
-- Create projects/configs/secrets in the admin console
+- Sign in with created username/password
+- Create projects/configs/secrets
 
-## Step 4: Acquire token for API/CLI use
-
-### Option A: Login from CLI with username/password
+## Step 4: Install CLI (once)
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli configure --base-url http://localhost:8080/api --profile dev
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli login --profile dev
+uv tool install git+https://github.com/bearlike/Simple-Secrets-Manager.git
+uv tool update-shell
+ssm-cli --help
 ```
 
-### Option B: Set existing token
+If needed:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli auth set-token --profile dev --token "<token>"
+export PATH="$(uv tool dir --bin):$PATH"
 ```
 
-## Step 5: Verify access
+## Step 5: Authenticate CLI
+
+Option A: Login with username/password
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli whoami --profile dev
+ssm-cli configure --base-url http://localhost:8080/api --profile dev
+ssm-cli login --profile dev
+```
+
+Option B: Use an existing token
+
+```bash
+ssm-cli auth set-token --profile dev --token "<token>"
+```
+
+## Step 6: Verify access
+
+```bash
+ssm-cli whoami --profile dev
 ```
 
 ## Common issues
 
-- `System already initialized`: bootstrap was already completed.
-- `Missing API token`: login or set token before calling protected endpoints.
-- `Missing scope: <action>`: token does not include required action scope.
-- CLI `env` export fails for multiline values: use JSON format instead.
+- `System already initialized`: bootstrap already completed.
+- `Missing API token`: login or set token first.
+- `Missing scope: <action>`: token lacks required scope.
+- `.env` export fails for multiline values: use JSON format.
 
 ## Security notes
 
-- Tokens should be scoped for least privilege.
-- Prefer service tokens for CI/CD and machine workloads.
-- Rotate/revoke tokens regularly via `/api/auth/tokens/v2/revoke`.
+- Scope tokens with least privilege.
+- Prefer service tokens for CI/CD.
+- Rotate/revoke tokens via `/api/auth/tokens/v2/revoke`.

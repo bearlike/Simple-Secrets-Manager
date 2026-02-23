@@ -40,6 +40,14 @@ Open:
 - backend via proxy: `http://localhost:8080/api`
 - backend direct: `http://localhost:5000/api`
 
+CLI from anywhere:
+
+```bash
+uv tool install git+https://github.com/bearlike/Simple-Secrets-Manager.git
+uv tool update-shell
+ssm-cli --help
+```
+
 ## Minimal compose example
 
 ```yaml

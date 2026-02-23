@@ -57,6 +57,20 @@ Run CLI from source during development:
 uv run ssm-cli --help
 ```
 
+Install CLI globally for manual QA outside repo:
+
+```bash
+uv tool install git+https://github.com/bearlike/Simple-Secrets-Manager.git
+uv tool update-shell
+ssm-cli --help
+```
+
+If needed:
+
+```bash
+export PATH="$(uv tool dir --bin):$PATH"
+```
+
 ## Full stack via Docker Compose
 
 ```bash

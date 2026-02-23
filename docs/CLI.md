@@ -1,38 +1,107 @@
 # CLI Reference
 
-Simple Secrets Manager ships with a Doppler-like CLI implemented with Click + Rich.
+`ssm-cli` is the command-line client for Simple Secrets Manager.
 
-## Install and run with UVX (recommended)
+## 1) Install Once (Recommended)
 
-Run from anywhere without cloning this repository:
+Install globally with uv tools:
+
+```bash
+uv tool install git+https://github.com/bearlike/Simple-Secrets-Manager.git
+uv tool update-shell
+ssm-cli --help
+```
+
+If command is not found in a new shell:
+
+```bash
+export PATH="$(uv tool dir --bin):$PATH"
+```
+
+Upgrade later:
+
+```bash
+uv tool upgrade simple-secrets-manager
+```
+
+Uninstall:
+
+```bash
+uv tool uninstall simple-secrets-manager
+```
+
+## 2) Ephemeral Run (No Install)
+
+Use UVX directly when you do not want a persistent install:
 
 ```bash
 uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli --help
 ```
 
-Pin to a release tag:
+Pin to tag:
 
 ```bash
 uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git@v1.3.0 ssm-cli --help
 ```
 
-Pin to a commit SHA:
+## 3) Quick Start
+
+Configure backend URL:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git@<commit-sha> ssm-cli --help
+ssm-cli configure --base-url http://localhost:8080/api --profile dev
 ```
 
-Local development fallback (inside this repo):
+Authenticate:
 
 ```bash
-uv run ssm-cli --help
+ssm-cli login --profile dev
+# or
+ssm-cli auth set-token --profile dev --token "<token>"
 ```
 
-`ssm` remains available as a backward-compatible alias.
+Set default project/config for current directory:
 
-## Resolution order (DRY/KISS)
+```bash
+ssm-cli setup --project my-project --config dev --profile dev
+```
 
-The CLI resolves values using one deterministic order.
+Run your app with injected secrets:
+
+```bash
+ssm-cli run --profile dev -- python app.py
+```
+
+## Core Commands
+
+Download secrets:
+
+```bash
+ssm-cli secrets download --profile dev --format json
+ssm-cli secrets download --profile dev --format env
+```
+
+Mount secrets to FIFO:
+
+```bash
+ssm-cli secrets mount --profile dev --path /tmp/ssm-secrets.fifo --format json
+```
+
+Validate current session:
+
+```bash
+ssm-cli whoami --profile dev
+```
+
+Profile management:
+
+```bash
+ssm-cli profile list
+ssm-cli profile use dev
+ssm-cli profile set dev --base-url http://localhost:8080/api --project my-project --config dev --activate
+```
+
+## Resolution Order
 
 ### Base URL
 
@@ -62,11 +131,11 @@ The CLI resolves values using one deterministic order.
 2. stored token for `<profile>@<base_url>` in keyring
 3. stored token in file fallback
 
-## Config and credential files
+## File Locations
 
 - Global config: `~/.config/ssm/config.json`
 - Local config: `<current-dir>/.ssm/config.json`
-- Credential fallback: `~/.config/ssm/credentials.json` (mode `0600`)
+- Credential fallback: `~/.config/ssm/credentials.json` (`0600`)
 - Cache: `~/.cache/ssm/secrets/<hash>.json`
 
 Test overrides via env vars:
@@ -76,111 +145,13 @@ Test overrides via env vars:
 - `SSM_CREDENTIALS_FILE`
 - `SSM_CACHE_DIR`
 
-## Authentication
+## Exit Behavior
 
-### Login (username/password)
+- `run` exits with child process exit code.
+- Configuration/auth errors typically exit `2`.
+- Offline cache miss exits `4`.
 
-Uses legacy `GET /api/auth/tokens/` with HTTP Basic auth and stores returned token.
-
-```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli configure --base-url http://localhost:8080/api --profile dev
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli login --profile dev
-```
-
-### Service/personal token (recommended for CI or automation)
-
-```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli auth set-token --profile dev --token "<token>"
-```
-
-### Logout
-
-```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli logout --profile dev
-```
-
-Clear all local token records:
-
-```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli logout --all-profiles
-```
-
-## Project/config setup
-
-Set local defaults for current directory:
-
-```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli setup --project my-project --config dev --profile dev
-```
-
-## Core commands
-
-### Run command with injected secrets
-
-```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli run --profile dev -- python app.py
-```
-
-Useful flags:
-
-- `--offline`: cache-only
-- `--cache-ttl <seconds>`: cache freshness window
-- `--print-env`: print resolved keys
-- `--show-values`: print values (only with `--print-env`)
-
-### Download secrets
-
-```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli secrets download --profile dev --format json
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli secrets download --profile dev --format env
-```
-
-Note: `.env` output fails when any value contains a newline. Use JSON in that case.
-
-### Mount secrets to FIFO
-
-```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli secrets mount --profile dev --path /tmp/ssm-secrets.fifo --format json
-```
-
-- Creates FIFO with `0600` permissions.
-- Writes one payload then removes FIFO unless `--keep` is used.
-
-### Session validation
-
-```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli whoami --profile dev
-```
-
-`whoami` validates token by calling `GET /projects` and reports visible scope behavior.
-
-## Profiles
-
-List profiles:
-
-```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli profile list
-```
-
-Activate profile:
-
-```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli profile use dev
-```
-
-Set profile defaults:
-
-```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli profile set dev --base-url http://localhost:8080/api --project my-project --config dev --activate
-```
-
-## Exit behavior
-
-- `run` exits with the child process exit code.
-- Configuration/auth errors generally use exit code `2`.
-- Offline cache miss uses exit code `4`.
-
-## Local quality checks (for maintainers)
+## Maintainer Checks
 
 ```bash
 ./scripts/quality.sh check

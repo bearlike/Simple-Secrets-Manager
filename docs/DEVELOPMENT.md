@@ -97,7 +97,15 @@ uv run ssm-cli --help
 
 Detailed CLI usage is documented in [`docs/CLI.md`](CLI.md).
 
-UVX distribution smoke check (outside repository path):
+Global CLI install smoke check:
+
+```bash
+uv tool install /absolute/path/to/Simple-Secrets-Manager
+uv tool update-shell
+ssm-cli --help
+```
+
+UVX distribution smoke check (ephemeral, no install):
 
 ```bash
 uvx --from /absolute/path/to/Simple-Secrets-Manager ssm-cli --help
@@ -128,6 +136,7 @@ uv run ssm-cli whoami --profile dev
 
 Container publishing is handled by `.github/workflows/ci.yml`.
 
-- Push to `main` or `feat/v1.3.0` with container/app changes triggers build+push to GHCR.
+- Push to `main` with container/app changes triggers build+push to GHCR.
+- Other branch pushes produce branch-ref tags and short SHA tags.
 - Tag push `vX.Y.Z` additionally publishes semantic tags.
 - Manual dispatch can publish an extra custom tag.
