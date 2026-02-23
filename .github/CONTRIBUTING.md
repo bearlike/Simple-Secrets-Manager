@@ -9,11 +9,16 @@ to the public under the [project's open source license](/LICENSE).
 
 1. [Fork](https://github.com/bearlike/simple-secrets-manager/fork) and clone the repository
 2. Configure and install the dependencies: `uv sync`
-3. Create a new branch: `git checkout -b my-branch-name`
-4. Make your changes
-5. Run quality checks: `uv run ruff check . && uv run ruff format --check . && uv run mypy .`
-6. Push to your fork and [submit a pull request](https://github.com/bearlike/simple-secrets-manager/compare)
-7. Pat your self on the back and wait for your pull request to be reviewed and merged.
+3. Install project hooks: `./scripts/install-git-hooks.sh`
+4. Create a new branch: `git checkout -b my-branch-name`
+5. Make your changes
+6. Run quality checks: `./scripts/quality.sh check` (or `./scripts/quality.sh fix`)
+7. Push to your fork and [submit a pull request](https://github.com/bearlike/simple-secrets-manager/compare)
+8. Pat your self on the back and wait for your pull request to be reviewed and merged.
+
+Installed hooks behavior:
+- `pre-commit` auto-fixes Ruff issues on staged Python files.
+- `pre-push` runs `./scripts/quality.sh fix` and blocks the push if auto-fixes are needed.
 
 Here are a few things you can do that will increase the likelihood of your pull request being accepted:
 

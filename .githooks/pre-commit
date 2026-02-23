@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv is required for hooks. Install uv and retry."
+  exit 1
+fi
+
+mapfile -t STAGED_FILES < <(git diff --cached --name-only --diff-filter=ACMR | grep -E '(\.py$|^pyproject\.toml$)' || true)
+
+if [[ ${#STAGED_FILES[@]} -eq 0 ]]; then
+  exit 0
+fi
+
+echo "pre-commit: auto-fixing lint/style with Ruff for staged files..."
+uv run ruff check --fix "${STAGED_FILES[@]}"
+uv run ruff format "${STAGED_FILES[@]}"
+git add "${STAGED_FILES[@]}"

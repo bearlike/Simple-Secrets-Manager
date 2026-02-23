@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+cd "$REPO_ROOT"
+
+if ! command -v uv >/dev/null 2>&1; then
+  echo "uv is required for hooks. Install uv and retry."
+  exit 1
+fi
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "pre-push: working tree must be clean before push."
+  echo "Commit or stash your changes, then push again."
+  exit 1
+fi
+
+echo "pre-push: running full quality gate (lint/type/tests)..."
+./scripts/quality.sh fix
+
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  echo "pre-push: Ruff applied fixes."
+  echo "Review and commit these changes before pushing:"
+  git --no-pager diff --name-only
+  exit 1
+fi

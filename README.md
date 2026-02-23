@@ -82,11 +82,20 @@ Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was 
 ### Development quality checks
 
 ```bash
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy .
-uv run pytest -q
+./scripts/quality.sh check
+# or auto-fix lint/style first, then type-check and test
+./scripts/quality.sh fix
 ```
+
+### Git hooks (auto lint/test before push)
+
+```bash
+./scripts/install-git-hooks.sh
+```
+
+After installation:
+- `pre-commit` auto-fixes Ruff issues on staged Python files.
+- `pre-push` runs full lint/type/test gates and blocks push if fixes are required.
 
 For user creation and initial setup, see the [First-Time Usage Guide](https://github.com/bearlike/simple-secrets-manager/wiki/First%E2%80%90Time-Usage).
 

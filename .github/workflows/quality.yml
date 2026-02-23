@@ -1,14 +1,9 @@
 name: Quality checks
 
 on:
-  push:
-    branches:
-      - "**"
-    paths-ignore:
-      - "docs/**"
   pull_request:
-    paths-ignore:
-      - "docs/**"
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 jobs:
   quality:
@@ -29,14 +24,13 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Ruff lint
-        run: uv run ruff check .
+      - name: Run quality command
+        run: ./scripts/quality.sh fix
 
-      - name: Ruff format check
-        run: uv run ruff format --check .
-
-      - name: MyPy
-        run: uv run mypy .
-
-      - name: Tests
-        run: uv run pytest -q
+      - name: Fail if auto-fixes were needed
+        run: |
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            echo "Ruff auto-fixed files in CI. Run './scripts/quality.sh fix' locally and commit the changes."
+            git --no-pager diff --name-only
+            exit 1
+          fi
