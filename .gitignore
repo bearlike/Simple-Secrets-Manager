@@ -144,3 +144,9 @@ cython_debug/
 # IDE Configurations
 .idea/
 .vscode/
+
+# Frontend workspace artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local

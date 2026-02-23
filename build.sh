@@ -3,6 +3,9 @@
 # You have to be logged in to dockerhub before running this script
 # $ docker login -u <username>
 #
+# This script builds and pushes the backend image.
+# Frontend image build script: ./frontend/build.sh
+#
 # We try to follow [SemVer v2.0.0](https://semver.org/)
 VERSION="1.2.1"
 IMAGE_NAME="ghcr.io/bearlike/simple-secrets-manager"

@@ -12,7 +12,9 @@ to the public under the [project's open source license](/LICENSE).
 3. Install project hooks: `./scripts/install-git-hooks.sh`
 4. Create a new branch: `git checkout -b my-branch-name`
 5. Make your changes
-6. Run quality checks: `./scripts/quality.sh check` (or `./scripts/quality.sh fix`)
+6. Run quality checks:
+   - Backend: `./scripts/quality.sh check` (or `./scripts/quality.sh fix`)
+   - Frontend: `cd frontend && npm run lint && npm run build`
 7. Push to your fork and [submit a pull request](https://github.com/bearlike/simple-secrets-manager/compare)
 8. Pat your self on the back and wait for your pull request to be reviewed and merged.
 

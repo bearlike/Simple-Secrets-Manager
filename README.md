@@ -10,6 +10,13 @@
 Secure storage, and delivery for tokens, passwords, API keys, and other secrets using HTTP API, Swagger UI or Python Package.
 > `TL;DR`: Poor Man's Hashi Corp Vault
 
+## Monorepo layout
+
+This repository now contains:
+
+- Backend API (Flask + MongoDB) at repository root.
+- Frontend Admin Console (Vite + React) at `frontend/`.
+
 ## Why does this exist?
 
 Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was heavy and non-portable (atleast difficult) for my homelab setup. So I wanted to build a Secrets Manager intended for small scale setups that could also scale well.
@@ -42,11 +49,19 @@ Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was 
 
 ### Automated Install: [`docker-compose`](https://docs.docker.com/compose/install/) (Recommended)
 
-1. Run the [stack](docker-compose.yml) by executing `docker-compose up -d`.
+1. Run the full stack:
+
+   ```bash
+   docker compose up -d --build
+   ```
+
+2. Open:
+   - Frontend: `http://localhost:8080`
+   - Backend Swagger: `http://localhost:5000/api`
 
 ### Manual Installation
 
-#### Setup Steps
+#### Backend setup
 
 1. **Clone repository**
 
@@ -60,7 +75,7 @@ Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was 
    ```sh
    CONNECTION_STRING=mongodb://username:password@mongo.hostname:27017
    TOKEN_SALT=change-me
-   CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+   CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080
    BIND_HOST=0.0.0.0
    PORT=5000
    ```
@@ -78,6 +93,29 @@ Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was 
    ```
 
 5. **Access the application**: Browse to `http://server_hostname:5000/api` to access the Swagger UI
+
+#### Frontend setup
+
+1. Install frontend dependencies:
+
+   ```bash
+   cd frontend
+   npm install
+   ```
+
+2. Optionally override API base URL:
+
+   ```bash
+   echo "VITE_API_BASE_URL=http://localhost:5000/api" > .env.local
+   ```
+
+3. Start frontend dev server:
+
+   ```bash
+   npm run dev
+   ```
+
+4. Open `http://localhost:5173`.
 
 ### Development quality checks
 
@@ -106,6 +144,13 @@ For user creation and initial setup, see the [First-Time Usage Guide](https://gi
 - `CORS_ORIGINS`: Comma-separated list of allowed origins for `/api/*`.
 - `BIND_HOST`: Host interface used by Flask (default `0.0.0.0`).
 - `PORT`: HTTP port used by Flask (default `5000`).
+- `VITE_API_BASE_URL`: Frontend API base URL override (`frontend/.env.local`), defaults to `http://localhost:5000/api`.
+
+## Developer docs
+
+- Backend quality gates: `./scripts/quality.sh check`
+- Frontend quality gates: `cd frontend && npm run lint && npm run build`
+- Full guide: `docs/DEVELOPMENT.md`
 
 ## API examples
 
