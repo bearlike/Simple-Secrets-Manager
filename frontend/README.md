@@ -50,7 +50,7 @@ All API calls are made relative to that base and include `Authorization: Bearer 
 
 ## Local Backend + Frontend Workflow
 
-1. Start `Simple-Secrets-Manager` backend (branch `feat/v1.2.0`) on `localhost:5000`.
+1. Start `Simple-Secrets-Manager` backend (branch `feat/v1.3.0`) on `localhost:5000`.
 2. Confirm backend routes are available under `/api`.
 3. Start this frontend with `npm run dev`.
 4. In browser, log in with a valid token and verify:
