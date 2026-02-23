@@ -1,0 +1,36 @@
+name: Quality checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+jobs:
+  quality:
+    name: Ruff, MyPy, and tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run quality command
+        run: ./scripts/quality.sh fix
+
+      - name: Fail if auto-fixes were needed
+        run: |
+          if ! git diff --quiet || ! git diff --cached --quiet; then
+            echo "Ruff auto-fixed files in CI. Run './scripts/quality.sh fix' locally and commit the changes."
+            git --no-pager diff --name-only
+            exit 1
+          fi

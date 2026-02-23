@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 # Key-Value (KV) Secrets Engines API Resource
 from flask_restx import fields, Resource
-from flask import request
 from Api.api import api, conn
-from Access.is_auth import abort_if_authorization_fail
+from Access.is_auth import require_token
 
 # KV Namespace
 kv_ns = api.namespace(
@@ -60,8 +59,7 @@ class Engine_KV(Resource):
     def put(self, path, key):
         """Update a given resource"""
         args = kv_parser.parse_args()
-        API_KEY = request.headers.get("X-API-KEY", type=str, default=None)
-        abort_if_authorization_fail(API_KEY)
+        require_token()
         status, code = conn.kv.update(path, key, args["value"])
         if code != 200:
             api.abort(code, status)
@@ -75,8 +73,7 @@ class Engine_KV(Resource):
     )
     def delete(self, path, key):
         """Delete a given kv"""
-        API_KEY = request.headers.get("X-API-KEY", type=str, default=None)
-        abort_if_authorization_fail(API_KEY)
+        require_token()
         status, code = conn.kv.delete(path, key)
         if code != 200:
             api.abort(code, status)
@@ -88,8 +85,7 @@ class Engine_KV(Resource):
     def post(self, path, key):
         """Add a new kv to a path"""
         args = kv_parser.parse_args()
-        API_KEY = request.headers.get("X-API-KEY", type=str, default=None)
-        abort_if_authorization_fail(API_KEY)
+        require_token()
         status, code = conn.kv.add(path, key, args["value"])
         if code != 200:
             api.abort(code, status)
@@ -100,8 +96,7 @@ class Engine_KV(Resource):
     @api.marshal_with(kv_model)
     def get(self, path, key):
         """Fetch a given KV from a path"""
-        API_KEY = request.headers.get("X-API-KEY", type=str, default=None)
-        abort_if_authorization_fail(API_KEY)
+        require_token()
         status, code = conn.kv.get(path, key)
         if code != 200:
             api.abort(code, str(status))

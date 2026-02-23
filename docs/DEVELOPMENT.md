@@ -1,0 +1,107 @@
+# Development Guide
+
+## Monorepo overview
+
+- Backend API: repository root (`server.py`, `Api/`, `Engines/`, `Access/`)
+- Frontend Admin Console: `frontend/`
+
+## Local backend only
+
+1. Create `.env` in repo root:
+
+```bash
+CONNECTION_STRING=mongodb://root:password@localhost:27017
+TOKEN_SALT=change-me
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+BIND_HOST=0.0.0.0
+PORT=5000
+```
+
+2. Start backend:
+
+```bash
+uv sync
+uv run python3 server.py
+```
+
+3. Verify:
+
+```bash
+curl -sS http://localhost:5000/api
+```
+
+4. First-time bootstrap (deterministic DB-stamped onboarding):
+
+```bash
+curl -sS -X POST "http://localhost:5000/api/onboarding/bootstrap" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"Str0ng!Passw0rd"}'
+```
+
+After completion, onboarding is marked complete in MongoDB and first-time bootstrap is blocked.
+
+## Local frontend only
+
+```bash
+cd frontend
+npm install
+echo "VITE_API_BASE_URL=/api" > .env.local
+npm run dev
+```
+
+Open `http://localhost:5173`.
+
+## Full stack with Docker Compose
+
+```bash
+docker compose up -d --build
+```
+
+- Frontend: `http://localhost:8080`
+- Backend API via reverse proxy: `http://localhost:8080/api`
+- Backend API direct: `http://localhost:5000/api`
+- MongoDB: `localhost:27017`
+
+Stop:
+
+```bash
+docker compose down
+```
+
+## Quality checks
+
+Backend:
+
+```bash
+./scripts/quality.sh check
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm run lint
+npm run build
+```
+
+## Integration smoke checks
+
+Backend health endpoint (Swagger index):
+
+```bash
+curl -sS http://localhost:5000/api | head
+```
+
+Frontend HTTP check:
+
+```bash
+curl -sS -I http://localhost:8080
+```
+
+## CI publish flow
+
+Container publishing is handled by `.github/workflows/ci.yml`.
+
+- Push to `main` or `feat/v1.3.0` with container/app changes triggers build+push to GHCR.
+- Tag push `vX.Y.Z` additionally publishes semantic tags.
+- Manual dispatch can publish an extra custom tag.

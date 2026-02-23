@@ -1,8 +1,0 @@
-# Exported from Poetry from `pyproject.toml`
-# on Wednesday, April 9, 2025 @ 04:42:44 PM
-
-python-dotenv (>=1.1.0,<2.0.0)
-loguru (>=0.7.3,<0.8.0)
-flask-httpauth (>4,<5)
-flask-restx (>=0.5.1)
-pymongo (>4,<5)

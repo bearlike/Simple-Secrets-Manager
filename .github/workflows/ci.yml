@@ -1,24 +1,37 @@
-name: Build and deploy multiarch image
+name: Build and publish unified Docker image
 
 on:
   push:
+    branches:
+      - main
+      - feat/v1.3.0
     tags:
       - "v*"
-    paths-ignore:
-      - "docs/**"
-  release:
-    types: [published]
+    paths:
+      - ".github/workflows/ci.yml"
+      - "Dockerfile"
+      - "docker/**"
+      - "frontend/**"
+      - "Api/**"
+      - "Access/**"
+      - "Engines/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - "server.py"
+      - "connection.py"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag for the Docker image"
-        required: true
-        default: "latest"
+        description: "Optional extra Docker tag to publish (for example: staging)"
+        required: false
 
 jobs:
   docker:
     name: Build and push image
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,31 +49,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract version information
-        id: version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION_FULL="${{ github.event.inputs.tag }}"
-            # Remove 'v' prefix if present
-            VERSION_FULL=${VERSION_FULL#v}
-          elif [ "${{ github.event_name }}" = "release" ]; then
-            VERSION_FULL="${{ github.event.release.tag_name }}"
-            # Remove 'v' prefix if present
-            VERSION_FULL=${VERSION_FULL#v}
-          else
-            # Extract from git tag
-            VERSION_FULL=${GITHUB_REF#refs/tags/v}
-          fi
-
-          # Split version into parts
-          IFS='.' read -r VERSION_MAJOR VERSION_MINOR VERSION_PATCH <<< "$VERSION_FULL"
-          VERSION_SHORT="$VERSION_MAJOR.$VERSION_MINOR"
-
-          echo "VERSION_FULL=$VERSION_FULL" >> $GITHUB_OUTPUT
-          echo "VERSION_SHORT=$VERSION_SHORT" >> $GITHUB_OUTPUT
-          echo "VERSION_MAJOR=$VERSION_MAJOR" >> $GITHUB_OUTPUT
-
-          echo "Versions: Full=$VERSION_FULL, Short=$VERSION_SHORT, Major=$VERSION_MAJOR"
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/bearlike/simple-secrets-manager
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=sha,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '' }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -68,6 +69,9 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/bearlike/simple-secrets-manager:latest,ghcr.io/bearlike/simple-secrets-manager:${{ steps.version.outputs.VERSION_FULL }},ghcr.io/bearlike/simple-secrets-manager:${{ steps.version.outputs.VERSION_SHORT }},ghcr.io/bearlike/simple-secrets-manager:${{ steps.version.outputs.VERSION_MAJOR }}
+          build-args: |
+            VITE_API_BASE_URL=/api
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

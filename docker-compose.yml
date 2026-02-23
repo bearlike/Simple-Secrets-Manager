@@ -1,8 +1,8 @@
 # To start stack:
-# $ docker-compose run -d
+# $ docker compose up -d --build
 #
 # To stop stack:
-# $ docker-compose down
+# $ docker compose down
 volumes:
   mongo_data:
 
@@ -24,18 +24,24 @@ services:
     networks:
       - app-tier
 
-  ssm-app:
+  ssm:
     image: ghcr.io/bearlike/simple-secrets-manager:latest
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: /api
     restart: always
     depends_on:
       - mongo
     ports:
+      - "8080:8080"
       - "5000:5000"
     environment:
       CONNECTION_STRING: mongodb://root:password@mongo:27017
+      TOKEN_SALT: docker-local-dev
+      CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:5000,http://127.0.0.1:5000
+      BIND_HOST: 0.0.0.0
       PORT: 5000
     networks:
       - app-tier

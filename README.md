@@ -7,74 +7,161 @@
     <a href="https://github.com/bearlike/simple-secrets-manager/wiki/First%E2%80%90Time-Usage"><img alt="Documentation" src="https://img.shields.io/badge/Wiki-docs-informational?logo=github"></a>
 </p>
 
-Secure storage, and delivery for tokens, passwords, API keys, and other secrets using HTTP API, Swagger UI or Python Package.
-> `TL;DR`: Poor Man's Hashi Corp Vault
+Simple Secrets Manager is a lightweight, self-hosted secret manager for teams that need clean project/config-based secret organization without enterprise overhead.
 
-## Why does this exist?
+<img height="720" alt="image" src="https://github.com/user-attachments/assets/539016cb-9428-4b3d-8704-31dc474caf65" />
 
-Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was heavy and non-portable (atleast difficult) for my homelab setup. So I wanted to build a Secrets Manager intended for small scale setups that could also scale well.
+## Product
 
-## Goals
+### What it is for
 
-- A lightweight system that sucks less power out of the wall. Therefore, minimal background jobs and reduced resource utilizations.
-- Should be compatible on both `x86-64` and `arm64v8` (mainly Raspberry Pi 4).
-- High stability, availability and easy scalability.
+- Store secrets by `project` and `config` (`dev`, `staging`, `prod`, etc.).
+- Inherit values across configs and override only where needed.
+- Manage values from UI or API.
+- Use username/password for humans and scoped tokens for automation.
 
-## Available secret engines
+### Quick start (Docker)
 
-| Secret Engine | Description                                           |
-|---------------|-------------------------------------------------------|
-| `kv`          | Key-Value engine is used to store arbitrary secrets.  |
+```bash
+docker compose up -d --build
+```
 
-## Available authentication methods
+Open:
 
-| Auth Methods      | Description                                                               |
-|-------------------|---------------------------------------------------------------------------|
-| `userpass`        | Allows users to authenticate using a username and password combination.   |
-| `token`           | Allows users to authenticate using a token. Token generation requires users to be authenticated via `userpass`                               |
+- Frontend: `http://localhost:8080`
+- Backend API (proxy): `http://localhost:8080/api`
+- Backend API (direct): `http://localhost:5000/api`
 
-## Future
+### First-time setup
 
-- Secret engines for certificates (PKI), SSH and databases.
-- Encrypting secrets before writing to a persistent storage, so gaining access to the raw storage isn't enough to access your secrets.
+- On a fresh install, login shows initial setup.
+- Create the first admin username/password.
+- Then sign in with username/password and start creating projects/configs/secrets.
 
-## Getting started
+For full onboarding screens and flow, see the [First-Time Usage Guide](https://github.com/bearlike/simple-secrets-manager/wiki/First%E2%80%90Time-Usage).
 
-### Automated Install: [`docker-compose`](https://docs.docker.com/compose/install/) (Recommended)
+### Standard usage flow
 
-1. Run the [stack](docker-compose.yml) by executing `docker-compose up -d`.
+1. Create a project.
+2. Create one or more configs.
+3. Add secrets manually or import a `.env` file from the config page.
+4. Export secrets in JSON or `.env` format when needed.
+5. Create scoped tokens for services and CI/CD.
 
-### Manual Installation
+## Contributing
 
-#### Setup Steps
+### Prerequisites
 
-1. **Clone repository**
+- Docker + Docker Compose
+- Python + `uv`
+- Node.js + npm
 
-   ```bash
-   git clone --depth 1 https://github.com/bearlike/simple-secrets-manager
-   cd simple-secrets-manager
-   ```
+### Local backend setup
 
-2. Create a `.env` file in the project root to configure MongoDB connection.
+```bash
+git clone --depth 1 https://github.com/bearlike/simple-secrets-manager
+cd simple-secrets-manager
+```
 
-   ```sh
-   CONNECTION_STRING=mongodb://username:password@mongo.hostname:27017
-   ```
+Create `.env` at repository root:
 
-3. **Install dependencies**
+```bash
+CONNECTION_STRING=mongodb://username:password@mongo.hostname:27017
+TOKEN_SALT=change-me
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080
+BIND_HOST=0.0.0.0
+PORT=5000
+```
 
-   ```bash
-   pip3 install -r requirements.txt
-   # Or if using Poetry
-   poetry install
-   ```
+Run backend:
 
-4. **Start the server**
+```bash
+uv sync
+uv run python3 server.py
+```
 
-   ```bash
-   python3 server.py
-   ```
+### Local frontend setup
 
-5. **Access the application**: Browse to `http://server_hostname:5000/api` to access the Swagger UI
+```bash
+cd frontend
+npm install
+echo "VITE_API_BASE_URL=/api" > .env.local
+npm run dev
+```
 
-For user creation and initial setup, see the [First-Time Usage Guide](https://github.com/bearlike/simple-secrets-manager/wiki/First%E2%80%90Time-Usage).
+Open `http://localhost:5173`.
+
+### Quality checks
+
+Backend:
+
+```bash
+./scripts/quality.sh check
+```
+
+Frontend:
+
+```bash
+cd frontend
+npm run lint
+npm run build
+```
+
+### Developer docs
+
+- Full development guide: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
+- Frontend notes: [`frontend/README.md`](frontend/README.md)
+
+## Supplementary Reference
+
+### Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `CONNECTION_STRING` | MongoDB connection string. |
+| `TOKEN_SALT` | Salt used before hashing API tokens. |
+| `CORS_ORIGINS` | Comma-separated allowed origins for direct backend access on port `5000`. |
+| `BIND_HOST` | Flask bind host (default `0.0.0.0`). |
+| `PORT` | Flask port (default `5000`). |
+| `VITE_API_BASE_URL` | Frontend API base URL override (`frontend/.env.local`), defaults to `/api`. |
+
+### API examples
+
+Set variables:
+
+```bash
+export BASE_URL="http://localhost:5000/api"
+export TOKEN="<api-token>"
+```
+
+List projects:
+
+```bash
+curl -sS "$BASE_URL/projects" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+List configs in a project:
+
+```bash
+curl -sS "$BASE_URL/projects/my-project/configs" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Export secrets (with inherited values and metadata):
+
+```bash
+curl -sS "$BASE_URL/projects/my-project/configs/dev/secrets?format=json&include_parent=true&include_meta=true" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Revoke a token by `token_id`:
+
+```bash
+curl -sS -X POST "$BASE_URL/auth/tokens/v2/revoke" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"token_id":"<token-id>"}'
+```
+
+Container runtime reference: [`docs/README_dockerhub.md`](docs/README_dockerhub.md)

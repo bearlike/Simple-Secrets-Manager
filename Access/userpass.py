@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """User-Pass authentication for Secrets Manager"""
+
 from werkzeug.security import generate_password_hash, check_password_hash
 from bson.timestamp import Timestamp
 from textwrap import dedent
@@ -25,11 +26,11 @@ class _password_policy:
 
     def __repr__(self):
         policy_str = f"""
-        (1) Minimum of { self.length } characters in length.
-        (2) Must have at least { self.lowercase } lowercase characters.
-        (3) Must have at least { self.uppercase }uppercase characters.
-        (4) Must have at least { self.numbers } numbers.
-        (5) Must have at least { self.special } special characters.
+        (1) Minimum of {self.length} characters in length.
+        (2) Must have at least {self.lowercase} lowercase characters.
+        (3) Must have at least {self.uppercase}uppercase characters.
+        (4) Must have at least {self.numbers} numbers.
+        (5) Must have at least {self.special} special characters.
         """
         policy_str = dedent(policy_str).replace("\n", " ")
         return policy_str
@@ -73,10 +74,10 @@ class User_Pass:
         """
         # Username policy check
         if not re.fullmatch(self.p_pol.uname_pat, username):
-            return f"Username does not match { self.p_pol.uname_pat }", 400
+            return f"Username does not match {self.p_pol.uname_pat}", 400
         # Password policy check
         if not self.p_pol.check(password):
-            return f"Password policy not met. { self.p_pol }", 400
+            return f"Password policy not met. {self.p_pol}", 400
         finder = self._userpass.find_one({"username": username})
         if not finder:
             password = generate_password_hash(password, method="pbkdf2:sha256")

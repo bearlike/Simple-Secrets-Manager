@@ -36,11 +36,12 @@ def strtobool(val: str) -> bool:
 def init_app():
     from Api.api import app
 
+    debug_enabled = strtobool(os.getenv("DEBUG", "False"))
     app.run(
-        debug=strtobool(os.getenv("DEBUG", "False")),
+        debug=debug_enabled,
         host=os.environ.get("BIND_HOST", "0.0.0.0"),
         port=os.environ.get("PORT", 5000),
-        use_reloader=True,
+        use_reloader=debug_enabled,
     )
 
 

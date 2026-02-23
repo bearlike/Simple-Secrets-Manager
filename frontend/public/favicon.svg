@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="SSM Favicon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f766e" />
+      <stop offset="100%" stop-color="#0b1220" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)" />
+  <path d="M32 14c-7.2 0-13 5.8-13 13v4h-3a2 2 0 0 0-2 2v15a2 2 0 0 0 2 2h32a2 2 0 0 0 2-2V33a2 2 0 0 0-2-2h-3v-4c0-7.2-5.8-13-13-13zm0 6c3.9 0 7 3.1 7 7v4H25v-4c0-3.9 3.1-7 7-7z" fill="#e2f8f6"/>
+  <circle cx="32" cy="40" r="3" fill="#0b1220" />
+  <rect x="30.5" y="43" width="3" height="5" rx="1.2" fill="#0b1220" />
+</svg>

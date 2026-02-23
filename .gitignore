@@ -94,12 +94,9 @@ ipython_config.py
 #   install all needed dependencies.
 #Pipfile.lock
 
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
+# uv
+#   Commit uv.lock for reproducible dependency resolution across environments.
+#uv.lock
 
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow
 __pypackages__/
@@ -147,3 +144,13 @@ cython_debug/
 # IDE Configurations
 .idea/
 .vscode/
+
+# Frontend workspace artifacts
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# Frontend source files under src/lib must be versioned.
+!frontend/src/lib/
+!frontend/src/lib/**
