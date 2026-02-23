@@ -7,26 +7,28 @@ Simple Secrets Manager ships with a Doppler-like CLI implemented with Click + Ri
 Run from anywhere without cloning this repository:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm --help
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli --help
 ```
 
 Pin to a release tag:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git@v1.3.0 ssm --help
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git@v1.3.0 ssm-cli --help
 ```
 
 Pin to a commit SHA:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git@<commit-sha> ssm --help
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git@<commit-sha> ssm-cli --help
 ```
 
 Local development fallback (inside this repo):
 
 ```bash
-uv run ssm --help
+uv run ssm-cli --help
 ```
+
+`ssm` remains available as a backward-compatible alias.
 
 ## Resolution order (DRY/KISS)
 
@@ -81,26 +83,26 @@ Test overrides via env vars:
 Uses legacy `GET /api/auth/tokens/` with HTTP Basic auth and stores returned token.
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm configure --base-url http://localhost:8080/api --profile dev
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm login --profile dev
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli configure --base-url http://localhost:8080/api --profile dev
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli login --profile dev
 ```
 
 ### Service/personal token (recommended for CI or automation)
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm auth set-token --profile dev --token "<token>"
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli auth set-token --profile dev --token "<token>"
 ```
 
 ### Logout
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm logout --profile dev
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli logout --profile dev
 ```
 
 Clear all local token records:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm logout --all-profiles
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli logout --all-profiles
 ```
 
 ## Project/config setup
@@ -108,7 +110,7 @@ uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm logout
 Set local defaults for current directory:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm setup --project my-project --config dev --profile dev
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli setup --project my-project --config dev --profile dev
 ```
 
 ## Core commands
@@ -116,7 +118,7 @@ uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm setup 
 ### Run command with injected secrets
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm run --profile dev -- python app.py
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli run --profile dev -- python app.py
 ```
 
 Useful flags:
@@ -129,8 +131,8 @@ Useful flags:
 ### Download secrets
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm secrets download --profile dev --format json
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm secrets download --profile dev --format env
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli secrets download --profile dev --format json
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli secrets download --profile dev --format env
 ```
 
 Note: `.env` output fails when any value contains a newline. Use JSON in that case.
@@ -138,7 +140,7 @@ Note: `.env` output fails when any value contains a newline. Use JSON in that ca
 ### Mount secrets to FIFO
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm secrets mount --profile dev --path /tmp/ssm-secrets.fifo --format json
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli secrets mount --profile dev --path /tmp/ssm-secrets.fifo --format json
 ```
 
 - Creates FIFO with `0600` permissions.
@@ -147,7 +149,7 @@ uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm secret
 ### Session validation
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm whoami --profile dev
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli whoami --profile dev
 ```
 
 `whoami` validates token by calling `GET /projects` and reports visible scope behavior.
@@ -157,19 +159,19 @@ uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm whoami
 List profiles:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm profile list
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli profile list
 ```
 
 Activate profile:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm profile use dev
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli profile use dev
 ```
 
 Set profile defaults:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm profile set dev --base-url http://localhost:8080/api --project my-project --config dev --activate
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli profile set dev --base-url http://localhost:8080/api --project my-project --config dev --activate
 ```
 
 ## Exit behavior

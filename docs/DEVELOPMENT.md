@@ -92,7 +92,7 @@ CLI:
 
 ```bash
 uv sync
-uv run ssm --help
+uv run ssm-cli --help
 ```
 
 Detailed CLI usage is documented in [`docs/CLI.md`](CLI.md).
@@ -100,7 +100,7 @@ Detailed CLI usage is documented in [`docs/CLI.md`](CLI.md).
 UVX distribution smoke check (outside repository path):
 
 ```bash
-uvx --from /absolute/path/to/Simple-Secrets-Manager ssm --help
+uvx --from /absolute/path/to/Simple-Secrets-Manager ssm-cli --help
 ```
 
 ## Integration smoke checks
@@ -120,8 +120,8 @@ curl -sS -I http://localhost:8080
 CLI smoke check:
 
 ```bash
-uv run ssm configure --base-url http://localhost:8080/api --profile dev
-uv run ssm whoami --profile dev
+uv run ssm-cli configure --base-url http://localhost:8080/api --profile dev
+uv run ssm-cli whoami --profile dev
 ```
 
 ## CI publish flow

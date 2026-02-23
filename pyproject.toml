@@ -39,6 +39,7 @@ build-backend = "setuptools.build_meta"
 
 [project.scripts]
 ssm = "ssm_cli.main:cli"
+ssm-cli = "ssm_cli.main:cli"
 
 [tool.setuptools]
 packages = ["Access", "Api", "Engines", "ssm_cli"]

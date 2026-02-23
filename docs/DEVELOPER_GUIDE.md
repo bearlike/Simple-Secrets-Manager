@@ -54,7 +54,7 @@ npm run dev
 Run CLI from source during development:
 
 ```bash
-uv run ssm --help
+uv run ssm-cli --help
 ```
 
 ## Full stack via Docker Compose
@@ -90,8 +90,8 @@ npm run build
 CLI smoke check against Docker stack:
 
 ```bash
-uv run ssm configure --base-url http://localhost:8080/api --profile dev
-uv run ssm whoami --profile dev
+uv run ssm-cli configure --base-url http://localhost:8080/api --profile dev
+uv run ssm-cli whoami --profile dev
 ```
 
 ## Additional references

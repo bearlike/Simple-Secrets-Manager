@@ -51,20 +51,20 @@ Step-by-step guide: [`docs/FIRST_TIME_SETUP.md`](docs/FIRST_TIME_SETUP.md)
 Run the CLI from anywhere without cloning this repository:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm --help
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli --help
 ```
 
 Configure and authenticate:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm configure --base-url http://localhost:8080/api --profile dev
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm auth set-token --token "<service-or-personal-token>" --profile dev
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli configure --base-url http://localhost:8080/api --profile dev
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli auth set-token --token "<service-or-personal-token>" --profile dev
 ```
 
 Run any process with injected secrets:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm run --profile dev -- python app.py
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli run --profile dev -- python app.py
 ```
 
 Detailed CLI reference: [`docs/CLI.md`](docs/CLI.md)
