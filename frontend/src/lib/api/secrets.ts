@@ -10,7 +10,7 @@ interface SecretValueInput {
   value: string;
 }
 
-interface SecretUpsertInput {
+export interface SecretUpsertInput {
   key: string;
   value: string;
 }
@@ -29,14 +29,22 @@ function secretsEndpoint(
 }
 
 export async function getSecrets(projectSlug: string, configSlug: string): Promise<Secret[]> {
+  return mapSecretsData(await getSecretsKeyMap(projectSlug, configSlug, true));
+}
+
+export async function getSecretsKeyMap(
+  projectSlug: string,
+  configSlug: string,
+  includeParent = true
+): Promise<Record<string, string>> {
   const response = await apiClient<SecretsJsonResponseDto>(
     secretsEndpoint(projectSlug, configSlug, {
       format: 'json',
-      include_parent: true
+      include_parent: includeParent
     })
   );
 
-  return mapSecretsData(response.data ?? {});
+  return response.data ?? {};
 }
 
 export async function createSecret(
@@ -87,6 +95,33 @@ export function deleteSecret(projectSlug: string, configSlug: string, key: strin
       method: 'DELETE'
     }
   );
+}
+
+export async function upsertSecretsBulk(
+  projectSlug: string,
+  configSlug: string,
+  entries: SecretUpsertInput[]
+): Promise<{ succeeded: number; failedKeys: string[] }> {
+  const results = await Promise.allSettled(
+    entries.map((entry) =>
+      apiClient<void>(`/projects/${projectSlug}/configs/${configSlug}/secrets/${encodeURIComponent(entry.key)}`, {
+        method: 'PUT',
+        body: JSON.stringify({ value: entry.value })
+      })
+    )
+  );
+
+  const failedKeys: string[] = [];
+  let succeeded = 0;
+  results.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      succeeded += 1;
+      return;
+    }
+    failedKeys.push(entries[index].key);
+  });
+
+  return { succeeded, failedKeys };
 }
 
 export async function bulkExport(

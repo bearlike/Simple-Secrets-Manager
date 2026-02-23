@@ -7,177 +7,127 @@
     <a href="https://github.com/bearlike/simple-secrets-manager/wiki/First%E2%80%90Time-Usage"><img alt="Documentation" src="https://img.shields.io/badge/Wiki-docs-informational?logo=github"></a>
 </p>
 
-Secure storage, and delivery for tokens, passwords, API keys, and other secrets using HTTP API, Swagger UI or Python Package.
-> `TL;DR`: Poor Man's Hashi Corp Vault
+Simple Secrets Manager is a lightweight, self-hosted secret manager for teams that need clean project/config-based secret organization without enterprise overhead.
 
 <img height="720" alt="image" src="https://github.com/user-attachments/assets/539016cb-9428-4b3d-8704-31dc474caf65" />
 
+## Product
 
-## Monorepo layout
+### What it is for
 
-This repository now contains:
+- Store secrets by `project` and `config` (`dev`, `staging`, `prod`, etc.).
+- Inherit values across configs and override only where needed.
+- Manage values from UI or API.
+- Use username/password for humans and scoped tokens for automation.
 
-- Backend API (Flask + MongoDB) at repository root.
-- Frontend Admin Console (Vite + React) at `frontend/`.
+### Quick start (Docker)
 
-## Why does this exist?
+```bash
+docker compose up -d --build
+```
 
-Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was heavy and non-portable (atleast difficult) for my homelab setup. So I wanted to build a Secrets Manager intended for small scale setups that could also scale well.
+Open:
 
-## Goals
+- Frontend: `http://localhost:8080`
+- Backend API (proxy): `http://localhost:8080/api`
+- Backend API (direct): `http://localhost:5000/api`
 
-- A lightweight system that sucks less power out of the wall. Therefore, minimal background jobs and reduced resource utilizations.
-- Should be compatible on both `x86-64` and `arm64v8` (mainly Raspberry Pi 4).
-- High stability, availability and easy scalability.
+### First-time setup
 
-## Available secret engines
+- On a fresh install, login shows initial setup.
+- Create the first admin username/password.
+- Then sign in with username/password and start creating projects/configs/secrets.
 
-| Secret Engine | Description                                           |
-|---------------|-------------------------------------------------------|
-| `kv`          | Key-Value engine is used to store arbitrary secrets.  |
+For full onboarding screens and flow, see the [First-Time Usage Guide](https://github.com/bearlike/simple-secrets-manager/wiki/First%E2%80%90Time-Usage).
 
-## Available authentication methods
+### Standard usage flow
 
-| Auth Methods      | Description                                                               |
-|-------------------|---------------------------------------------------------------------------|
-| `userpass`        | Allows users to authenticate using a username and password combination.   |
-| `token`           | Allows users to authenticate using a token. Token generation requires users to be authenticated via `userpass`                               |
+1. Create a project.
+2. Create one or more configs.
+3. Add secrets manually or import a `.env` file from the config page.
+4. Export secrets in JSON or `.env` format when needed.
+5. Create scoped tokens for services and CI/CD.
 
-## Future
+## Contributing
 
-- Secret engines for certificates (PKI), SSH and databases.
-- Encrypting secrets before writing to a persistent storage, so gaining access to the raw storage isn't enough to access your secrets.
+### Prerequisites
 
-## Getting started
+- Docker + Docker Compose
+- Python + `uv`
+- Node.js + npm
 
-### Automated Install: [`docker-compose`](https://docs.docker.com/compose/install/) (Recommended)
+### Local backend setup
 
-1. Run the full stack:
+```bash
+git clone --depth 1 https://github.com/bearlike/simple-secrets-manager
+cd simple-secrets-manager
+```
 
-   ```bash
-   docker compose up -d --build
-   ```
+Create `.env` at repository root:
 
-2. Open:
-   - Frontend: `http://localhost:8080`
-   - Backend API (via reverse proxy): `http://localhost:8080/api`
-   - Backend API (direct): `http://localhost:5000/api`
+```bash
+CONNECTION_STRING=mongodb://username:password@mongo.hostname:27017
+TOKEN_SALT=change-me
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080
+BIND_HOST=0.0.0.0
+PORT=5000
+```
 
-### Manual Installation
+Run backend:
 
-#### Backend setup
+```bash
+uv sync
+uv run python3 server.py
+```
 
-1. **Clone repository**
+### Local frontend setup
 
-   ```bash
-   git clone --depth 1 https://github.com/bearlike/simple-secrets-manager
-   cd simple-secrets-manager
-   ```
+```bash
+cd frontend
+npm install
+echo "VITE_API_BASE_URL=/api" > .env.local
+npm run dev
+```
 
-2. Create a `.env` file in the project root.
+Open `http://localhost:5173`.
 
-   ```sh
-   CONNECTION_STRING=mongodb://username:password@mongo.hostname:27017
-   TOKEN_SALT=change-me
-   CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080
-   BIND_HOST=0.0.0.0
-   PORT=5000
-   ```
+### Quality checks
 
-3. **Install dependencies**
-
-   ```bash
-   uv sync
-   ```
-
-4. **Start the server**
-
-   ```bash
-   uv run python3 server.py
-   ```
-
-5. **Access the application**:
-   - Frontend UI: `http://server_hostname:8080`
-   - Backend Swagger UI: `http://server_hostname:5000/api` (or `http://server_hostname:8080/api`)
-
-#### Frontend setup
-
-1. Install frontend dependencies:
-
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-2. Optionally override API base URL:
-
-   ```bash
-   echo "VITE_API_BASE_URL=/api" > .env.local
-   ```
-
-3. Start frontend dev server:
-
-   ```bash
-   npm run dev
-   ```
-
-4. Open `http://localhost:5173`.
-
-### First-time setup (deterministic DB-stamped onboarding)
-
-- Open frontend login (`http://localhost:5173` for dev or `http://localhost:8080` for Docker).
-- If the system is not initialized, the login screen automatically switches to an **Initial Setup** wizard.
-- Submit admin username/password once. Backend stamps onboarding state in MongoDB and returns a bootstrap API token.
-- Frontend logs in automatically with that token.
-- On subsequent launches, only token login is shown.
-
-### Development quality checks
+Backend:
 
 ```bash
 ./scripts/quality.sh check
-# or auto-fix lint/style first, then type-check and test
-./scripts/quality.sh fix
 ```
 
-### Git hooks (auto lint/test before push)
+Frontend:
 
 ```bash
-./scripts/install-git-hooks.sh
+cd frontend
+npm run lint
+npm run build
 ```
 
-After installation:
-- `pre-commit` auto-fixes Ruff issues on staged Python files.
-- `pre-push` runs full lint/type/test gates and blocks push if fixes are required.
+### Developer docs
 
-For user creation and initial setup, see the [First-Time Usage Guide](https://github.com/bearlike/simple-secrets-manager/wiki/First%E2%80%90Time-Usage).
+- Full development guide: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
+- Frontend notes: [`frontend/README.md`](frontend/README.md)
 
-## Environment variables
+## Supplementary Reference
 
-- `CONNECTION_STRING`: MongoDB connection string.
-- `TOKEN_SALT`: Salt used before hashing API tokens.
-- `CORS_ORIGINS`: Comma-separated list of allowed origins for `/api/*` when calling backend directly on port `5000`.
-- `BIND_HOST`: Host interface used by Flask (default `0.0.0.0`).
-- `PORT`: HTTP port used by Flask (default `5000`).
-- `VITE_API_BASE_URL`: Frontend API base URL override (`frontend/.env.local`), defaults to `/api`.
+### Environment variables
 
-## Developer docs
+| Variable | Description |
+|----------|-------------|
+| `CONNECTION_STRING` | MongoDB connection string. |
+| `TOKEN_SALT` | Salt used before hashing API tokens. |
+| `CORS_ORIGINS` | Comma-separated allowed origins for direct backend access on port `5000`. |
+| `BIND_HOST` | Flask bind host (default `0.0.0.0`). |
+| `PORT` | Flask port (default `5000`). |
+| `VITE_API_BASE_URL` | Frontend API base URL override (`frontend/.env.local`), defaults to `/api`. |
 
-- Backend quality gates: `./scripts/quality.sh check`
-- Frontend quality gates: `cd frontend && npm run lint && npm run build`
-- Full guide: `docs/DEVELOPMENT.md`
-- Container publish flow: `.github/workflows/ci.yml`
+### API examples
 
-## CI/CD container publish
-
-`GitHub Actions` publishes the unified image `ghcr.io/bearlike/simple-secrets-manager` automatically:
-
-- On pushes to `main` and `feat/v1.2.0` when backend/frontend/container files change.
-- On semantic version tags (`vX.Y.Z`) with semantic container tags (`X.Y.Z`, `X.Y`, `X`).
-- On manual workflow dispatch (optional custom extra tag).
-
-## API examples
-
-Set these first:
+Set variables:
 
 ```bash
 export BASE_URL="http://localhost:5000/api"
@@ -198,21 +148,14 @@ curl -sS "$BASE_URL/projects/my-project/configs" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-Export secrets as JSON (with inherited values and metadata):
+Export secrets (with inherited values and metadata):
 
 ```bash
 curl -sS "$BASE_URL/projects/my-project/configs/dev/secrets?format=json&include_parent=true&include_meta=true" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-List scoped tokens metadata:
-
-```bash
-curl -sS "$BASE_URL/auth/tokens/v2" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-Revoke token by `token_id` (preferred):
+Revoke a token by `token_id`:
 
 ```bash
 curl -sS -X POST "$BASE_URL/auth/tokens/v2/revoke" \
@@ -221,32 +164,4 @@ curl -sS -X POST "$BASE_URL/auth/tokens/v2/revoke" \
   -d '{"token_id":"<token-id>"}'
 ```
 
-Revoke token by plaintext token (compatibility):
-
-```bash
-curl -sS -X POST "$BASE_URL/auth/tokens/v2/revoke" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"token":"<plaintext-token>"}'
-```
-
-Read audit events filtered by project/config slugs:
-
-```bash
-curl -sS "$BASE_URL/audit/events?project=my-project&config=dev&since=2026-01-01T00:00:00Z&limit=50" \
-  -H "Authorization: Bearer $TOKEN"
-```
-
-Check onboarding status (no auth):
-
-```bash
-curl -sS "$BASE_URL/onboarding/status"
-```
-
-Bootstrap first admin and token (no auth, first-time only):
-
-```bash
-curl -sS -X POST "$BASE_URL/onboarding/bootstrap" \
-  -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"Str0ng!Passw0rd"}'
-```
+Container runtime reference: [`docs/README_dockerhub.md`](docs/README_dockerhub.md)
