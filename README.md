@@ -10,6 +10,9 @@
 Secure storage, and delivery for tokens, passwords, API keys, and other secrets using HTTP API, Swagger UI or Python Package.
 > `TL;DR`: Poor Man's Hashi Corp Vault
 
+<img height="720" alt="image" src="https://github.com/user-attachments/assets/539016cb-9428-4b3d-8704-31dc474caf65" />
+
+
 ## Monorepo layout
 
 This repository now contains:
