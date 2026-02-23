@@ -84,6 +84,15 @@ npm run lint
 npm run build
 ```
 
+CLI:
+
+```bash
+uv sync
+uv run ssm --help
+```
+
+Detailed CLI usage is documented in [`docs/CLI.md`](CLI.md).
+
 ## Integration smoke checks
 
 Backend health endpoint (Swagger index):
@@ -96,6 +105,13 @@ Frontend HTTP check:
 
 ```bash
 curl -sS -I http://localhost:8080
+```
+
+CLI smoke check:
+
+```bash
+uv run ssm configure --base-url http://localhost:8080/api --profile dev
+uv run ssm whoami --profile dev
 ```
 
 ## CI publish flow

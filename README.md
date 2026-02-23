@@ -4,7 +4,7 @@
     <a href="https://github.com/bearlike/simple-secrets-manager/pkgs/container/simple-secrets-manager"><img alt="Docker Image Architecture" src="https://img.shields.io/badge/architecture-arm64v8%20%7C%20x86__64-blue?logo=docker"></a>
     <a href="https://github.com/bearlike/simple-secrets-manager/actions/workflows/ci.yml"><img alt="GitHub Repository" src="https://github.com/bearlike/simple-secrets-manager/actions/workflows/ci.yml/badge.svg"></a>
     <a href="/LICENSE"><img alt="License" src="https://img.shields.io/github/license/bearlike/simple-secrets-manager"></a>
-    <a href="https://github.com/bearlike/simple-secrets-manager/wiki/First%E2%80%90Time-Usage"><img alt="Documentation" src="https://img.shields.io/badge/Wiki-docs-informational?logo=github"></a>
+    <a href="docs/DEVELOPMENT.md"><img alt="Documentation" src="https://img.shields.io/badge/Docs-Development-informational?logo=readme"></a>
 </p>
 
 Simple Secrets Manager is a lightweight, self-hosted secret manager for teams that need clean project/config-based secret organization without enterprise overhead.
@@ -38,7 +38,7 @@ Open:
 - Create the first admin username/password.
 - Then sign in with username/password and start creating projects/configs/secrets.
 
-For full onboarding screens and flow, see the [First-Time Usage Guide](https://github.com/bearlike/simple-secrets-manager/wiki/First%E2%80%90Time-Usage).
+For full onboarding and bootstrap flow, see [`docs/FIRST_TIME_SETUP.md`](docs/FIRST_TIME_SETUP.md).
 
 ### Standard usage flow
 
@@ -47,6 +47,39 @@ For full onboarding screens and flow, see the [First-Time Usage Guide](https://g
 3. Add secrets manually or import a `.env` file from the config page.
 4. Export secrets in JSON or `.env` format when needed.
 5. Create scoped tokens for services and CI/CD.
+
+### CLI (Doppler-like workflow)
+
+After `uv sync`, the CLI entrypoint is available at `.venv/bin/ssm`.
+
+Configure base URL and set a token:
+
+```bash
+.venv/bin/ssm configure --base-url http://localhost:8080/api --profile dev
+.venv/bin/ssm auth set-token --token "<service-or-personal-token>" --profile dev
+```
+
+Set directory defaults:
+
+```bash
+.venv/bin/ssm setup --project my-project --config dev --profile dev
+```
+
+Run commands with injected secrets:
+
+```bash
+.venv/bin/ssm run --profile dev -- python app.py
+```
+
+Other useful commands:
+
+```bash
+.venv/bin/ssm whoami --profile dev
+.venv/bin/ssm secrets download --profile dev --format json
+.venv/bin/ssm secrets mount --profile dev --path /tmp/ssm-secrets.fifo --format json
+```
+
+Command reference and detailed CLI behavior are documented in [`docs/CLI.md`](docs/CLI.md).
 
 ## Contributing
 
@@ -110,6 +143,8 @@ npm run build
 ### Developer docs
 
 - Full development guide: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
+- First-time setup guide: [`docs/FIRST_TIME_SETUP.md`](docs/FIRST_TIME_SETUP.md)
+- CLI reference: [`docs/CLI.md`](docs/CLI.md)
 - Frontend notes: [`frontend/README.md`](frontend/README.md)
 
 ## Supplementary Reference
