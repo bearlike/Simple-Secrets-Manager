@@ -6,13 +6,13 @@
     <a href="/LICENSE"><img alt="License" src="https://img.shields.io/github/license/bearlike/simple-secrets-manager"></a>
 </p>
 
-Simple Secrets Manager is a lightweight, self-hosted secrets platform with:
+Simple Secrets Manager is a lightweight, self-hosted secret manager for teams that need clean project/config-based secret organization without enterprise overhead. Comes with a `ssm-cli` command-line client.
 
-- Backend API
-- Frontend Admin Console
-- `ssm-cli` command-line client
+<img height="720" alt="image" src="https://github.com/user-attachments/assets/539016cb-9428-4b3d-8704-31dc474caf65" />
 
-## Install the Product (Backend + Frontend Bundle)
+## Getting Started
+
+### 1️⃣ Deploying the SSM Server
 
 Start the full stack with Docker Compose:
 
@@ -26,7 +26,7 @@ Endpoints:
 - Backend API via proxy: `http://localhost:8080/api`
 - Backend API direct: `http://localhost:5000/api`
 
-## First-Time Setup
+#### First-Time Setup
 
 On a fresh install:
 
@@ -36,7 +36,12 @@ On a fresh install:
 
 API-only bootstrap steps are in [`docs/FIRST_TIME_SETUP.md`](docs/FIRST_TIME_SETUP.md).
 
-## Install CLI Once, Run Anywhere
+---
+
+### 2️⃣ Installing `ssm-cli` locally
+
+`ssm-cli` is a lightweight command-line client that securely authenticates to Simple Secrets Manager and injects your project/config secrets into any command or runtime on demand.
+
 
 Install `ssm-cli` globally via uv:
 
@@ -64,7 +69,7 @@ If you installed from Git and want a fresh reinstall:
 uv tool install --force git+https://github.com/bearlike/Simple-Secrets-Manager.git
 ```
 
-## Authenticate CLI to Your Backend
+#### Authenticate CLI to Your Backend
 
 Set backend URL and token:
 
@@ -79,7 +84,7 @@ Or login with username/password:
 ssm-cli login --profile dev
 ```
 
-## Use the Application from CLI
+#### Use the Application from CLI
 
 Inject secrets into a process:
 
@@ -98,6 +103,8 @@ Check active CLI session:
 ```bash
 ssm-cli whoami --profile dev
 ```
+
+---
 
 ## Documentation
 
@@ -121,3 +128,25 @@ If you run prebuilt images only:
 docker compose pull
 docker compose up -d
 ```
+
+---
+
+## Contributing 👏
+
+We welcome contributions from the community to improve Meeseeks. Use the steps below.
+
+1. Fork the repository and clone it to your local machine.
+2. Use the pre-commit hook to automate linting and testing, catching errors early. 
+3. Create a new branch for your contribution.
+4. Make your changes, commit them, and push to your fork.
+5. Open a pull request describing the change and the problem it solves.
+
+## Bug Reports and Feature Requests 🐞
+
+If you encounter bugs or have ideas for features, open an issue on the [issue tracker](https://github.com/bearlike/Simple-Secrets-Manager/issues). Include reproduction steps and error messages when possible.
+
+Thank you for contributing.
+
+---
+
+Licensed under [CC0 1.0 Universal](./LICENSE).
