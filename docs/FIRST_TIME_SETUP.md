@@ -1,6 +1,6 @@
 # First-Time Setup Guide
 
-This guide covers the first initialization of a fresh Simple Secrets Manager deployment.
+This guide walks you through initializing a fresh Simple Secrets Manager deployment using only the API. You’ll skip the front-end completely. We usually recommend the first-time user wizard in the UI, so stick to these instructions only if you're deploying in a restrictive environment where browser access isn't an option.
 
 ## Prerequisites
 
@@ -29,7 +29,7 @@ curl -sS -X POST "http://localhost:5000/api/onboarding/bootstrap" \
 
 This creates the first admin account and marks onboarding complete.
 
-## Step 3: Sign in from UI
+## Step 3: Sign in from UI (or use the API)
 
 - Open `http://localhost:8080`
 - Use the created username/password
