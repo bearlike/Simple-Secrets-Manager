@@ -68,15 +68,13 @@ Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was 
 3. **Install dependencies**
 
    ```bash
-   pip3 install -r requirements.txt
-   # Or if using Poetry
-   poetry install
+   uv sync
    ```
 
 4. **Start the server**
 
    ```bash
-   python3 server.py
+   uv run python3 server.py
    ```
 
 5. **Access the application**: Browse to `http://server_hostname:5000/api` to access the Swagger UI
