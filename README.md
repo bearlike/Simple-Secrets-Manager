@@ -162,6 +162,15 @@ For user creation and initial setup, see the [First-Time Usage Guide](https://gi
 - Backend quality gates: `./scripts/quality.sh check`
 - Frontend quality gates: `cd frontend && npm run lint && npm run build`
 - Full guide: `docs/DEVELOPMENT.md`
+- Container publish flow: `.github/workflows/ci.yml`
+
+## CI/CD container publish
+
+`GitHub Actions` publishes the unified image `ghcr.io/bearlike/simple-secrets-manager` automatically:
+
+- On pushes to `main` and `feat/v1.2.0` when backend/frontend/container files change.
+- On semantic version tags (`vX.Y.Z`) with semantic container tags (`X.Y.Z`, `X.Y`, `X`).
+- On manual workflow dispatch (optional custom extra tag).
 
 ## API examples
 

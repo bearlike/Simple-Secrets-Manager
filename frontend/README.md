@@ -24,13 +24,16 @@ On a fresh backend, the login screen switches to an **Initial Setup** wizard tha
 
 ## Docker
 
-Build image:
+Default deployment path is the unified root image (`docker compose up -d --build` from repository root).
+
+Standalone frontend image build is optional for frontend-only workflows:
 
 ```bash
+cd frontend
 docker build -t ssm-admin-console:local .
 ```
 
-Run image:
+Run standalone image:
 
 ```bash
 docker run --rm -p 8080:80 ssm-admin-console:local

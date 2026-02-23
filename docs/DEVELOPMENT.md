@@ -97,3 +97,11 @@ Frontend HTTP check:
 ```bash
 curl -sS -I http://localhost:8080
 ```
+
+## CI publish flow
+
+Container publishing is handled by `.github/workflows/ci.yml`.
+
+- Push to `main` or `feat/v1.2.0` with container/app changes triggers build+push to GHCR.
+- Tag push `vX.Y.Z` additionally publishes semantic tags.
+- Manual dispatch can publish an extra custom tag.
