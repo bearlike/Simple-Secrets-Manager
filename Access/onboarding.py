@@ -4,23 +4,13 @@ from datetime import datetime, timedelta, timezone
 from pymongo.errors import DuplicateKeyError
 
 from Api.serialization import to_iso
+from Access.scopes import DEFAULT_TOKEN_ACTION_SCOPES, global_scopes
 
 
 class Onboarding:
     DOC_ID = "bootstrap_state_v1"
     BOOTSTRAP_TOKEN_TTL_SECONDS = 15811200
-    BOOTSTRAP_ACTION_SCOPES = [
-        "projects:read",
-        "projects:write",
-        "configs:read",
-        "configs:write",
-        "secrets:read",
-        "secrets:write",
-        "secrets:export",
-        "tokens:manage",
-        "audit:read",
-        "users:manage",
-    ]
+    BOOTSTRAP_ACTION_SCOPES = DEFAULT_TOKEN_ACTION_SCOPES
 
     def __init__(self, state_col, userpass_engine, tokens_engine):
         self._state = state_col
@@ -119,7 +109,7 @@ class Onboarding:
                     token_type="personal",
                     created_by=username,
                     subject_user=username,
-                    scopes=[{"actions": self.BOOTSTRAP_ACTION_SCOPES}],
+                    scopes=global_scopes(self.BOOTSTRAP_ACTION_SCOPES),
                     expires_at=datetime.utcnow() + timedelta(seconds=self.BOOTSTRAP_TOKEN_TTL_SECONDS),
                 )
             except Exception as exc:  # pragma: no cover - defensive path

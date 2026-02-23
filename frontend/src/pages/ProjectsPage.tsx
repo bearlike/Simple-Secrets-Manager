@@ -23,10 +23,8 @@ function ProjectCard({ project }: {project: Project;}) {
     queryKey: queryKeys.configs(project.slug),
     queryFn: () => getConfigs(project.slug)
   });
-  const defaultConfig = configs.find((c) => c.slug === 'dev') ?? configs[0];
   const handleClick = () => {
-    const configSlug = defaultConfig?.slug ?? 'dev';
-    navigate(`/projects/${project.slug}/configs/${configSlug}`);
+    navigate(`/projects/${project.slug}/settings`);
   };
   return (
     <Card

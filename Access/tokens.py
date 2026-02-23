@@ -9,6 +9,7 @@ import secrets
 from bson import ObjectId
 
 from Api.serialization import oid_to_str, sanitize_doc, to_iso
+from Access.scopes import global_scopes
 
 
 class Tokens:
@@ -28,7 +29,7 @@ class Tokens:
             token_type="personal",
             created_by=username,
             subject_user=username,
-            scopes=[],
+            scopes=global_scopes(),
             expires_at=expires_at,
         )
 

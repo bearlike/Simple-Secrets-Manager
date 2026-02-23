@@ -24,6 +24,7 @@ def authorize(actor, action, project_id=None, config_id=None):
             if req_project and req_project == scope_project:
                 return True
             continue
-        if not req_project and not req_config:
-            return True
+        # Global action scopes (no project/config restriction) must apply to all
+        # resources for that action.
+        return True
     return False

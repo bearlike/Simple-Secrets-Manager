@@ -17,10 +17,15 @@ import {
 } from '@/components/ui/card';
 import { useAuth } from '../lib/auth';
 import { queryKeys } from '../lib/api/queryKeys';
+import { loginWithUserpass } from '../lib/api/auth';
 import { bootstrapFirstUser, getOnboardingState } from '../lib/api/onboarding';
 
-const tokenSchema = z.object({
-  token: z.string().min(10, 'Token must be at least 10 characters')
+const loginSchema = z.object({
+  username: z
+    .string()
+    .min(2, 'Username is required')
+    .regex(/^[a-zA-Z0-9_]+$/, 'Use letters, numbers, or underscore'),
+  password: z.string().min(1, 'Password is required')
 });
 
 const setupSchema = z
@@ -37,14 +42,14 @@ const setupSchema = z
     path: ['confirmPassword']
   });
 
-type TokenFormValues = z.infer<typeof tokenSchema>;
+type LoginFormValues = z.infer<typeof loginSchema>;
 type SetupFormValues = z.infer<typeof setupSchema>;
 
 export function LoginPage() {
   const { login, isAuthenticated } = useAuth();
   const navigate = useNavigate();
-  const tokenForm = useForm<TokenFormValues>({
-    resolver: zodResolver(tokenSchema)
+  const loginForm = useForm<LoginFormValues>({
+    resolver: zodResolver(loginSchema)
   });
   const setupForm = useForm<SetupFormValues>({
     resolver: zodResolver(setupSchema)
@@ -54,6 +59,22 @@ export function LoginPage() {
     queryKey: queryKeys.onboardingStatus(),
     queryFn: getOnboardingState,
     retry: false
+  });
+
+  const loginMutation = useMutation({
+    mutationFn: ({ username, password }: { username: string; password: string }) =>
+      loginWithUserpass({ username, password }),
+    onSuccess: (token) => {
+      login(token);
+      navigate('/projects');
+    },
+    onError: (error) => {
+      if (error instanceof Error) {
+        toast.error(error.message);
+      } else {
+        toast.error('Login failed');
+      }
+    }
   });
 
   const bootstrapMutation = useMutation({
@@ -73,20 +94,13 @@ export function LoginPage() {
     }
   });
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors }
-  } = tokenForm;
+  const onSubmitLogin = ({ username, password }: LoginFormValues) => {
+    loginMutation.mutate({ username, password });
+  };
 
   if (isAuthenticated) {
     return <Navigate to="/projects" replace />;
   }
-
-  const onSubmitToken = ({ token }: TokenFormValues) => {
-    login(token);
-    navigate('/projects');
-  };
 
   const onSubmitSetup = ({ username, password }: SetupFormValues) => {
     bootstrapMutation.mutate({ username, password });
@@ -110,7 +124,7 @@ export function LoginPage() {
             <CardDescription className="text-sm">
               {showSetupWizard ?
               'Create the first administrator and bootstrap token' :
-              'Enter your personal access token to continue'}
+              'Sign in with your username and password'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -162,22 +176,35 @@ export function LoginPage() {
                   {bootstrapMutation.isPending ? 'Initializing...' : 'Initialize System'}
                 </Button>
               </form> :
-            <form onSubmit={handleSubmit(onSubmitToken)} className="space-y-4">
+            <form onSubmit={loginForm.handleSubmit(onSubmitLogin)} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="token">API Token</Label>
+                  <Label htmlFor="login-username">Username</Label>
                   <Input
-                    id="token"
-                    type="password"
-                    {...register('token')}
-                    placeholder="dp.st.••••••••••••••••"
-                    className="font-mono text-sm"
-                    autoComplete="current-password"
+                    id="login-username"
+                    type="text"
+                    {...loginForm.register('username')}
+                    placeholder="admin"
+                    autoComplete="username"
                     autoFocus
                   />
-                  {errors.token && <p className="text-xs text-destructive">{errors.token.message}</p>}
+                  {loginForm.formState.errors.username &&
+                  <p className="text-xs text-destructive">{loginForm.formState.errors.username.message}</p>
+                  }
                 </div>
-                <Button type="submit" className="w-full">
-                  Sign In
+                <div className="space-y-1.5">
+                  <Label htmlFor="login-password">Password</Label>
+                  <Input
+                    id="login-password"
+                    type="password"
+                    {...loginForm.register('password')}
+                    autoComplete="current-password"
+                  />
+                  {loginForm.formState.errors.password &&
+                  <p className="text-xs text-destructive">{loginForm.formState.errors.password.message}</p>
+                  }
+                </div>
+                <Button type="submit" className="w-full" disabled={loginMutation.isPending}>
+                  {loginMutation.isPending ? 'Signing in...' : 'Sign In'}
                 </Button>
               </form>
             }

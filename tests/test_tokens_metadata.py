@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from bson import ObjectId
 
+from Access.scopes import global_scopes
 from Access.tokens import Tokens
 
 
@@ -40,6 +41,10 @@ class FakeCollection:
         target = self.find_one(query)
         if target and "$set" in update:
             target.update(update["$set"])
+        return None
+
+    def insert_one(self, doc):
+        self.docs.append(doc)
         return None
 
 
@@ -88,3 +93,16 @@ def test_revoke_token_by_token_id():
     assert code == 200
     assert result["status"] == "OK"
     assert collection.docs[0]["revoked_at"] is not None
+
+
+def test_generate_personal_token_has_default_scopes():
+    collection = FakeCollection([])
+    tokens = Tokens(collection)
+    result = tokens.generate(username="alice", max_ttl=300)
+
+    assert result["status"] == "OK"
+    assert len(collection.docs) == 1
+    assert collection.docs[0]["subject_user"] == "alice"
+    assert collection.docs[0]["scopes"] == global_scopes()
+    actions = set(collection.docs[0]["scopes"][0]["actions"])
+    assert {"projects:write", "configs:write", "secrets:write"}.issubset(actions)

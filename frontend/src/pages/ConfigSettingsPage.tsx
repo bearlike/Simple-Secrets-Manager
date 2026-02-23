@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { PlusIcon, GitBranchIcon } from 'lucide-react';
+import { PlusIcon, GitBranchIcon, ArrowRightIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -13,6 +13,7 @@ import { EmptyState } from '../components/common/EmptyState';
 
 export function ConfigSettingsPage() {
   const { projectSlug = '' } = useParams<{ projectSlug: string }>();
+  const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
 
   const { data: projects = [] } = useQuery({
@@ -57,13 +58,16 @@ export function ConfigSettingsPage() {
               <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
                 CREATED
               </th>
+              <th className="px-4 py-2.5 text-right text-xs font-medium tracking-wider text-muted-foreground">
+                ACTION
+              </th>
             </tr>
           </thead>
           <tbody>
             {isLoading &&
               Array.from({ length: 3 }).map((_, index) => (
                 <tr key={index} className="border-b border-border last:border-0">
-                  {Array.from({ length: 4 }).map((__, colIndex) => (
+                  {Array.from({ length: 5 }).map((__, colIndex) => (
                     <td key={colIndex} className="px-4 py-2.5">
                       <Skeleton className="h-4 w-20" />
                     </td>
@@ -74,7 +78,7 @@ export function ConfigSettingsPage() {
             {!isLoading &&
               configs.length === 0 && (
                 <tr>
-                  <td colSpan={4}>
+                  <td colSpan={5}>
                     <EmptyState
                       icon={GitBranchIcon}
                       title="No configs yet"
@@ -94,7 +98,16 @@ export function ConfigSettingsPage() {
               configs.map((config) => (
                 <tr
                   key={config.slug}
-                  className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+                  className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/projects/${projectSlug}/configs/${config.slug}`)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      navigate(`/projects/${projectSlug}/configs/${config.slug}`);
+                    }
+                  }}
+                  tabIndex={0}
+                  role="button"
                 >
                   <td className="px-4 py-2.5 font-medium text-sm">{config.name}</td>
                   <td className="px-4 py-2.5">
@@ -114,6 +127,21 @@ export function ConfigSettingsPage() {
                   </td>
                   <td className="px-4 py-2.5 text-xs text-muted-foreground">
                     {config.createdAt ? new Date(config.createdAt).toLocaleDateString() : '-'}
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 text-xs"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        navigate(`/projects/${projectSlug}/configs/${config.slug}`);
+                      }}
+                      aria-label={`Open ${config.slug}`}
+                    >
+                      Open
+                      <ArrowRightIcon className="h-3.5 w-3.5" />
+                    </Button>
                   </td>
                 </tr>
               ))}

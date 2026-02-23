@@ -11,18 +11,10 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 import { getProjects } from '../../lib/api/projects';
-import { getConfigs } from '../../lib/api/configs';
 import { queryKeys } from '../../lib/api/queryKeys';
 import { useAuth } from '../../lib/auth';
 function ProjectNavItem({ slug, name }: {slug: string;name: string;}) {
-  const { data: configs = [] } = useQuery({
-    queryKey: queryKeys.configs(slug),
-    queryFn: () => getConfigs(slug)
-  });
-  const defaultConfig = configs.find((c) => c.slug === 'dev') ?? configs[0];
-  const to = defaultConfig ?
-  `/projects/${slug}/configs/${defaultConfig.slug}` :
-  `/projects/${slug}/configs/dev`;
+  const to = `/projects/${slug}/settings`;
   return (
     <NavLink
       to={to}

@@ -30,7 +30,7 @@ function buildUrl(endpoint: string): string {
 function buildHeaders(options: ApiClientOptions, token: string | null): Headers {
   const headers = new Headers(options.headers);
 
-  if (token) {
+  if (token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 

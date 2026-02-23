@@ -69,7 +69,7 @@ export function CreateProjectDialog({
       toast.success('Project created');
       reset();
       onOpenChange(false);
-      navigate(`/projects/${project.slug}/configs/dev`);
+      navigate(`/projects/${project.slug}/settings`);
     },
     onError: () => {
       toast.error('Failed to create project');
