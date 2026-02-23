@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Token authentication for Secrets Manager."""
+
 import datetime as dt
 import hashlib
 import os
@@ -75,9 +76,7 @@ class Tokens:
             return {"status": "Token not found"}, 404
         if username and finder.get("subject_user") not in (None, username) and finder.get("created_by") != username:
             return {"status": "Not allowed"}, 403
-        self._tokens.update_one(
-            {"_id": finder["_id"]}, {"$set": {"revoked_at": dt.datetime.utcnow()}}
-        )
+        self._tokens.update_one({"_id": finder["_id"]}, {"$set": {"revoked_at": dt.datetime.utcnow()}})
         return {"status": "OK"}, 200
 
     def _serialize_token_metadata(self, doc):

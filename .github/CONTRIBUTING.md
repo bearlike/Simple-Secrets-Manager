@@ -11,7 +11,7 @@ to the public under the [project's open source license](/LICENSE).
 2. Configure and install the dependencies: `uv sync`
 3. Create a new branch: `git checkout -b my-branch-name`
 4. Make your changes
-5. Format code and check code formatting: `uv run flake8`
+5. Run quality checks: `uv run ruff check . && uv run ruff format --check . && uv run mypy .`
 6. Push to your fork and [submit a pull request](https://github.com/bearlike/simple-secrets-manager/compare)
 7. Pat your self on the back and wait for your pull request to be reviewed and merged.
 

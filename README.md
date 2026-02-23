@@ -79,6 +79,15 @@ Hashi Corp Vault works well but it was meant for enterprises. Therefore, it was 
 
 5. **Access the application**: Browse to `http://server_hostname:5000/api` to access the Swagger UI
 
+### Development quality checks
+
+```bash
+uv run ruff check .
+uv run ruff format --check .
+uv run mypy .
+uv run pytest -q
+```
+
 For user creation and initial setup, see the [First-Time Usage Guide](https://github.com/bearlike/simple-secrets-manager/wiki/First%E2%80%90Time-Usage).
 
 ## Environment variables

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Database model for the Secrets Manager"""
+
 import os
 import sys
 import pymongo

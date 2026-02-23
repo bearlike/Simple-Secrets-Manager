@@ -25,7 +25,8 @@ Issues = "https://github.com/bearlike/simple-secrets-manager/issues"
 dev = [
     "ipykernel>=6.29.5,<7.0.0",
     "pytest>=8.3.5,<9.0.0",
-    "flake8>=7.1.2,<8.0.0",
+    "ruff>=0.13.0,<0.14.0",
+    "mypy>=1.17.1,<2.0.0",
 ]
 
 [build-system]
@@ -35,3 +36,16 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools]
 packages = ["Access", "Api", "Engines"]
 py-modules = ["connection", "server"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py39"
+exclude = [".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F"]
+
+[tool.mypy]
+python_version = "3.9"
+ignore_missing_imports = true
+exclude = ["^\\.venv/"]

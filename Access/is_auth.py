@@ -8,7 +8,7 @@ from flask_httpauth import HTTPBasicAuth
 from Api.api import conn, api
 from Access.policy import authorize
 
-userpass = HTTPBasicAuth()
+userpass: HTTPBasicAuth = HTTPBasicAuth()
 
 
 def _extract_token():

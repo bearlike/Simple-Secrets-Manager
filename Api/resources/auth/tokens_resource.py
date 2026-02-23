@@ -5,9 +5,7 @@ from Api.api import api, conn
 from Access.is_auth import userpass
 
 # tokens Namespace
-tokens_ns = api.namespace(
-    name="auth/tokens", description="Allows users to authenticate using a token."
-)
+tokens_ns = api.namespace(name="auth/tokens", description="Allows users to authenticate using a token.")
 tokens_model = api.model(
     "Auth Method - Token",
     {

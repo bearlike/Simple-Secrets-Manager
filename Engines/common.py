@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Common validation helpers shared across engines/resources."""
+
 import re
 
 SLUG_PATTERN = re.compile(r"^[a-z0-9_-]+$")
