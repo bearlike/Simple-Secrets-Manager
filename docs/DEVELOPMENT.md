@@ -1,4 +1,8 @@
-# Development Guide
+# Development Details
+
+This document is a deeper engineering reference.
+
+For day-to-day developer onboarding, use [`docs/DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) first.
 
 ## Monorepo overview
 
@@ -84,6 +88,29 @@ npm run lint
 npm run build
 ```
 
+CLI:
+
+```bash
+uv sync
+uv run ssm-cli --help
+```
+
+Detailed CLI usage is documented in [`docs/CLI.md`](CLI.md).
+
+Global CLI install smoke check:
+
+```bash
+uv tool install /absolute/path/to/Simple-Secrets-Manager
+uv tool update-shell
+ssm-cli --help
+```
+
+UVX distribution smoke check (ephemeral, no install):
+
+```bash
+uvx --from /absolute/path/to/Simple-Secrets-Manager ssm-cli --help
+```
+
 ## Integration smoke checks
 
 Backend health endpoint (Swagger index):
@@ -98,10 +125,18 @@ Frontend HTTP check:
 curl -sS -I http://localhost:8080
 ```
 
+CLI smoke check:
+
+```bash
+uv run ssm-cli configure --base-url http://localhost:8080/api --profile dev
+uv run ssm-cli whoami --profile dev
+```
+
 ## CI publish flow
 
 Container publishing is handled by `.github/workflows/ci.yml`.
 
-- Push to `main` or `feat/v1.3.0` with container/app changes triggers build+push to GHCR.
+- Push to `main` with container/app changes triggers build+push to GHCR.
+- Other branch pushes produce branch-ref tags and short SHA tags.
 - Tag push `vX.Y.Z` additionally publishes semantic tags.
 - Manual dispatch can publish an extra custom tag.

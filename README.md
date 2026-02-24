@@ -2,166 +2,151 @@
 <p align="center">
     <a href="https://github.com/bearlike/simple-secrets-manager/pkgs/container/simple-secrets-manager"><img alt="Docker Image Tag" src="https://img.shields.io/badge/Docker-ghcr.io%2Fbearlike%2Fsimple%E2%80%94secrets%E2%80%94manager%3Alatest-blue?logo=docker"></a>
     <a href="https://github.com/bearlike/simple-secrets-manager/pkgs/container/simple-secrets-manager"><img alt="Docker Image Architecture" src="https://img.shields.io/badge/architecture-arm64v8%20%7C%20x86__64-blue?logo=docker"></a>
-    <a href="https://github.com/bearlike/simple-secrets-manager/actions/workflows/ci.yml"><img alt="GitHub Repository" src="https://github.com/bearlike/simple-secrets-manager/actions/workflows/ci.yml/badge.svg"></a>
-    <a href="/LICENSE"><img alt="License" src="https://img.shields.io/github/license/bearlike/simple-secrets-manager"></a>
-    <a href="https://github.com/bearlike/simple-secrets-manager/wiki/First%E2%80%90Time-Usage"><img alt="Documentation" src="https://img.shields.io/badge/Wiki-docs-informational?logo=github"></a>
+    <a href="https://github.com/bearlike/simple-secrets-manager/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/bearlike/simple-secrets-manager/actions/workflows/ci.yml/badge.svg"></a>
+    <a href="/LICENSE"><img alt="License" src="https://img.shields.io/github/license/bearlike/simple-secrets-manager.svg"></a>
 </p>
 
-Simple Secrets Manager is a lightweight, self-hosted secret manager for teams that need clean project/config-based secret organization without enterprise overhead.
+Simple Secrets Manager is a lightweight, self-hosted secret manager for teams that need clean project/config-based secret organization without enterprise overhead. Comes with a `ssm-cli` command-line client.
 
 <img height="720" alt="image" src="https://github.com/user-attachments/assets/539016cb-9428-4b3d-8704-31dc474caf65" />
 
-## Product
+## Getting Started
 
-### What it is for
+### 1️⃣ Deploying the SSM Server
 
-- Store secrets by `project` and `config` (`dev`, `staging`, `prod`, etc.).
-- Inherit values across configs and override only where needed.
-- Manage values from UI or API.
-- Use username/password for humans and scoped tokens for automation.
-
-### Quick start (Docker)
+Start the full stack with Docker Compose:
 
 ```bash
 docker compose up -d --build
 ```
 
-Open:
+Endpoints:
 
 - Frontend: `http://localhost:8080`
-- Backend API (proxy): `http://localhost:8080/api`
-- Backend API (direct): `http://localhost:5000/api`
+- Backend API via proxy: `http://localhost:8080/api`
+- Backend API direct: `http://localhost:5000/api`
 
-### First-time setup
+#### First-Time Setup
 
-- On a fresh install, login shows initial setup.
-- Create the first admin username/password.
-- Then sign in with username/password and start creating projects/configs/secrets.
+On a fresh install:
 
-For full onboarding screens and flow, see the [First-Time Usage Guide](https://github.com/bearlike/simple-secrets-manager/wiki/First%E2%80%90Time-Usage).
+1. Open `http://localhost:8080`
+2. Complete initial setup (create first admin user)
+3. Sign in and create projects/configs/secrets
 
-### Standard usage flow
+API-only bootstrap steps are in [`docs/FIRST_TIME_SETUP.md`](docs/FIRST_TIME_SETUP.md).
 
-1. Create a project.
-2. Create one or more configs.
-3. Add secrets manually or import a `.env` file from the config page.
-4. Export secrets in JSON or `.env` format when needed.
-5. Create scoped tokens for services and CI/CD.
+---
 
-## Contributing
+### 2️⃣ Installing `ssm-cli` locally
 
-### Prerequisites
+`ssm-cli` is a lightweight command-line client that securely authenticates to Simple Secrets Manager and injects your project/config secrets into any command or runtime on demand.
 
-- Docker + Docker Compose
-- Python + `uv`
-- Node.js + npm
 
-### Local backend setup
+Install `ssm-cli` globally via uv:
 
 ```bash
-git clone --depth 1 https://github.com/bearlike/simple-secrets-manager
-cd simple-secrets-manager
+uv tool install git+https://github.com/bearlike/Simple-Secrets-Manager.git
+uv tool update-shell
+ssm-cli --help
 ```
 
-Create `.env` at repository root:
+If `ssm-cli` is not found, ensure uv's tool bin is on `PATH`:
 
 ```bash
-CONNECTION_STRING=mongodb://username:password@mongo.hostname:27017
-TOKEN_SALT=change-me
-CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080
-BIND_HOST=0.0.0.0
-PORT=5000
+export PATH="$(uv tool dir --bin):$PATH"
 ```
 
-Run backend:
+Already installed? Update to latest:
 
 ```bash
-uv sync
-uv run python3 server.py
+uv tool upgrade simple-secrets-manager
 ```
 
-### Local frontend setup
+If you installed from Git and want a fresh reinstall:
 
 ```bash
-cd frontend
-npm install
-echo "VITE_API_BASE_URL=/api" > .env.local
-npm run dev
+uv tool install --force git+https://github.com/bearlike/Simple-Secrets-Manager.git
 ```
 
-Open `http://localhost:5173`.
+#### Authenticate CLI to Your Backend
 
-### Quality checks
-
-Backend:
+Set backend URL and token:
 
 ```bash
-./scripts/quality.sh check
+ssm-cli configure --base-url http://localhost:8080/api --profile dev
+ssm-cli auth set-token --token "<service-or-personal-token>" --profile dev
 ```
 
-Frontend:
+Or login with username/password:
 
 ```bash
-cd frontend
-npm run lint
-npm run build
+ssm-cli login --profile dev
 ```
 
-### Developer docs
+#### Use the Application from CLI
 
-- Full development guide: [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
-- Frontend notes: [`frontend/README.md`](frontend/README.md)
-
-## Supplementary Reference
-
-### Environment variables
-
-| Variable | Description |
-|----------|-------------|
-| `CONNECTION_STRING` | MongoDB connection string. |
-| `TOKEN_SALT` | Salt used before hashing API tokens. |
-| `CORS_ORIGINS` | Comma-separated allowed origins for direct backend access on port `5000`. |
-| `BIND_HOST` | Flask bind host (default `0.0.0.0`). |
-| `PORT` | Flask port (default `5000`). |
-| `VITE_API_BASE_URL` | Frontend API base URL override (`frontend/.env.local`), defaults to `/api`. |
-
-### API examples
-
-Set variables:
+Inject secrets into a process:
 
 ```bash
-export BASE_URL="http://localhost:5000/api"
-export TOKEN="<api-token>"
+ssm-cli run --profile dev -- python app.py
 ```
 
-List projects:
+Download secrets:
 
 ```bash
-curl -sS "$BASE_URL/projects" \
-  -H "Authorization: Bearer $TOKEN"
+ssm-cli secrets download --profile dev --format json
 ```
 
-List configs in a project:
+Check active CLI session:
 
 ```bash
-curl -sS "$BASE_URL/projects/my-project/configs" \
-  -H "Authorization: Bearer $TOKEN"
+ssm-cli whoami --profile dev
 ```
 
-Export secrets (with inherited values and metadata):
+---
+
+## Documentation
+
+- CLI reference: [`docs/CLI.md`](docs/CLI.md)
+- First-time setup: [`docs/FIRST_TIME_SETUP.md`](docs/FIRST_TIME_SETUP.md)
+- Container runtime reference: [`docs/README_dockerhub.md`](docs/README_dockerhub.md)
+- Developer docs: [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md)
+
+## Update Existing Deployment
+
+If you run from this repository source:
 
 ```bash
-curl -sS "$BASE_URL/projects/my-project/configs/dev/secrets?format=json&include_parent=true&include_meta=true" \
-  -H "Authorization: Bearer $TOKEN"
+git pull
+docker compose up -d --build
 ```
 
-Revoke a token by `token_id`:
+If you run prebuilt images only:
 
 ```bash
-curl -sS -X POST "$BASE_URL/auth/tokens/v2/revoke" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"token_id":"<token-id>"}'
+docker compose pull
+docker compose up -d
 ```
 
-Container runtime reference: [`docs/README_dockerhub.md`](docs/README_dockerhub.md)
+---
+
+## Contributing 👏
+
+We welcome contributions from the community to improve Meeseeks. Use the steps below.
+
+1. Fork the repository and clone it to your local machine.
+2. Use the pre-commit hook to automate linting and testing, catching errors early. 
+3. Create a new branch for your contribution.
+4. Make your changes, commit them, and push to your fork.
+5. Open a pull request describing the change and the problem it solves.
+
+## Bug Reports and Feature Requests 🐞
+
+If you encounter bugs or have ideas for features, open an issue on the [issue tracker](https://github.com/bearlike/Simple-Secrets-Manager/issues). Include reproduction steps and error messages when possible.
+
+Thank you for contributing.
+
+---
+
+Licensed under [CC0 1.0 Universal](./LICENSE).

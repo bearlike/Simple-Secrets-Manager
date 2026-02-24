@@ -15,6 +15,10 @@ dependencies = [
     "flask-cors>=5.0.0,<6.0.0",
     "flask-restx>=0.5.1",
     "pymongo>4,<5",
+    "click>=8.1.8,<9.0.0",
+    "rich>=13.9.4,<14.0.0",
+    "requests>=2.32.3,<3.0.0",
+    "keyring>=25.6.0,<26.0.0",
 ]
 
 [project.urls]
@@ -33,8 +37,12 @@ dev = [
 requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
+[project.scripts]
+ssm = "ssm_cli.main:cli"
+ssm-cli = "ssm_cli.main:cli"
+
 [tool.setuptools]
-packages = ["Access", "Api", "Engines"]
+packages = ["Access", "Api", "Engines", "ssm_cli"]
 py-modules = ["connection", "server"]
 
 [tool.ruff]
@@ -48,4 +56,8 @@ select = ["E", "F"]
 [tool.mypy]
 python_version = "3.9"
 ignore_missing_imports = true
-exclude = ["^\\.venv/"]
+exclude = [
+    "^\\.venv/",
+    "^build/",
+    "^simple_secrets_manager\\.egg-info/",
+]
