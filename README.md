@@ -133,7 +133,7 @@ docker compose up -d
 
 ## Contributing 👏
 
-We welcome contributions from the community to improve Meeseeks. Use the steps below.
+We welcome contributions from the community to improve this project. Use the steps below.
 
 1. Fork the repository and clone it to your local machine.
 2. Use the pre-commit hook to automate linting and testing, catching errors early. 
