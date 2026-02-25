@@ -78,6 +78,8 @@ Run your app with injected secrets:
 ssm-cli run --profile dev -- python app.py
 ```
 
+`ssm-cli run` resolves secret references by default (`${KEY}`, `${config.KEY}`, `${project.config.KEY}`) through the backend API.
+
 ## Core Commands
 
 Download secrets:
@@ -85,12 +87,14 @@ Download secrets:
 ```bash
 ssm-cli secrets download --profile dev --format json
 ssm-cli secrets download --profile dev --format env
+ssm-cli secrets download --profile dev --format json --raw
 ```
 
 Mount secrets to FIFO:
 
 ```bash
 ssm-cli secrets mount --profile dev --path /tmp/ssm-secrets.fifo --format json
+ssm-cli secrets mount --profile dev --path /tmp/ssm-secrets.fifo --format env --raw
 ```
 
 Validate current session:

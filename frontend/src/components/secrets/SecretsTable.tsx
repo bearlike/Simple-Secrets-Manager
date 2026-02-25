@@ -180,7 +180,8 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
       return {
         key: entry.key,
         value: entry.value,
-        action
+        action,
+        hasReference: entry.hasReference
       };
     });
 

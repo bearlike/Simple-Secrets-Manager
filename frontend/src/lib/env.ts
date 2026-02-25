@@ -1,6 +1,7 @@
 export interface ParsedEnvEntry {
   key: string;
   value: string;
+  hasReference: boolean;
 }
 
 export interface ParsedEnvResult {
@@ -10,6 +11,11 @@ export interface ParsedEnvResult {
 }
 
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const SECRET_REFERENCE_PATTERN = /\$\{[^{}]+\}/;
+
+export function containsSecretReference(value: string): boolean {
+  return SECRET_REFERENCE_PATTERN.test(value);
+}
 
 function stripInlineComment(value: string): string {
   const commentStart = value.search(/\s#/);
@@ -194,7 +200,11 @@ export function parseEnvContent(content: string): ParsedEnvResult {
   }
 
   return {
-    entries: Array.from(keyToValue.entries()).map(([key, value]) => ({ key, value })),
+    entries: Array.from(keyToValue.entries()).map(([key, value]) => ({
+      key,
+      value,
+      hasReference: containsSecretReference(value)
+    })),
     duplicateCount,
     errors
   };

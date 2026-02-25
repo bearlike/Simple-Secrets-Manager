@@ -44,12 +44,28 @@ def test_export_secrets_json_parses_values(monkeypatch):
     def fake_request(**kwargs):
         assert kwargs["headers"]["Authorization"] == "Bearer t"
         assert kwargs["params"]["format"] == "json"
+        assert kwargs["params"]["resolve_references"] == "true"
+        assert kwargs["params"]["raw"] == "false"
         return _response(200, {"data": {"API_KEY": "value", "PORT": "8080"}, "status": "OK"})
 
     monkeypatch.setattr(client.session, "request", fake_request)
 
     data = client.export_secrets_json("proj", "cfg")
     assert data == {"API_KEY": "value", "PORT": "8080"}
+
+
+def test_export_secrets_json_raw_mode_disables_resolution(monkeypatch):
+    client = ApiClient("http://localhost:8080", token="t")
+
+    def fake_request(**kwargs):
+        assert kwargs["params"]["resolve_references"] == "false"
+        assert kwargs["params"]["raw"] == "true"
+        return _response(200, {"data": {"A": "${B}"}, "status": "OK"})
+
+    monkeypatch.setattr(client.session, "request", fake_request)
+
+    data = client.export_secrets_json("proj", "cfg", raw=True)
+    assert data == {"A": "${B}"}
 
 
 def test_request_raises_api_error_on_http_failure(monkeypatch):

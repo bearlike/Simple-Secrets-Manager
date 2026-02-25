@@ -15,6 +15,13 @@ export interface SecretUpsertInput {
   value: string;
 }
 
+export interface SecretExportOptions {
+  includeParent?: boolean;
+  includeMeta?: boolean;
+  resolveReferences?: boolean;
+  raw?: boolean;
+}
+
 function secretsEndpoint(
   projectSlug: string,
   configSlug: string,
@@ -28,19 +35,27 @@ function secretsEndpoint(
   return `/projects/${projectSlug}/configs/${configSlug}/secrets?${searchParams.toString()}`;
 }
 
-export async function getSecrets(projectSlug: string, configSlug: string): Promise<Secret[]> {
-  return mapSecretsData(await getSecretsKeyMap(projectSlug, configSlug, true));
+export async function getSecrets(
+  projectSlug: string,
+  configSlug: string,
+  options?: SecretExportOptions
+): Promise<Secret[]> {
+  return mapSecretsData(await getSecretsKeyMap(projectSlug, configSlug, true, options));
 }
 
 export async function getSecretsKeyMap(
   projectSlug: string,
   configSlug: string,
-  includeParent = true
+  includeParent = true,
+  options?: SecretExportOptions
 ): Promise<Record<string, string>> {
   const response = await apiClient<SecretsJsonResponseDto>(
     secretsEndpoint(projectSlug, configSlug, {
       format: 'json',
-      include_parent: includeParent
+      include_parent: options?.includeParent ?? includeParent,
+      include_meta: options?.includeMeta ?? false,
+      resolve_references: options?.resolveReferences ?? false,
+      raw: options?.raw ?? false
     })
   );
 
@@ -127,11 +142,15 @@ export async function upsertSecretsBulk(
 export async function bulkExport(
   projectSlug: string,
   configSlug: string,
-  format: 'json' | 'env'
+  format: 'json' | 'env',
+  options?: SecretExportOptions
 ): Promise<BulkExportResult> {
   const endpoint = secretsEndpoint(projectSlug, configSlug, {
     format,
-    include_parent: true
+    include_parent: options?.includeParent ?? true,
+    include_meta: options?.includeMeta ?? false,
+    resolve_references: options?.resolveReferences ?? true,
+    raw: options?.raw ?? false
   });
 
   if (format === 'env') {

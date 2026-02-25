@@ -15,6 +15,7 @@ export interface EnvImportPreviewItem {
   key: string;
   value: string;
   action: EnvImportAction;
+  hasReference: boolean;
 }
 
 export interface EnvImportPreview {
@@ -95,6 +96,9 @@ export function ImportEnvDialog({ open, onOpenChange, preview, loading, onConfir
                   <th className="px-3 py-2 text-left text-xs font-medium tracking-wider text-muted-foreground">
                     ACTION
                   </th>
+                  <th className="px-3 py-2 text-left text-xs font-medium tracking-wider text-muted-foreground">
+                    TYPE
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -107,6 +111,14 @@ export function ImportEnvDialog({ open, onOpenChange, preview, loading, onConfir
                       <Badge variant="outline" className={`text-xs ${actionBadgeClass(item.action)}`}>
                         {actionLabel(item.action)}
                       </Badge>
+                    </td>
+                    <td className="px-3 py-2">
+                      {item.hasReference ?
+                      <Badge variant="outline" className="text-xs">
+                          Uses references
+                        </Badge> :
+                      <span className="text-xs text-muted-foreground">Literal</span>
+                      }
                     </td>
                   </tr>
                 )}

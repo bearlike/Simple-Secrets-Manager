@@ -105,6 +105,10 @@ export function AddSecretDialog({
             {errors.value &&
             <p className="text-xs text-destructive">{errors.value.message}</p>
             }
+            <p className="text-xs text-muted-foreground">
+              References: <code className="font-mono">${'{KEY}'}</code>, <code className="font-mono">${'{config.KEY}'}</code>,{' '}
+              <code className="font-mono">${'{project.config.KEY}'}</code>
+            </p>
           </div>
           <DialogFooter>
             <Button

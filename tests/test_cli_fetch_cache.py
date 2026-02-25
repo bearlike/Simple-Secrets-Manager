@@ -33,7 +33,7 @@ def test_fetch_secrets_falls_back_to_cache_on_api_error(monkeypatch, tmp_path):
 
     save_secret_cache("http://localhost:8080/api", "project-a", "dev", {"CACHED": "yes"})
 
-    def fail_export(self, project, config):
+    def fail_export(self, project, config, **kwargs):
         raise ApiError("boom", status_code=503)
 
     monkeypatch.setattr("ssm_cli.main.ApiClient.export_secrets_json", fail_export)

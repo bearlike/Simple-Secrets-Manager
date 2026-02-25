@@ -121,11 +121,24 @@ class ApiClient:
             raise ApiError("Token response is invalid", status_code=1, body=payload)
         return payload
 
-    def export_secrets_json(self, project: str, config: str) -> dict[str, str]:
+    def export_secrets_json(
+        self,
+        project: str,
+        config: str,
+        *,
+        resolve_references: bool = True,
+        raw: bool = False,
+    ) -> dict[str, str]:
         payload = self.request(
             "GET",
             f"/projects/{project}/configs/{config}/secrets",
-            params={"format": "json", "include_parent": "true", "include_meta": "false"},
+            params={
+                "format": "json",
+                "include_parent": "true",
+                "include_meta": "false",
+                "raw": str(raw).lower(),
+                "resolve_references": str(resolve_references and not raw).lower(),
+            },
             accept="application/json",
         )
         data = payload.get("data") if isinstance(payload, dict) else None

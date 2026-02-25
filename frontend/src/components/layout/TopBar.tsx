@@ -69,11 +69,14 @@ export function TopBar() {
     }
   };
 
-  const handleExport = async (format: 'json' | 'env') => {
+  const handleExport = async (format: 'json' | 'env', raw = false) => {
     if (!projectSlug || !configSlug) return;
 
     try {
-      const result = await bulkExport(projectSlug, configSlug, format);
+      const result = await bulkExport(projectSlug, configSlug, format, {
+        resolveReferences: !raw,
+        raw
+      });
       if (result.format === 'json') {
         downloadFile(
           JSON.stringify(result.data, null, 2),
@@ -83,7 +86,7 @@ export function TopBar() {
       } else {
         downloadFile(result.data, `${projectSlug}-${configSlug}.env`, 'text/plain');
       }
-      toast.success(`Exported as ${format.toUpperCase()}`);
+      toast.success(`Exported as ${format.toUpperCase()}${raw ? ' (raw)' : ''}`);
     } catch {
       toast.error('Export failed');
     }
@@ -177,8 +180,10 @@ export function TopBar() {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => handleExport('json')}>Export as JSON</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleExport('env')}>Export as .env</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleExport('json')}>Export as JSON (resolved)</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleExport('env')}>Export as .env (resolved)</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleExport('json', true)}>Export as JSON (raw)</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => handleExport('env', true)}>Export as .env (raw)</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       )}

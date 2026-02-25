@@ -92,10 +92,13 @@ Inject secrets into a process:
 ssm-cli run --profile dev -- python app.py
 ```
 
+`ssm-cli run` resolves secret references by default, including `${KEY}`, `${config.KEY}`, and `${project.config.KEY}`.
+
 Download secrets:
 
 ```bash
 ssm-cli secrets download --profile dev --format json
+ssm-cli secrets download --profile dev --format json --raw
 ```
 
 Check active CLI session:

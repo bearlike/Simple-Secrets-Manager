@@ -67,6 +67,8 @@ def _fetch_secrets(
     *,
     offline: bool,
     cache_ttl: int,
+    resolve_references: bool = True,
+    raw: bool = False,
 ) -> tuple[dict[str, str], str]:
     if not resolution.base_url or not resolution.project or not resolution.config:
         raise CliError("Missing base_url/project/config for secret retrieval", exit_code=2)
@@ -84,7 +86,12 @@ def _fetch_secrets(
 
     client = ApiClient(resolution.base_url, token=resolution.token)
     try:
-        data = client.export_secrets_json(resolution.project, resolution.config)
+        data = client.export_secrets_json(
+            resolution.project,
+            resolution.config,
+            resolve_references=resolve_references,
+            raw=raw,
+        )
         save_secret_cache(resolution.base_url, resolution.project, resolution.config, data)
         return data, "remote"
     except ApiError:
@@ -254,7 +261,13 @@ def run(
         require_project_config=True,
         require_token=True,
     )
-    secrets, source = _fetch_secrets(resolution, offline=offline, cache_ttl=cache_ttl)
+    secrets, source = _fetch_secrets(
+        resolution,
+        offline=offline,
+        cache_ttl=cache_ttl,
+        resolve_references=True,
+        raw=False,
+    )
 
     if print_env:
         _print_env_table(secrets, show_values=show_values)
@@ -279,6 +292,7 @@ def secrets() -> None:
 @click.option("--profile", default=None, help="Profile name")
 @click.option("--offline", is_flag=True, default=False, help="Use cached secrets only")
 @click.option("--cache-ttl", default=3600, show_default=True, type=int, help="Cache max age in seconds")
+@click.option("--raw", is_flag=True, default=False, help="Fetch raw values without resolving references")
 @_handle_errors
 def secrets_download(
     output_format: str,
@@ -288,6 +302,7 @@ def secrets_download(
     profile: str | None,
     offline: bool,
     cache_ttl: int,
+    raw: bool,
 ) -> None:
     resolution = resolve_context(
         base_url=base_url,
@@ -298,7 +313,13 @@ def secrets_download(
         require_project_config=True,
         require_token=True,
     )
-    secrets_data, source = _fetch_secrets(resolution, offline=offline, cache_ttl=cache_ttl)
+    secrets_data, source = _fetch_secrets(
+        resolution,
+        offline=offline,
+        cache_ttl=cache_ttl,
+        resolve_references=not raw,
+        raw=raw,
+    )
     if source != "remote":
         console.print(f"Using secrets from [bold]{source}[/bold].", style="yellow")
 
@@ -318,6 +339,7 @@ def secrets_download(
 @click.option("--profile", default=None, help="Profile name")
 @click.option("--offline", is_flag=True, default=False, help="Use cached secrets only")
 @click.option("--cache-ttl", default=3600, show_default=True, type=int, help="Cache max age in seconds")
+@click.option("--raw", is_flag=True, default=False, help="Fetch raw values without resolving references")
 @click.option("--keep", is_flag=True, default=False, help="Keep FIFO after write")
 @_handle_errors
 def secrets_mount(
@@ -329,6 +351,7 @@ def secrets_mount(
     profile: str | None,
     offline: bool,
     cache_ttl: int,
+    raw: bool,
     keep: bool,
 ) -> None:
     resolution = resolve_context(
@@ -340,7 +363,13 @@ def secrets_mount(
         require_project_config=True,
         require_token=True,
     )
-    secrets_data, source = _fetch_secrets(resolution, offline=offline, cache_ttl=cache_ttl)
+    secrets_data, source = _fetch_secrets(
+        resolution,
+        offline=offline,
+        cache_ttl=cache_ttl,
+        resolve_references=not raw,
+        raw=raw,
+    )
 
     payload = json.dumps(secrets_data, sort_keys=True) if output_format == "json" else render_env_lines(secrets_data)
 

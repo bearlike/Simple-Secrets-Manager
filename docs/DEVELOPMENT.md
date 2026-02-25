@@ -97,6 +97,20 @@ uv run ssm-cli --help
 
 Detailed CLI usage is documented in [`docs/CLI.md`](CLI.md).
 
+## Secret reference resolution
+
+Config export endpoint supports optional reference resolution:
+
+- `GET /api/projects/<project>/configs/<config>/secrets?format=json|env&resolve_references=true`
+- `raw=true` disables resolution and returns stored raw values.
+- `placeholder_max_depth=<n>` controls recursion depth for nested references.
+
+Supported placeholders:
+
+- `${KEY}` (same config)
+- `${config.KEY}` (another config in same project)
+- `${project.config.KEY}` (config in another project)
+
 Global CLI install smoke check:
 
 ```bash
