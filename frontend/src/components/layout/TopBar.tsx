@@ -26,6 +26,7 @@ import {
 import { getProjects } from '../../lib/api/projects';
 import { getConfigs } from '../../lib/api/configs';
 import { bulkExport } from '../../lib/api/secrets';
+import { getAppVersion } from '../../lib/api/version';
 import { queryKeys } from '../../lib/api/queryKeys';
 import { useTheme } from '../../lib/theme';
 
@@ -59,6 +60,11 @@ export function TopBar() {
     queryKey: queryKeys.configs(projectSlug ?? ''),
     queryFn: () => getConfigs(projectSlug ?? ''),
     enabled: !!projectSlug
+  });
+  const { data: appVersion = 'unknown' } = useQuery({
+    queryKey: queryKeys.appVersion(),
+    queryFn: getAppVersion,
+    staleTime: 5 * 60 * 1000
   });
 
   const currentProject = projects.find((project) => project.slug === projectSlug);
@@ -145,7 +151,7 @@ export function TopBar() {
           aria-label="Open repository on GitHub"
         >
           <GithubIcon className="h-3.5 w-3.5" />
-          GitHub
+          {`GitHub v${appVersion}`}
         </a>
       </Button>
 

@@ -41,6 +41,7 @@ class SecretReferenceResolver:
         export_config: Callable[[object], tuple[dict | None, object, str, int]],
         require_scope: Callable[[str, object, object], object] | None = None,
         max_depth: int = 8,
+        root_data: dict[str, str] | None = None,
     ):
         if max_depth < 1:
             raise SecretReferenceError("placeholder_max_depth must be >= 1")
@@ -52,6 +53,9 @@ class SecretReferenceResolver:
         self._max_depth = max_depth
         self._context_cache: dict[_Context, dict[str, str]] = {}
         self._resolved_cache: dict[_Node, str] = {}
+        self._validated_cache: set[_Node] = set()
+        if root_data is not None:
+            self._context_cache[self._root] = dict(root_data)
 
     def resolve_map(self, data: dict[str, str]) -> dict[str, str]:
         self._context_cache[self._root] = dict(data)
@@ -69,11 +73,58 @@ class SecretReferenceResolver:
             token = match.group(1).strip()
             parsed = self._parse_reference(token, current)
             if parsed is None:
-                return match.group(0)
+                return ""
             resolved = self._resolve_key(parsed, stack=stack, depth=depth)
-            return match.group(0) if resolved is None else resolved
+            return "" if resolved is None else resolved
 
         return PLACEHOLDER_PATTERN.sub(replace, value)
+
+    def validate_value_references(self, *, key: str, value: str) -> list[str]:
+        if "${" not in value:
+            return []
+        current = self._root
+        source = _Node(current.project_slug, current.config_slug, key)
+        errors: list[str] = []
+        for match in PLACEHOLDER_PATTERN.finditer(value):
+            token = match.group(1).strip()
+            parsed = self._parse_reference(token, current)
+            if parsed is None:
+                errors.append(f"Invalid reference syntax: {match.group(0)}")
+                continue
+            try:
+                self._ensure_node_resolvable(parsed, stack=(source,), depth=0)
+            except SecretReferenceError as exc:
+                errors.append(exc.message)
+        return sorted(set(errors))
+
+    def _ensure_node_resolvable(self, node: _Node, *, stack: tuple[_Node, ...], depth: int) -> None:
+        if depth >= self._max_depth:
+            raise SecretReferenceError(
+                f"Secret reference max depth exceeded ({self._max_depth}) while validating "
+                f"{node.project_slug}.{node.config_slug}.{node.key}"
+            )
+        if node in stack:
+            path = " -> ".join(f"{item.project_slug}.{item.config_slug}.{item.key}" for item in (*stack, node))
+            raise SecretReferenceError(f"Secret reference cycle detected: {path}")
+        if node in self._validated_cache:
+            return
+
+        context = _Context(node.project_slug, node.config_slug)
+        data = self._load_context_data(context)
+        raw_value = data.get(node.key)
+        if raw_value is None:
+            raise SecretReferenceError(f"Unresolved reference: ${{{node.project_slug}.{node.config_slug}.{node.key}}}")
+
+        for match in PLACEHOLDER_PATTERN.finditer(raw_value):
+            token = match.group(1).strip()
+            parsed = self._parse_reference(token, context)
+            if parsed is None:
+                raise SecretReferenceError(
+                    f"Invalid reference syntax in {node.project_slug}.{node.config_slug}.{node.key}: {match.group(0)}"
+                )
+            self._ensure_node_resolvable(parsed, stack=(*stack, node), depth=depth + 1)
+
+        self._validated_cache.add(node)
 
     def _resolve_key(self, node: _Node, *, stack: tuple[_Node, ...], depth: int) -> str | None:
         if depth >= self._max_depth:

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
+from typing import Optional
+
 from flask import Response, g
-from flask_restx import Resource
+from flask_restx import Resource, inputs
 
 from Api.api import api, conn
 from Api.resources.helpers import resolve_project_config
@@ -14,15 +16,15 @@ secrets_ns = api.namespace(
 secret_parser = api.parser()
 secret_parser.add_argument("value", type=str, required=True, location="json")
 secret_get_parser = api.parser()
-secret_get_parser.add_argument("raw", type=bool, default=False, location="args")
-secret_get_parser.add_argument("resolve_references", type=bool, default=False, location="args")
+secret_get_parser.add_argument("raw", type=inputs.boolean, default=False, location="args")
+secret_get_parser.add_argument("resolve_references", type=inputs.boolean, default=False, location="args")
 secret_get_parser.add_argument("placeholder_max_depth", type=int, default=8, location="args")
 export_parser = api.parser()
 export_parser.add_argument("format", type=str, choices=("json", "env"), default="json", location="args")
-export_parser.add_argument("include_parent", type=bool, default=True, location="args")
-export_parser.add_argument("include_meta", type=bool, default=True, location="args")
-export_parser.add_argument("raw", type=bool, default=False, location="args")
-export_parser.add_argument("resolve_references", type=bool, default=False, location="args")
+export_parser.add_argument("include_parent", type=inputs.boolean, default=True, location="args")
+export_parser.add_argument("include_meta", type=inputs.boolean, default=True, location="args")
+export_parser.add_argument("raw", type=inputs.boolean, default=False, location="args")
+export_parser.add_argument("resolve_references", type=inputs.boolean, default=False, location="args")
 export_parser.add_argument("placeholder_max_depth", type=int, default=8, location="args")
 
 
@@ -36,7 +38,23 @@ def _resolve_reference_map(
 ) -> dict[str, str]:
     if not enabled:
         return data
-    resolver = SecretReferenceResolver(
+    resolver = _build_reference_resolver(
+        project_slug=project_slug,
+        config_slug=config_slug,
+        max_depth=max_depth,
+        root_data=data,
+    )
+    return resolver.resolve_map(data)
+
+
+def _build_reference_resolver(
+    *,
+    project_slug: str,
+    config_slug: str,
+    max_depth: int,
+    root_data: Optional[dict[str, str]] = None,
+) -> SecretReferenceResolver:
+    return SecretReferenceResolver(
         project_slug=project_slug,
         config_slug=config_slug,
         get_project_by_slug=conn.projects.get_by_slug,
@@ -48,8 +66,8 @@ def _resolve_reference_map(
         ),
         require_scope=require_scope,
         max_depth=max_depth,
+        root_data=root_data,
     )
-    return resolver.resolve_map(data)
 
 
 @secrets_ns.route("/<string:key>")
@@ -60,7 +78,32 @@ class SecretItemResource(Resource):
         project, config = resolve_project_config(project_slug, config_slug)
         require_scope("secrets:write", project_id=project["_id"], config_id=config["_id"])
         args = secret_parser.parse_args()
-        result, code = conn.secrets_v2.put(config["_id"], key, args["value"], g.actor.get("id"))
+        value = args["value"]
+
+        if "${" in value:
+            exported, _, msg, code = conn.secrets_v2.export_config(
+                config["_id"],
+                include_parent=True,
+                include_metadata=False,
+            )
+            if code >= 400 or exported is None:
+                api.abort(code, msg)
+            staged = dict(exported)
+            staged[key] = value
+            resolver = _build_reference_resolver(
+                project_slug=project_slug,
+                config_slug=config_slug,
+                max_depth=8,
+                root_data=staged,
+            )
+            try:
+                errors = resolver.validate_value_references(key=key, value=value)
+            except SecretReferenceError as exc:
+                api.abort(exc.status_code, exc.message)
+            if errors:
+                api.abort(400, "; ".join(errors))
+
+        result, code = conn.secrets_v2.put(config["_id"], key, value, g.actor.get("id"))
         audit_event("secrets.write", project_slug=project_slug, config_slug=config_slug, key=key, status_code=code)
         if code >= 400:
             api.abort(code, result)

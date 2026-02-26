@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -6,61 +7,70 @@ import { toast } from 'sonner';
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
-  DialogTitle,
-  DialogFooter } from
-'@/components/ui/dialog';
+  DialogTitle
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiClientError } from '../../lib/api/client';
-import { createSecret } from '../../lib/api/secrets';
+import { updateSecret } from '../../lib/api/secrets';
 import { queryKeys } from '../../lib/api/queryKeys';
+import type { Secret } from '../../lib/api/types';
 import { SecretValueEditor } from './SecretValueEditor';
 import { useReferenceSuggestions } from './useReferenceSuggestions';
+
 const schema = z.object({
-  key: z.
-  string().
-  min(1, 'Key is required').
-  regex(
-    /^[A-Z0-9_]+$/,
-    'Key must be uppercase letters, numbers, and underscores only'
-  ),
   value: z.string().min(1, 'Value is required')
 });
+
 type FormValues = z.infer<typeof schema>;
-interface AddSecretDialogProps {
+
+interface EditSecretDialogProps {
+  secret: Secret | null;
   projectSlug: string;
   configSlug: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
-export function AddSecretDialog({
+
+export function EditSecretDialog({
+  secret,
   projectSlug,
   configSlug,
   open,
   onOpenChange
-}: AddSecretDialogProps) {
+}: EditSecretDialogProps) {
   const queryClient = useQueryClient();
   const referenceSuggestions = useReferenceSuggestions({ projectSlug, configSlug });
   const {
     control,
-    register,
     handleSubmit,
     reset,
     formState: { errors }
   } = useForm<FormValues>({
-    resolver: zodResolver(schema)
+    resolver: zodResolver(schema),
+    defaultValues: {
+      value: secret?.value ?? ''
+    }
   });
+
+  useEffect(() => {
+    reset({
+      value: secret?.value ?? ''
+    });
+  }, [secret?.key, secret?.value, reset]);
+
   const mutation = useMutation({
-    mutationFn: (data: FormValues) =>
-    createSecret(projectSlug, configSlug, data),
+    mutationFn: (data: FormValues) => {
+      if (!secret) throw new Error('No secret selected');
+      return updateSecret(projectSlug, configSlug, secret.key, data);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.secrets(projectSlug, configSlug)
       });
-      toast.success('Secret created');
-      reset();
+      toast.success('Secret updated');
       onOpenChange(false);
     },
     onError: (error) => {
@@ -72,78 +82,67 @@ export function AddSecretDialog({
         toast.error(error.message);
         return;
       }
-      toast.error('Failed to create secret');
+      toast.error('Failed to update secret');
     }
   });
+
   const onSubmit = (data: FormValues) => mutation.mutate(data);
+
   return (
     <Dialog
       open={open}
-      onOpenChange={(v) => {
-        onOpenChange(v);
-        if (!v) reset();
-      }}>
-
-      <DialogContent className="sm:max-w-[720px]">
+      onOpenChange={(next) => {
+        onOpenChange(next);
+        if (!next) {
+          mutation.reset();
+        }
+      }}
+    >
+      <DialogContent className="sm:max-w-[760px]">
         <DialogHeader>
-          <DialogTitle>Add Secret</DialogTitle>
+          <DialogTitle>Edit Secret</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
           <div className="space-y-1.5">
-            <Label htmlFor="key">Key</Label>
-            <Input
-              id="key"
-              {...register('key')}
-              placeholder="DATABASE_URL"
-              className="font-mono"
-              autoComplete="off" />
-
-            {errors.key &&
-            <p className="text-xs text-destructive">{errors.key.message}</p>
-            }
-            <p className="text-xs text-muted-foreground">
-              Uppercase letters, numbers, and underscores only
-            </p>
+            <Label>Key</Label>
+            <p className="font-mono text-sm font-medium">{secret?.key ?? '—'}</p>
           </div>
+
           <div className="space-y-1.5">
-            <Label htmlFor="value">Value</Label>
+            <Label htmlFor="secret-edit-value">Value</Label>
             <Controller
               name="value"
               control={control}
-              render={({ field }) =>
-              <SecretValueEditor
-                value={field.value}
-                onChange={field.onChange}
-                placeholder="Enter secret value..."
-                rows={6}
-                className="min-h-[160px]"
-                autocompleteItems={referenceSuggestions}
-              />
-              }
+              render={({ field }) => (
+                <SecretValueEditor
+                  value={field.value}
+                  onChange={field.onChange}
+                  rows={12}
+                  className="min-h-[320px]"
+                  autoFocus
+                  autocompleteItems={referenceSuggestions}
+                />
+              )}
             />
 
-            {errors.value &&
-            <p className="text-xs text-destructive">{errors.value.message}</p>
-            }
+            {errors.value && <p className="text-xs text-destructive">{errors.value.message}</p>}
             <p className="text-xs text-muted-foreground">
-              References: <code className="font-mono">${'{KEY}'}</code>, <code className="font-mono">${'{config.KEY}'}</code>,{' '}
+              References: <code className="font-mono">${'{KEY}'}</code>,{' '}
+              <code className="font-mono">${'{config.KEY}'}</code>,{' '}
               <code className="font-mono">${'{project.config.KEY}'}</code>
             </p>
           </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}>
 
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? 'Saving...' : 'Add Secret'}
+            <Button type="submit" disabled={mutation.isPending || !secret}>
+              {mutation.isPending ? 'Saving...' : 'Save'}
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
-    </Dialog>);
-
+    </Dialog>
+  );
 }

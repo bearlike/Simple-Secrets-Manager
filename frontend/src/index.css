@@ -60,3 +60,28 @@
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 }
+
+@layer components {
+  .ssm-secret-editor-cm:focus-within {
+    @apply ring-1 ring-ring;
+  }
+
+  .ssm-secret-editor-cm .cm-tooltip-autocomplete {
+    @apply border border-border bg-popover text-popover-foreground shadow-md;
+    max-width: 360px;
+  }
+
+  .ssm-secret-value .token.ssm-ref-token-valid,
+  .ssm-secret-editor-cm .cm-ssm-ref-valid {
+    @apply font-semibold text-blue-700 dark:text-blue-300;
+  }
+
+  .ssm-secret-value .token.ssm-ref-token-invalid,
+  .ssm-secret-editor-cm .cm-ssm-ref-invalid {
+    @apply decoration-dotted text-red-700 underline dark:text-red-300;
+  }
+
+  .ssm-secret-value {
+    overflow-wrap: anywhere;
+  }
+}

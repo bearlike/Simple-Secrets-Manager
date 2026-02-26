@@ -1,3 +1,5 @@
+import { containsSecretReference } from './secretReferences';
+
 export interface ParsedEnvEntry {
   key: string;
   value: string;
@@ -11,12 +13,6 @@ export interface ParsedEnvResult {
 }
 
 const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const SECRET_REFERENCE_PATTERN = /\$\{[^{}]+\}/;
-
-export function containsSecretReference(value: string): boolean {
-  return SECRET_REFERENCE_PATTERN.test(value);
-}
-
 function stripInlineComment(value: string): string {
   const commentStart = value.search(/\s#/);
   if (commentStart < 0) return value.trimEnd();

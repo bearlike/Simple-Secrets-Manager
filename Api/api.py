@@ -55,4 +55,5 @@ if True:
         Auth_Userpass_delete,
         Auth_Userpass_register,
     )
+    from Api.resources.meta.version_resource import VersionResource  # noqa: F401
     from Api.errors import errors  # noqa: F401

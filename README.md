@@ -93,6 +93,7 @@ ssm-cli run --profile dev -- python app.py
 ```
 
 `ssm-cli run` resolves secret references by default, including `${KEY}`, `${config.KEY}`, and `${project.config.KEY}`.
+Invalid or unresolved references are rejected on save by the API, and missing references at read time resolve to empty strings.
 
 Download secrets:
 

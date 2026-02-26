@@ -21,7 +21,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   deleteSecret,
   getSecrets,
@@ -39,7 +38,8 @@ import {
   type EnvImportPreviewItem,
   ImportEnvDialog
 } from './ImportEnvDialog';
-import { EditSecretPopover } from './EditSecretPopover';
+import { EditSecretDialog } from './EditSecretDialog';
+import { SecretValueText } from './SecretValueEditor';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { EmptyState } from '../common/EmptyState';
 import { getConfigBadgeClass } from '../../lib/badgeStyles';
@@ -67,12 +67,28 @@ interface SecretsTableProps {
   configSlug: string;
 }
 
+function columnClass(columnId: string, header = false): string {
+  if (columnId === 'key') {
+    return header ? 'w-56 max-w-[14rem]' : 'w-56 max-w-[14rem] align-top';
+  }
+  if (columnId === 'value') {
+    return header ? '' : 'min-w-0 align-top';
+  }
+  if (columnId === 'updatedAt') {
+    return header ? 'w-28' : 'w-28 align-top';
+  }
+  if (columnId === 'actions') {
+    return header ? 'w-32 text-right' : 'w-32 align-top';
+  }
+  return header ? '' : 'align-top';
+}
+
 export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
-  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editingSecret, setEditingSecret] = useState<Secret | null>(null);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [globalFilter, setGlobalFilter] = useState('');
@@ -102,7 +118,7 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
   const importMutation = useMutation({
     mutationFn: async () => {
       if (!importPreview) {
-        return { succeeded: 0, failedKeys: [] as string[] };
+        return { succeeded: 0, failed: [] as { key: string; message: string }[] };
       }
 
       const entries: SecretUpsertInput[] = importPreview.items.map((item) => ({
@@ -111,23 +127,25 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
       }));
       return upsertSecretsBulk(projectSlug, configSlug, entries);
     },
-    onSuccess: ({ succeeded, failedKeys }) => {
+    onSuccess: ({ succeeded, failed }) => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.secrets(projectSlug, configSlug)
       });
       setImportOpen(false);
       setImportPreview(null);
 
-      if (failedKeys.length === 0) {
+      if (failed.length === 0) {
         toast.success(`Imported ${succeeded} variable${succeeded === 1 ? '' : 's'}`);
         return;
       }
 
-      const failedPreview = failedKeys.slice(0, 3).join(', ');
-      const moreFailed = failedKeys.length > 3 ? ', ...' : '';
+      const failedPreview = failed.slice(0, 3).map((item) => item.key).join(', ');
+      const moreFailed = failed.length > 3 ? ', ...' : '';
+      const firstError = failed[0]?.message ? `: ${failed[0].message}` : '';
       toast.error(
-        `Imported ${succeeded} variable${succeeded === 1 ? '' : 's'}; failed ${failedKeys.length}` +
-          (failedPreview ? ` (${failedPreview}${moreFailed})` : '')
+        `Imported ${succeeded} variable${succeeded === 1 ? '' : 's'}; failed ${failed.length}` +
+          (failedPreview ? ` (${failedPreview}${moreFailed})` : '') +
+          firstError
       );
     },
     onError: (error) => {
@@ -229,7 +247,11 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
       {
         accessorKey: 'key',
         header: 'KEY',
-        cell: ({ row }) => <span className="font-mono text-sm font-medium">{row.original.key}</span>
+        cell: ({ row }) => (
+          <span className="block max-w-full break-all font-mono text-sm font-medium leading-5">
+            {row.original.key}
+          </span>
+        )
       },
       {
         accessorKey: 'value',
@@ -237,18 +259,11 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
         cell: ({ row }) => {
           const revealed = revealedKeys.has(row.original.key);
           return (
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-sm text-muted-foreground">
-                {revealed ? row.original.value : '••••••••••••'}
-              </span>
-              <button
-                onClick={() => toggleReveal(row.original.key)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-                aria-label={revealed ? 'Hide value' : 'Reveal value'}
-              >
-                {revealed ? <EyeOffIcon className="h-3.5 w-3.5" /> : <EyeIcon className="h-3.5 w-3.5" />}
-              </button>
-            </div>
+            revealed ?
+            <div className="max-w-full rounded-md border border-border bg-muted/20 px-2 py-1">
+                <SecretValueText value={row.original.value} className="max-h-40 overflow-y-auto" />
+              </div> :
+            <span className="font-mono text-sm text-muted-foreground">••••••••••••</span>
           );
         }
       },
@@ -263,33 +278,28 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
         id: 'actions',
         header: '',
         cell: ({ row }) => (
-          <div className="flex items-center gap-1 justify-end">
-            <Popover
-              open={editingKey === row.original.key}
-              onOpenChange={(open) => {
-                if (!open) setEditingKey(null);
-              }}
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => toggleReveal(row.original.key)}
+              aria-label={revealedKeys.has(row.original.key) ? 'Hide value' : 'Reveal value'}
             >
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0"
-                  onClick={() => setEditingKey(row.original.key)}
-                  aria-label="Edit secret"
-                >
-                  <PencilIcon className="h-3.5 w-3.5" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent side="left" align="start" className="p-0 w-auto">
-                <EditSecretPopover
-                  secret={row.original}
-                  projectSlug={projectSlug}
-                  configSlug={configSlug}
-                  onClose={() => setEditingKey(null)}
-                />
-              </PopoverContent>
-            </Popover>
+              {revealedKeys.has(row.original.key) ?
+              <EyeOffIcon className="h-3.5 w-3.5" /> :
+              <EyeIcon className="h-3.5 w-3.5" />
+              }
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
+              onClick={() => setEditingSecret(row.original)}
+              aria-label="Edit secret"
+            >
+              <PencilIcon className="h-3.5 w-3.5" />
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -303,7 +313,7 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
         )
       }
     ],
-    [revealedKeys, editingKey, projectSlug, configSlug]
+    [revealedKeys]
   );
 
   const table = useReactTable({
@@ -359,15 +369,15 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
         onChange={onFileChange}
       />
 
-      <div className="rounded-md border border-border overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-md border border-border">
+        <table className="min-w-[760px] w-full table-fixed text-sm">
           <thead>
             <tr className="bg-muted/40 border-b border-border">
               {table.getHeaderGroups().map((headerGroup) =>
                 headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground"
+                    className={`px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground ${columnClass(header.column.id, true)}`}
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
@@ -420,7 +430,7 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
                       className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
                     >
                       {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className="px-4 py-2.5">
+                        <td key={cell.id} className={`px-4 py-2.5 ${columnClass(cell.column.id)}`}>
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
                       ))}
@@ -435,6 +445,16 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
         configSlug={configSlug}
         open={addOpen}
         onOpenChange={setAddOpen}
+      />
+
+      <EditSecretDialog
+        secret={editingSecret}
+        projectSlug={projectSlug}
+        configSlug={configSlug}
+        open={!!editingSecret}
+        onOpenChange={(open) => {
+          if (!open) setEditingSecret(null);
+        }}
       />
 
       <ImportEnvDialog

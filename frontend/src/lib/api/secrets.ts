@@ -1,4 +1,4 @@
-import { apiClient, apiClientText } from './client';
+import { ApiClientError, apiClient, apiClientText } from './client';
 import { mapSecretsData } from './mappers';
 import type {
   BulkExportResult,
@@ -116,7 +116,7 @@ export async function upsertSecretsBulk(
   projectSlug: string,
   configSlug: string,
   entries: SecretUpsertInput[]
-): Promise<{ succeeded: number; failedKeys: string[] }> {
+): Promise<{ succeeded: number; failed: { key: string; message: string }[] }> {
   const results = await Promise.allSettled(
     entries.map((entry) =>
       apiClient<void>(`/projects/${projectSlug}/configs/${configSlug}/secrets/${encodeURIComponent(entry.key)}`, {
@@ -126,17 +126,24 @@ export async function upsertSecretsBulk(
     )
   );
 
-  const failedKeys: string[] = [];
+  const failed: { key: string; message: string }[] = [];
   let succeeded = 0;
   results.forEach((result, index) => {
     if (result.status === 'fulfilled') {
       succeeded += 1;
       return;
     }
-    failedKeys.push(entries[index].key);
+    const reason = result.reason;
+    let message = 'Request failed';
+    if (reason instanceof ApiClientError) {
+      message = reason.message;
+    } else if (reason instanceof Error && reason.message.trim()) {
+      message = reason.message;
+    }
+    failed.push({ key: entries[index].key, message });
   });
 
-  return { succeeded, failedKeys };
+  return { succeeded, failed };
 }
 
 export async function bulkExport(

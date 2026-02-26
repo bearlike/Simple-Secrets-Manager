@@ -111,6 +111,11 @@ Supported placeholders:
 - `${config.KEY}` (another config in same project)
 - `${project.config.KEY}` (config in another project)
 
+Validation and fallback behavior:
+
+- `PUT /api/projects/<project>/configs/<config>/secrets/<key>` validates references before save and returns `400` for invalid or unresolved references.
+- If a previously valid reference becomes unavailable later (for example referenced secret deleted), read/export resolution substitutes an empty string for that placeholder.
+
 Global CLI install smoke check:
 
 ```bash
@@ -138,6 +143,14 @@ Frontend HTTP check:
 ```bash
 curl -sS -I http://localhost:8080
 ```
+
+Application version endpoint:
+
+```bash
+curl -sS http://localhost:5000/api/version
+```
+
+The Admin Console GitHub button displays this backend-reported version so Docker-built frontend/backend stay in sync.
 
 CLI smoke check:
 

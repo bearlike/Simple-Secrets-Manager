@@ -66,7 +66,7 @@ def test_resolves_same_config_cross_config_and_cross_project_references():
     ]
 
 
-def test_keeps_unresolved_references_literal():
+def test_unresolved_references_render_as_empty_string():
     fixture = _Fixture()
     resolver = SecretReferenceResolver(
         project_slug="app",
@@ -79,11 +79,11 @@ def test_keeps_unresolved_references_literal():
     )
 
     resolved = resolver.resolve_map({"A": "value-${MISSING}-suffix", "B": "${bad.token.with.extra.parts}"})
-    assert resolved["A"] == "value-${MISSING}-suffix"
-    assert resolved["B"] == "${bad.token.with.extra.parts}"
+    assert resolved["A"] == "value--suffix"
+    assert resolved["B"] == ""
 
 
-def test_keeps_missing_context_reference_literal():
+def test_missing_context_reference_renders_empty_string():
     fixture = _Fixture()
     resolver = SecretReferenceResolver(
         project_slug="app",
@@ -96,8 +96,8 @@ def test_keeps_missing_context_reference_literal():
     )
 
     resolved = resolver.resolve_map({"A": "${missing.dev.API_HOST}", "B": "${app.missing.API_HOST}"})
-    assert resolved["A"] == "${missing.dev.API_HOST}"
-    assert resolved["B"] == "${app.missing.API_HOST}"
+    assert resolved["A"] == ""
+    assert resolved["B"] == ""
 
 
 def test_detects_reference_cycle():
@@ -136,3 +136,41 @@ def test_enforces_max_depth_limit():
         raise AssertionError("Expected depth error")
     except SecretReferenceError as exc:
         assert "max depth" in exc.message.lower()
+
+
+def test_validate_value_references_fails_for_unresolved_and_invalid_tokens():
+    fixture = _Fixture()
+    resolver = SecretReferenceResolver(
+        project_slug="app",
+        config_slug="dev",
+        get_project_by_slug=fixture.get_project,
+        get_config_by_slug=fixture.get_config,
+        export_config=fixture.export_config,
+        require_scope=fixture.require_scope,
+        max_depth=8,
+        root_data=dict(fixture.exports["c-dev"]),
+    )
+
+    errors = resolver.validate_value_references(key="BROKEN", value="${missing.dev.API_HOST}:${bad-token}")
+    assert any("Unresolved reference" in item for item in errors)
+    assert any("Invalid reference syntax" in item for item in errors)
+
+
+def test_validate_value_references_detects_nested_broken_reference():
+    fixture = _Fixture()
+    fixture.exports["c-base"]["BROKEN"] = "${doesnotexist.KEY}"
+    root_data = dict(fixture.exports["c-dev"])
+    root_data["DATABASE_URL"] = "postgres://${base.BROKEN}@db:5432/app"
+    resolver = SecretReferenceResolver(
+        project_slug="app",
+        config_slug="dev",
+        get_project_by_slug=fixture.get_project,
+        get_config_by_slug=fixture.get_config,
+        export_config=fixture.export_config,
+        require_scope=fixture.require_scope,
+        max_depth=8,
+        root_data=root_data,
+    )
+
+    errors = resolver.validate_value_references(key="DATABASE_URL", value=root_data["DATABASE_URL"])
+    assert any("Unresolved reference" in item for item in errors)
