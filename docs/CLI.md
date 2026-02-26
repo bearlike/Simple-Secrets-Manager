@@ -47,7 +47,7 @@ uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli --
 Pin to tag:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git@v1.3.0 ssm-cli --help
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git@v1.3.1 ssm-cli --help
 ```
 
 ## 3) Quick Start

@@ -197,6 +197,19 @@ interface SecretValueTextProps {
 }
 
 export function SecretValueText({ value, className }: SecretValueTextProps) {
+  if (value.length === 0) {
+    return (
+      <span
+        className={cn(
+          'ssm-secret-value block max-w-full font-mono text-sm italic text-muted-foreground/80',
+          className
+        )}
+      >
+        Empty Value
+      </span>
+    );
+  }
+
   return (
     <span
       className={cn(
