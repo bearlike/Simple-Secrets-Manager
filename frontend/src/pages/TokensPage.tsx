@@ -12,8 +12,10 @@ import {
 } from '../lib/api/tokens';
 import { getProjects } from '../lib/api/projects';
 import { queryKeys } from '../lib/api/queryKeys';
+import type { Token } from '../lib/api/types';
 import { TokensTable } from '../components/tokens/TokensTable';
 import { CreateTokenDialog } from '../components/tokens/CreateTokenDialog';
+import { getApiErrorMessage, notifyApiError } from '../lib/api/errorToast';
 
 export function TokensPage() {
   const [createOpen, setCreateOpen] = useState(false);
@@ -31,16 +33,28 @@ export function TokensPage() {
     queryFn: getProjects
   });
 
-  const revokeMutation = useMutation({
+  const revokeMutation = useMutation<void, Error, string, { previousTokens?: Token[] }>({
     mutationFn: (id: string) => revokeToken(id),
-    onMutate: (id) => setRevokingId(id),
+    onMutate: async (id) => {
+      setRevokingId(id);
+      await queryClient.cancelQueries({ queryKey: queryKeys.tokens() });
+
+      const previousTokens = queryClient.getQueryData<Token[]>(queryKeys.tokens());
+      queryClient.setQueryData<Token[]>(queryKeys.tokens(), (current = []) =>
+        current.filter((token) => token.id !== id)
+      );
+      return { previousTokens };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tokens() });
       toast.success('Token revoked');
       setRevokingId(undefined);
     },
-    onError: () => {
-      toast.error('Failed to revoke token');
+    onError: (error, _id, context) => {
+      if (context?.previousTokens) {
+        queryClient.setQueryData(queryKeys.tokens(), context.previousTokens);
+      }
+      notifyApiError(error, 'Failed to revoke token');
       setRevokingId(undefined);
     }
   });
@@ -78,7 +92,7 @@ export function TokensPage() {
       {hasListError && (
         <Alert className="mb-4 border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800">
           <AlertDescription className="text-red-700 dark:text-red-300">
-            Failed to load tokens. You can still create a new token.
+            {getApiErrorMessage(tokensQuery.error, 'Failed to load tokens. You can still create a new token.')}
           </AlertDescription>
         </Alert>
       )}

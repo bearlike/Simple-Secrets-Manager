@@ -52,7 +52,9 @@ function extractPlaintext(response: CreateTokenResponseDto): string {
 
 export async function getTokens(): Promise<Token[]> {
   try {
-    const response = await apiClient<TokenListResponseDto | TokenDto[]>('/auth/tokens/v2');
+    const response = await apiClient<TokenListResponseDto | TokenDto[]>(
+      '/auth/tokens/v2?include_revoked=false'
+    );
     return extractTokenDtos(response).map(mapTokenDto);
   } catch (error) {
     if (

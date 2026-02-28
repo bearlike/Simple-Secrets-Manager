@@ -4,7 +4,9 @@ import {
   LockIcon,
   KeyRoundIcon,
   ScrollTextIcon,
-  SettingsIcon,
+  UserIcon,
+  UsersIcon,
+  GroupIcon,
   LogOutIcon,
   FolderIcon } from
 'lucide-react';
@@ -83,6 +85,33 @@ export function Sidebar() {
       {/* Bottom nav */}
       <div className="border-t border-border py-2 px-2 space-y-0.5">
         <NavLink
+          to="/account"
+          className={({ isActive }) =>
+          `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors ${isActive ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`
+          }>
+
+          <UserIcon className="h-3.5 w-3.5" />
+          Account
+        </NavLink>
+        <NavLink
+          to="/team"
+          className={({ isActive }) =>
+          `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors ${isActive ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`
+          }>
+
+          <UsersIcon className="h-3.5 w-3.5" />
+          Team
+        </NavLink>
+        <NavLink
+          to="/groups"
+          className={({ isActive }) =>
+          `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors ${isActive ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`
+          }>
+
+          <GroupIcon className="h-3.5 w-3.5" />
+          Groups
+        </NavLink>
+        <NavLink
           to="/tokens"
           className={({ isActive }) =>
           `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors ${isActive ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`
@@ -100,13 +129,6 @@ export function Sidebar() {
           <ScrollTextIcon className="h-3.5 w-3.5" />
           Audit Log
         </NavLink>
-        <button
-          disabled
-          className="flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm text-muted-foreground/50 w-full cursor-not-allowed">
-
-          <SettingsIcon className="h-3.5 w-3.5" />
-          Settings
-        </button>
         <div className="pt-1">
           <Button
             variant="ghost"

@@ -18,6 +18,9 @@ import { createSecret } from '../../lib/api/secrets';
 import { queryKeys } from '../../lib/api/queryKeys';
 import { SecretValueEditor } from './SecretValueEditor';
 import { useReferenceSuggestions } from './useReferenceSuggestions';
+
+const ICON_SLUG_PATTERN = /^[a-z0-9-]+:[a-z0-9][a-z0-9-]*$/;
+
 const schema = z.object({
   key: z.
   string().
@@ -26,7 +29,14 @@ const schema = z.object({
     /^[A-Z0-9_]+$/,
     'Key must be uppercase letters, numbers, and underscores only'
   ),
-  value: z.string().min(1, 'Value is required')
+  value: z.string().min(1, 'Value is required'),
+  iconSlug: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim().toLowerCase() ?? '')
+    .refine((value) => value.length === 0 || ICON_SLUG_PATTERN.test(value), {
+      message: 'Icon slug must match "prefix:name"'
+    })
 });
 type FormValues = z.infer<typeof schema>;
 interface AddSecretDialogProps {
@@ -54,7 +64,11 @@ export function AddSecretDialog({
   });
   const mutation = useMutation({
     mutationFn: (data: FormValues) =>
-    createSecret(projectSlug, configSlug, data),
+    createSecret(projectSlug, configSlug, {
+      key: data.key,
+      value: data.value,
+      iconSlug: data.iconSlug || undefined
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: queryKeys.secrets(projectSlug, configSlug)
@@ -104,6 +118,18 @@ export function AddSecretDialog({
             <p className="text-xs text-muted-foreground">
               Uppercase letters, numbers, and underscores only
             </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="iconSlug">Icon slug (optional)</Label>
+            <Input
+              id="iconSlug"
+              {...register('iconSlug')}
+              placeholder="simple-icons:sqlalchemy"
+              className="font-mono"
+              autoComplete="off"
+            />
+            {errors.iconSlug && <p className="text-xs text-destructive">{errors.iconSlug.message}</p>}
+            <p className="text-xs text-muted-foreground">Leave blank to auto-detect icon</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="value">Value</Label>

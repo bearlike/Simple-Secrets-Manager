@@ -108,6 +108,20 @@ uv run ssm-cli configure --base-url http://localhost:8080/api --profile dev
 uv run ssm-cli whoami --profile dev
 ```
 
+Workspace RBAC smoke checks:
+
+```bash
+curl -sS http://localhost:5000/api/me -H "Authorization: Bearer <token>"
+curl -sS http://localhost:5000/api/workspace/members -H "Authorization: Bearer <token>"
+curl -sS http://localhost:5000/api/workspace/groups -H "Authorization: Bearer <token>"
+```
+
+Role quick reference:
+
+- Workspace roles: `owner`, `admin`, `collaborator`, `viewer`
+- Project roles: `admin`, `collaborator`, `viewer`, `none`
+- Group/project assignments are managed under `/api/workspace/*`.
+
 ## Additional references
 
 - Development details: [`docs/DEVELOPMENT.md`](DEVELOPMENT.md)

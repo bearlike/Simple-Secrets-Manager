@@ -27,6 +27,7 @@ import { createToken } from '../../lib/api/tokens';
 import { getConfigs } from '../../lib/api/configs';
 import { queryKeys } from '../../lib/api/queryKeys';
 import type { Project } from '../../lib/api/types';
+import { notifyApiError } from '../../lib/api/errorToast';
 
 const schema = z
   .object({
@@ -49,6 +50,13 @@ const schema = z
         code: z.ZodIssueCode.custom,
         path: ['serviceName'],
         message: 'Service name is required for service tokens'
+      });
+    }
+    if (value.type === 'personal' && value.ttlHours && value.ttlHours > 24) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['ttlHours'],
+        message: 'Personal token TTL cannot exceed 24 hours'
       });
     }
   });
@@ -101,8 +109,8 @@ export function CreateTokenDialog({ open, onOpenChange, projects }: CreateTokenD
         handleClose();
       }
     },
-    onError: () => {
-      toast.error('Failed to create token');
+    onError: (error) => {
+      notifyApiError(error, 'Failed to create token');
     }
   });
 
@@ -281,6 +289,9 @@ export function CreateTokenDialog({ open, onOpenChange, projects }: CreateTokenD
                 {...register('ttlHours')}
               />
               {errors.ttlHours && <p className="text-xs text-destructive">{errors.ttlHours.message}</p>}
+              {selectedType === 'personal' && (
+                <p className="text-xs text-muted-foreground">Personal tokens are capped at 24 hours.</p>
+              )}
             </div>
 
             <DialogFooter>

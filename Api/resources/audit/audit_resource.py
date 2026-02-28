@@ -13,7 +13,8 @@ audit_parser = api.parser()
 audit_parser.add_argument("project", type=str, required=False, location="args")
 audit_parser.add_argument("config", type=str, required=False, location="args")
 audit_parser.add_argument("since", type=str, required=False, location="args")
-audit_parser.add_argument("limit", type=int, required=False, default=100, location="args")
+audit_parser.add_argument("limit", type=int, required=False, default=50, location="args")
+audit_parser.add_argument("page", type=int, required=False, default=1, location="args")
 
 
 @audit_ns.route("/events")
@@ -22,6 +23,11 @@ class AuditEventsResource(Resource):
     @with_token
     def get(self):
         args = audit_parser.parse_args()
+        if args["limit"] < 1:
+            api.abort(400, "limit must be >= 1")
+        if args["page"] < 1:
+            api.abort(400, "page must be >= 1")
+
         project_id = None
         config_id = None
         project_slug = args.get("project")
@@ -41,12 +47,13 @@ class AuditEventsResource(Resource):
                     since = since.replace(tzinfo=timezone.utc)
             except ValueError:
                 api.abort(400, "Invalid since format. Use ISO-8601 format.")
-        events = conn.audit.query_events(
+        page_result = conn.audit.query_events_page(
             project_slug=project_slug,
             config_slug=config_slug,
             since=since,
             limit=args["limit"],
+            page=args["page"],
             project_id=oid_to_str(project_id),
             config_id=oid_to_str(config_id),
         )
-        return {"events": events, "status": "OK"}
+        return {**page_result, "status": "OK"}

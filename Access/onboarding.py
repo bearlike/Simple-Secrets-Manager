@@ -12,10 +12,21 @@ class Onboarding:
     BOOTSTRAP_TOKEN_TTL_SECONDS = 15811200
     BOOTSTRAP_ACTION_SCOPES = DEFAULT_TOKEN_ACTION_SCOPES
 
-    def __init__(self, state_col, userpass_engine, tokens_engine):
+    def __init__(
+        self,
+        state_col,
+        userpass_engine,
+        tokens_engine,
+        workspaces_engine=None,
+        users_engine=None,
+        memberships_engine=None,
+    ):
         self._state = state_col
         self._userpass = userpass_engine
         self._tokens = tokens_engine
+        self._workspaces = workspaces_engine
+        self._users = users_engine
+        self._memberships = memberships_engine
         self._state.create_index("status")
 
     def _doc(self):
@@ -101,6 +112,13 @@ class Onboarding:
             else:
                 self._mark_failed(register_status)
                 return {"status": str(register_status)}, register_code
+
+        if self._workspaces is not None and self._users is not None and self._memberships is not None:
+            workspace = self._workspaces.ensure_default()
+            workspace_id = workspace.get("_id") if workspace else None
+            if workspace_id is not None:
+                self._users.ensure(username)
+                self._memberships.upsert_workspace_membership(workspace_id, username, "owner")
 
         token_payload = None
         if issue_token:

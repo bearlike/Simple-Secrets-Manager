@@ -73,6 +73,32 @@ class FakeTokens:
         }
 
 
+class FakeWorkspaces:
+    def __init__(self):
+        self.workspace = {"_id": "w1", "slug": "default"}
+
+    def ensure_default(self):
+        return self.workspace
+
+
+class FakeUsers:
+    def __init__(self):
+        self.docs = {}
+
+    def ensure(self, username):
+        self.docs[username] = {"username": username}
+        return self.docs[username]
+
+
+class FakeMemberships:
+    def __init__(self):
+        self.last_call = None
+
+    def upsert_workspace_membership(self, workspace_id, username, role):
+        self.last_call = (workspace_id, username, role)
+        return {"workspace_role": role}, "OK", 200
+
+
 def test_onboarding_status_default_not_initialized():
     onboarding = Onboarding(FakeStateCollection(), FakeUserPass(), FakeTokens())
     state = onboarding.get_state()
@@ -91,3 +117,24 @@ def test_bootstrap_success_and_lock_after_completion():
     second_result, second_code = onboarding.bootstrap("admin2", "password2", issue_token=True)
     assert second_code == 409
     assert second_result["status"] == "System already initialized"
+
+
+def test_bootstrap_seeds_workspace_owner_membership():
+    workspaces = FakeWorkspaces()
+    users = FakeUsers()
+    memberships = FakeMemberships()
+    onboarding = Onboarding(
+        FakeStateCollection(),
+        FakeUserPass(),
+        FakeTokens(),
+        workspaces_engine=workspaces,
+        users_engine=users,
+        memberships_engine=memberships,
+    )
+
+    result, code = onboarding.bootstrap("admin", "password", issue_token=False)
+
+    assert code == 200
+    assert result["status"] == "OK"
+    assert users.docs["admin"]["username"] == "admin"
+    assert memberships.last_call == ("w1", "admin", "owner")

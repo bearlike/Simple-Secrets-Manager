@@ -27,13 +27,22 @@ post_userpass_parser.add_argument("password", type=str, required=True, location=
 
 @userpass_ns.route("/delete")
 class Auth_Userpass_delete(Resource):
-    @api.doc(parser=delete_userpass_parser)
+    @api.doc(parser=delete_userpass_parser, security=["Bearer", "Token"])
     @api.marshal_with(userpass_model)
     def delete(self):
+        require_token()
+        require_scope("users:manage")
         args = delete_userpass_parser.parse_args()
         status, code = conn.userpass.remove(username=args["username"])
         if code != 200:
             api.abort(code, status)
+        workspace = conn.workspaces.ensure_default()
+        workspace_id = workspace.get("_id") if workspace else None
+        if workspace_id is not None:
+            conn.memberships.remove_workspace_membership(workspace_id, args["username"])
+            conn.memberships.remove_all_for_subject(workspace_id, "user", args["username"])
+            conn.groups.remove_user_from_all_groups(workspace_id, args["username"])
+        conn.users.delete(args["username"])
         return status
 
 
@@ -49,6 +58,14 @@ class Auth_Userpass_register(Resource):
         args = post_userpass_parser.parse_args()
         if conn.onboarding.is_initialized():
             status, code = conn.userpass.register(username=args["username"], password=args["password"])
+            if code == 200:
+                workspace = conn.workspaces.ensure_default()
+                workspace_id = workspace.get("_id") if workspace else None
+                conn.users.ensure(args["username"])
+                if workspace_id is not None:
+                    settings = conn.workspaces.get_settings(workspace_id) or {}
+                    role = settings.get("defaultWorkspaceRole", "viewer")
+                    conn.memberships.upsert_workspace_membership(workspace_id, args["username"], role)
         else:
             result, code = conn.onboarding.bootstrap(
                 username=args["username"],

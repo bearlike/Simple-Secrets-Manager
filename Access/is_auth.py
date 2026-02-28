@@ -48,7 +48,7 @@ def require_token():
                 "reason": err,
             }
         )
-        api.abort(401, "Not Authorized to access the requested resource")
+        api.abort(401, f"Not Authorized to access the requested resource ({err})")
     g.actor = actor
     return actor
 

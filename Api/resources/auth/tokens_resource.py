@@ -62,4 +62,7 @@ class Auth_Tokens(Resource):
     def get(self):
         """Generate a new API token"""
         # TODO: Add support for userpass
-        return conn.tokens.generate(username=userpass.current_user())
+        return conn.tokens.generate(
+            username=userpass.current_user(),
+            max_ttl=conn.tokens.SESSION_TOKEN_TTL_SECONDS,
+        )

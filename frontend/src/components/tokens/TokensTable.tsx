@@ -37,6 +37,29 @@ function formatRelativeTime(dateStr?: string): string {
   return `${days}d ago`;
 }
 
+function formatDuration(milliseconds: number): string {
+  if (milliseconds <= 0) return 'expired';
+
+  const totalMinutes = Math.floor(milliseconds / 60000);
+  const days = Math.floor(totalMinutes / (60 * 24));
+  const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+  const minutes = totalMinutes % 60;
+
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${Math.max(minutes, 1)}m`;
+}
+
+function formatTtl(createdAt?: string, expiresAt?: string): string {
+  if (!createdAt || !expiresAt) return '-';
+
+  const created = new Date(createdAt);
+  const expires = new Date(expiresAt);
+  if (Number.isNaN(created.getTime()) || Number.isNaN(expires.getTime())) return '-';
+
+  return formatDuration(expires.getTime() - created.getTime());
+}
+
 interface TokensTableProps {
   tokens: Token[];
   onRevoke: (id: string) => void;
@@ -82,6 +105,15 @@ export function TokensTable({ tokens, onRevoke, revoking, isLoading }: TokensTab
       accessorKey: 'expiresAt',
       header: 'EXPIRES',
       cell: ({ row }) => <span className="text-xs text-muted-foreground">{formatDate(row.original.expiresAt)}</span>
+    },
+    {
+      id: 'ttl',
+      header: 'TTL',
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {formatTtl(row.original.createdAt, row.original.expiresAt)}
+        </span>
+      )
     },
     {
       accessorKey: 'lastUsedAt',
@@ -137,7 +169,7 @@ export function TokensTable({ tokens, onRevoke, revoking, isLoading }: TokensTab
             {isLoading &&
               Array.from({ length: 3 }).map((_, rowIndex) => (
                 <tr key={rowIndex} className="border-b border-border last:border-0">
-                  {Array.from({ length: 6 }).map((__, colIndex) => (
+                  {Array.from({ length: 7 }).map((__, colIndex) => (
                     <td key={colIndex} className="px-4 py-2.5">
                       <Skeleton className="h-4 w-20" />
                     </td>
@@ -148,7 +180,7 @@ export function TokensTable({ tokens, onRevoke, revoking, isLoading }: TokensTab
             {!isLoading &&
               table.getRowModel().rows.length === 0 && (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={7}>
                     <EmptyState
                       icon={KeyRoundIcon}
                       title="No tokens yet"

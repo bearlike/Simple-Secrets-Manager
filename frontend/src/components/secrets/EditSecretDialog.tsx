@@ -12,6 +12,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ApiClientError } from '../../lib/api/client';
 import { updateSecret } from '../../lib/api/secrets';
@@ -21,7 +22,14 @@ import { SecretValueEditor } from './SecretValueEditor';
 import { useReferenceSuggestions } from './useReferenceSuggestions';
 
 const schema = z.object({
-  value: z.string().min(1, 'Value is required')
+  value: z.string().min(1, 'Value is required'),
+  iconSlug: z
+    .string()
+    .optional()
+    .transform((value) => value?.trim().toLowerCase() ?? '')
+    .refine((value) => value.length === 0 || /^[a-z0-9-]+:[a-z0-9][a-z0-9-]*$/.test(value), {
+      message: 'Icon slug must match "prefix:name"'
+    })
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -45,26 +53,32 @@ export function EditSecretDialog({
   const referenceSuggestions = useReferenceSuggestions({ projectSlug, configSlug });
   const {
     control,
+    register,
     handleSubmit,
     reset,
     formState: { errors }
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      value: secret?.value ?? ''
+      value: secret?.value ?? '',
+      iconSlug: secret?.iconSlug ?? ''
     }
   });
 
   useEffect(() => {
     reset({
-      value: secret?.value ?? ''
+      value: secret?.value ?? '',
+      iconSlug: secret?.iconSlug ?? ''
     });
-  }, [secret?.key, secret?.value, reset]);
+  }, [secret?.key, secret?.value, secret?.iconSlug, reset]);
 
   const mutation = useMutation({
     mutationFn: (data: FormValues) => {
       if (!secret) throw new Error('No secret selected');
-      return updateSecret(projectSlug, configSlug, secret.key, data);
+      return updateSecret(projectSlug, configSlug, secret.key, {
+        value: data.value,
+        iconSlug: data.iconSlug || null
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -106,6 +120,19 @@ export function EditSecretDialog({
           <div className="space-y-1.5">
             <Label>Key</Label>
             <p className="font-mono text-sm font-medium">{secret?.key ?? '—'}</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="iconSlug">Icon slug</Label>
+            <Input
+              id="iconSlug"
+              {...register('iconSlug')}
+              placeholder="simple-icons:sqlalchemy"
+              className="font-mono"
+              autoComplete="off"
+            />
+            {errors.iconSlug && <p className="text-xs text-destructive">{errors.iconSlug.message}</p>}
+            <p className="text-xs text-muted-foreground">Clear this field to reset back to auto-detected icon</p>
           </div>
 
           <div className="space-y-1.5">

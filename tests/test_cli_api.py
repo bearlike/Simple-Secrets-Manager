@@ -82,3 +82,17 @@ def test_request_raises_api_error_on_http_failure(monkeypatch):
     except ApiError as exc:
         assert exc.status_code == 401
         assert "Not Authorized" in exc.message
+
+
+def test_get_me_returns_profile_payload(monkeypatch):
+    client = ApiClient("http://localhost:8080", token="t")
+
+    def fake_request(**kwargs):
+        assert kwargs["headers"]["Authorization"] == "Bearer t"
+        return _response(200, {"status": "OK", "username": "alice", "workspaceRole": "owner"})
+
+    monkeypatch.setattr(client.session, "request", fake_request)
+
+    payload = client.get_me()
+    assert payload["username"] == "alice"
+    assert payload["workspaceRole"] == "owner"

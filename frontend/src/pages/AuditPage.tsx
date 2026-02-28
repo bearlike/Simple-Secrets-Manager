@@ -18,6 +18,8 @@ import { getConfigs } from '../lib/api/configs';
 import { queryKeys } from '../lib/api/queryKeys';
 import { EmptyState } from '../components/common/EmptyState';
 
+const AUDIT_PAGE_SIZE = 50;
+
 function toSinceIso(date: string): string | undefined {
   if (!date) return undefined;
   return new Date(`${date}T00:00:00.000Z`).toISOString();
@@ -33,6 +35,7 @@ export function AuditPage() {
   const [projectFilter, setProjectFilter] = useState<string>('');
   const [configFilter, setConfigFilter] = useState<string>('');
   const [sinceDate, setSinceDate] = useState('');
+  const [page, setPage] = useState(1);
 
   const { data: projects = [] } = useQuery({
     queryKey: queryKeys.projects(),
@@ -47,21 +50,26 @@ export function AuditPage() {
 
   const sinceIso = useMemo(() => toSinceIso(sinceDate), [sinceDate]);
 
-  const { data: events = [], isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: queryKeys.audit({
       projectSlug: projectFilter || undefined,
       configSlug: configFilter || undefined,
       since: sinceIso,
-      limit: 100
+      page,
+      limit: AUDIT_PAGE_SIZE
     }),
     queryFn: () =>
       getAuditEvents({
         projectSlug: projectFilter || undefined,
         configSlug: configFilter || undefined,
         since: sinceIso,
-        limit: 100
+        page,
+        limit: AUDIT_PAGE_SIZE
       })
   });
+
+  const events = data?.events ?? [];
+  const hasNext = data?.hasNext ?? false;
 
   const hasFilters = Boolean(projectFilter || configFilter || sinceDate);
 
@@ -69,6 +77,7 @@ export function AuditPage() {
     setProjectFilter('');
     setConfigFilter('');
     setSinceDate('');
+    setPage(1);
   };
 
   return (
@@ -86,6 +95,7 @@ export function AuditPage() {
           onValueChange={(value) => {
             setProjectFilter(value === 'all' ? '' : value);
             setConfigFilter('');
+            setPage(1);
           }}
         >
           <SelectTrigger className="h-8 w-40 text-xs">
@@ -104,7 +114,10 @@ export function AuditPage() {
         {projectFilter && (
           <Select
             value={configFilter || 'all'}
-            onValueChange={(value) => setConfigFilter(value === 'all' ? '' : value)}
+            onValueChange={(value) => {
+              setConfigFilter(value === 'all' ? '' : value);
+              setPage(1);
+            }}
           >
             <SelectTrigger className="h-8 w-36 text-xs">
               <SelectValue placeholder="All configs" />
@@ -123,7 +136,10 @@ export function AuditPage() {
         <Input
           type="date"
           value={sinceDate}
-          onChange={(event) => setSinceDate(event.target.value)}
+          onChange={(event) => {
+            setSinceDate(event.target.value);
+            setPage(1);
+          }}
           className="h-8 w-40 text-xs"
           placeholder="Since"
         />
@@ -136,100 +152,131 @@ export function AuditPage() {
         )}
       </div>
 
-      <div className="rounded-md border border-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-muted/40 border-b border-border">
-              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
-                TIMESTAMP
-              </th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
-                ACTOR
-              </th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
-                ACTION
-              </th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
-                PROJECT
-              </th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
-                CONFIG
-              </th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
-                KEY
-              </th>
-              <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
-                STATUS
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading &&
-              Array.from({ length: 8 }).map((_, rowIndex) => (
-                <tr key={rowIndex} className="border-b border-border last:border-0">
-                  {Array.from({ length: 7 }).map((__, colIndex) => (
-                    <td key={colIndex} className="px-4 py-2">
-                      <Skeleton className="h-3.5 w-20" />
+      <div className="rounded-md border border-border">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[980px] text-sm">
+            <thead>
+              <tr className="bg-muted/40 border-b border-border">
+                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
+                  TIMESTAMP
+                </th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
+                  ACTOR
+                </th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
+                  ACTION
+                </th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
+                  PROJECT
+                </th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
+                  CONFIG
+                </th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
+                  KEY
+                </th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
+                  STATUS
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {isLoading &&
+                Array.from({ length: 8 }).map((_, rowIndex) => (
+                  <tr key={rowIndex} className="border-b border-border last:border-0">
+                    {Array.from({ length: 7 }).map((__, colIndex) => (
+                      <td key={colIndex} className="px-4 py-2">
+                        <Skeleton className="h-3.5 w-20" />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+
+              {!isLoading &&
+                events.length === 0 && (
+                  <tr>
+                    <td colSpan={7}>
+                      <EmptyState
+                        icon={ScrollTextIcon}
+                        title="No audit events"
+                        description={
+                          hasFilters ? 'No events match your filters' : 'Actions will appear here as they happen'
+                        }
+                      />
                     </td>
-                  ))}
-                </tr>
-              ))}
+                  </tr>
+                )}
 
-            {!isLoading &&
-              events.length === 0 && (
-                <tr>
-                  <td colSpan={7}>
-                    <EmptyState
-                      icon={ScrollTextIcon}
-                      title="No audit events"
-                      description={
-                        hasFilters ? 'No events match your filters' : 'Actions will appear here as they happen'
-                      }
-                    />
-                  </td>
-                </tr>
-              )}
+              {!isLoading &&
+                events.map((event) => (
+                  <tr
+                    key={event.id}
+                    className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+                  >
+                    <td className="px-4 py-2">
+                      <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">
+                        {formatTimestamp(event.timestamp)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-xs">{event.actor}</td>
+                    <td className="px-4 py-2">
+                      <code className="font-mono text-xs">{event.action}</code>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="font-mono text-xs text-muted-foreground">{event.projectSlug ?? '-'}</span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="font-mono text-xs text-muted-foreground">{event.configSlug ?? '-'}</span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <span className="font-mono text-xs text-muted-foreground">{event.secretKey ?? '-'}</span>
+                    </td>
+                    <td className="px-4 py-2">
+                      <Badge
+                        variant="outline"
+                        className={
+                          event.status === 'success'
+                            ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800 text-xs'
+                            : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800 text-xs'
+                        }
+                      >
+                        {event.status}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-            {!isLoading &&
-              events.map((event) => (
-                <tr
-                  key={event.id}
-                  className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
-                >
-                  <td className="px-4 py-2">
-                    <span className="font-mono text-xs text-muted-foreground whitespace-nowrap">
-                      {formatTimestamp(event.timestamp)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-xs">{event.actor}</td>
-                  <td className="px-4 py-2">
-                    <code className="font-mono text-xs">{event.action}</code>
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className="font-mono text-xs text-muted-foreground">{event.projectSlug ?? '-'}</span>
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className="font-mono text-xs text-muted-foreground">{event.configSlug ?? '-'}</span>
-                  </td>
-                  <td className="px-4 py-2">
-                    <span className="font-mono text-xs text-muted-foreground">{event.secretKey ?? '-'}</span>
-                  </td>
-                  <td className="px-4 py-2">
-                    <Badge
-                      variant="outline"
-                      className={
-                        event.status === 'success'
-                          ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800 text-xs'
-                          : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800 text-xs'
-                      }
-                    >
-                      {event.status}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-          </tbody>
-        </table>
+      <div className="mt-3 flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          Page {page}
+          {isFetching && !isLoading ? ' | Refreshing...' : ''}
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 text-xs"
+            onClick={() => setPage((current) => Math.max(1, current - 1))}
+            disabled={isLoading || page <= 1}
+          >
+            Previous
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-8 px-3 text-xs"
+            onClick={() => setPage((current) => current + 1)}
+            disabled={isLoading || !hasNext}
+          >
+            Next
+          </Button>
+        </div>
       </div>
     </div>
   );

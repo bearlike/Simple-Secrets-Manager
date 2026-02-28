@@ -24,6 +24,7 @@ import { Badge } from '@/components/ui/badge';
 import { createConfig } from '../../lib/api/configs';
 import { queryKeys } from '../../lib/api/queryKeys';
 import type { Config } from '../../lib/api/types';
+import { notifyApiError } from '../../lib/api/errorToast';
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
   slug: z.
@@ -75,8 +76,8 @@ export function CreateConfigDialog({
       reset();
       onOpenChange(false);
     },
-    onError: () => {
-      toast.error('Failed to create config');
+    onError: (error) => {
+      notifyApiError(error, 'Failed to create config');
     }
   });
   const onSubmit = (data: FormValues) => mutation.mutate(data);

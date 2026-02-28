@@ -50,7 +50,21 @@ if True:
         SecretItemResource,
         SecretExportResource,
     )
+    from Api.resources.compare.compare_secret_resource import CompareSecretResource  # noqa: F401
     from Api.resources.audit.audit_resource import AuditEventsResource  # noqa: F401
+    from Api.resources.me import MeResource  # noqa: F401
+    from Api.resources.workspace.workspace_resource import (  # noqa: F401
+        WorkspaceSettingsResource,
+        WorkspaceMembersResource,
+        WorkspaceMemberItemResource,
+        WorkspaceProjectMembersResource,
+        WorkspaceProjectMemberItemResource,
+        WorkspaceGroupsResource,
+        WorkspaceGroupItemResource,
+        WorkspaceGroupMembersResource,
+        WorkspaceGroupMappingsResource,
+        WorkspaceGroupMappingItemResource,
+    )
     from Api.resources.auth.userpass_resource import (  # noqa: F401
         Auth_Userpass_delete,
         Auth_Userpass_register,

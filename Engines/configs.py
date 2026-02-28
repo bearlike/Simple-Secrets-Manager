@@ -43,6 +43,24 @@ class Configs:
     def get_by_id(self, config_id):
         return self._configs.find_one({"_id": config_id})
 
+    def list_ids(self, project_id):
+        docs = self._configs.find({"project_id": project_id}, {"_id": 1})
+        return [doc["_id"] for doc in docs if "_id" in doc]
+
+    def list_raw(self, project_id, limit=None):
+        cursor = self._configs.find(
+            {"project_id": project_id},
+            {"_id": 1, "slug": 1, "parent_config_id": 1, "created_at": 1},
+        ).sort("slug", 1)
+        if limit is not None:
+            try:
+                parsed_limit = int(limit)
+            except (TypeError, ValueError):
+                parsed_limit = 0
+            if parsed_limit > 0:
+                cursor = cursor.limit(parsed_limit)
+        return list(cursor)
+
     def list(self, project_id):
         docs = list(
             self._configs.find(

@@ -18,6 +18,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { createProject } from '../../lib/api/projects';
 import { queryKeys } from '../../lib/api/queryKeys';
+import { notifyApiError } from '../../lib/api/errorToast';
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
   slug: z.
@@ -71,8 +72,8 @@ export function CreateProjectDialog({
       onOpenChange(false);
       navigate(`/projects/${project.slug}/settings`);
     },
-    onError: () => {
-      toast.error('Failed to create project');
+    onError: (error) => {
+      notifyApiError(error, 'Failed to create project');
     }
   });
   const onSubmit = (data: FormValues) => mutation.mutate(data);

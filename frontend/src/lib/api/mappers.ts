@@ -3,15 +3,36 @@ import type {
   AuditEventDto,
   Config,
   ConfigDto,
+  MeProfile,
+  MeResponseDto,
   Project,
   ProjectDto,
+  SecretComparisonResponseDto,
+  SecretComparisonResult,
+  SecretComparisonRow,
+  SecretComparisonRowDto,
+  SecretMetaDto,
   Secret,
   Token,
-  TokenDto
+  TokenDto,
+  WorkspaceGroup,
+  WorkspaceGroupDto,
+  WorkspaceGroupMapping,
+  WorkspaceGroupMappingDto,
+  WorkspaceMember,
+  WorkspaceMemberDto,
+  WorkspaceProjectMember,
+  WorkspaceProjectMemberDto,
+  WorkspaceSettings,
+  WorkspaceSettingsResponseDto
 } from './types';
 
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value : undefined;
+}
+
+function asBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
 }
 
 function asStringArray(value: unknown): string[] {
@@ -54,12 +75,16 @@ export function mapConfigDto(dto: ConfigDto): Config {
   };
 }
 
-export function mapSecretsData(data: Record<string, string>): Secret[] {
+export function mapSecretsData(
+  data: Record<string, string>,
+  meta?: Record<string, SecretMetaDto>
+): Secret[] {
   return Object.entries(data)
     .map(([key, value]) => ({
       key,
       value,
-      updatedAt: undefined
+      updatedAt: asString(meta?.[key]?.updatedAt),
+      iconSlug: asString(meta?.[key]?.iconSlug) ?? asString(meta?.[key]?.icon_slug)
     }))
     .sort((a, b) => a.key.localeCompare(b.key));
 }
@@ -85,6 +110,7 @@ export function mapTokenDto(dto: TokenDto): Token {
       asString(dto.service_name) ??
       id,
     scopes,
+    createdAt: asString(dto.createdAt) ?? asString(dto.created_at),
     expiresAt: asString(dto.expiresAt) ?? asString(dto.expires_at),
     lastUsedAt: asString(dto.lastUsedAt) ?? asString(dto.last_used_at)
   };
@@ -151,4 +177,136 @@ export function mapAccessToActions(access: 'read' | 'read_write'): string[] {
     return ['secrets:read', 'secrets:export', 'secrets:write'];
   }
   return ['secrets:read', 'secrets:export'];
+}
+
+function mapSecretComparisonRowDto(dto: SecretComparisonRowDto): SecretComparisonRow {
+  const issues = Array.isArray(dto.issues)
+    ? dto.issues
+        .map((issue) => ({
+          code: asString(issue.code) ?? 'unknown_issue',
+          severity: (asString(issue.severity) as 'info' | 'warning' | 'error' | undefined) ?? 'warning',
+          message: asString(issue.message) ?? 'Unknown issue'
+        }))
+        .filter((issue) => issue.code !== 'unknown_issue' || issue.message !== 'Unknown issue')
+    : [];
+
+  return {
+    configSlug: asString(dto.configSlug) ?? asString(dto.config_slug) ?? 'unknown',
+    effective: {
+      value:
+        typeof dto.effective?.value === 'string' || dto.effective?.value === null ? dto.effective.value : null,
+      source:
+        typeof dto.effective?.source === 'string' || dto.effective?.source === null ? dto.effective.source : null,
+      isInherited: asBoolean(dto.effective?.isInherited) ?? asBoolean(dto.effective?.is_inherited) ?? false
+    },
+    direct: {
+      exists: asBoolean(dto.direct?.exists) ?? false,
+      value: typeof dto.direct?.value === 'string' || dto.direct?.value === null ? dto.direct.value : null
+    },
+    hasIssues: asBoolean(dto.hasIssues) ?? asBoolean(dto.has_issues) ?? issues.length > 0,
+    issues,
+    meta: dto.meta ?
+    {
+      updatedAt: asString(dto.meta.updatedAt) ?? asString(dto.meta.updated_at) ?? null,
+      updatedBy: asString(dto.meta.updatedBy) ?? asString(dto.meta.updated_by) ?? null,
+      iconSlug: asString(dto.meta.iconSlug) ?? asString(dto.meta.icon_slug) ?? null
+    } :
+    undefined
+  };
+}
+
+export function mapSecretComparisonResponse(dto: SecretComparisonResponseDto): SecretComparisonResult {
+  const byCode = Array.isArray(dto.issuesSummary?.byCode)
+    ? dto.issuesSummary.byCode
+        .map((entry) => ({
+          code: asString(entry.code) ?? '',
+          count: Number(entry.count ?? 0)
+        }))
+        .filter((entry) => entry.code.length > 0)
+    : [];
+
+  return {
+    project: asString(dto.project) ?? 'unknown-project',
+    key: asString(dto.key) ?? '',
+    configs: Array.isArray(dto.configs) ? dto.configs.map(mapSecretComparisonRowDto) : [],
+    summary: {
+      uniqueEffectiveValues: Number(dto.summary?.uniqueEffectiveValues ?? 0),
+      missingCount: Number(dto.summary?.missingCount ?? 0),
+      conflict: Boolean(dto.summary?.conflict ?? false)
+    },
+    issuesSummary: {
+      totalIssues: Number(dto.issuesSummary?.totalIssues ?? 0),
+      affectedConfigs: Number(dto.issuesSummary?.affectedConfigs ?? 0),
+      byCode
+    }
+  };
+}
+
+export function mapMeResponseDto(dto: MeResponseDto): MeProfile {
+  return {
+    username: asString(dto.username) ?? 'unknown',
+    email: asString(dto.email) ?? null,
+    fullName: asString(dto.fullName) ?? asString(dto.full_name) ?? null,
+    workspaceRole: asString(dto.workspaceRole) ?? asString(dto.workspace_role) ?? null,
+    workspaceSlug: asString(dto.workspaceSlug) ?? asString(dto.workspace_slug) ?? null,
+    effectivePermissionsSummary: {
+      globalActions: asStringArray(dto.effectivePermissionsSummary?.globalActions),
+      projectScopeCount: Number(dto.effectivePermissionsSummary?.projectScopeCount ?? 0)
+    }
+  };
+}
+
+export function mapWorkspaceSettingsResponseDto(dto: WorkspaceSettingsResponseDto): WorkspaceSettings {
+  return {
+    defaultWorkspaceRole:
+      (asString(dto.settings?.defaultWorkspaceRole) as WorkspaceSettings['defaultWorkspaceRole']) ?? 'viewer',
+    defaultProjectRole:
+      (asString(dto.settings?.defaultProjectRole) as WorkspaceSettings['defaultProjectRole']) ?? 'none',
+    referencingEnabled: Boolean(dto.settings?.referencingEnabled)
+  };
+}
+
+export function mapWorkspaceMemberDto(dto: WorkspaceMemberDto): WorkspaceMember {
+  return {
+    username: asString(dto.username) ?? 'unknown',
+    email: asString(dto.email) ?? null,
+    fullName: asString(dto.fullName) ?? asString(dto.full_name) ?? null,
+    workspaceRole:
+      (asString(dto.workspaceRole) as WorkspaceMember['workspaceRole']) ??
+      (asString(dto.workspace_role) as WorkspaceMember['workspaceRole']) ??
+      'viewer',
+    disabled: Boolean(dto.disabled),
+    createdAt: asString(dto.createdAt) ?? asString(dto.created_at)
+  };
+}
+
+export function mapWorkspaceGroupDto(dto: WorkspaceGroupDto): WorkspaceGroup {
+  const fallbackId = asString(dto.slug) ?? `group-${Date.now()}`;
+  return {
+    id: asString(dto.id) ?? asString(dto._id) ?? fallbackId,
+    slug: asString(dto.slug) ?? 'unknown',
+    name: asString(dto.name) ?? asString(dto.slug) ?? 'unknown',
+    description: asString(dto.description) ?? null,
+    createdAt: asString(dto.createdAt) ?? asString(dto.created_at)
+  };
+}
+
+export function mapWorkspaceGroupMappingDto(dto: WorkspaceGroupMappingDto): WorkspaceGroupMapping {
+  return {
+    id: asString(dto.id) ?? asString(dto._id) ?? fallbackId('mapping'),
+    provider: asString(dto.provider) ?? 'manual',
+    externalGroupKey: asString(dto.externalGroupKey) ?? asString(dto.external_group_key) ?? '',
+    groupSlug: asString(dto.groupSlug) ?? asString(dto.group_slug) ?? null,
+    createdAt: asString(dto.createdAt) ?? asString(dto.created_at)
+  };
+}
+
+export function mapWorkspaceProjectMemberDto(dto: WorkspaceProjectMemberDto): WorkspaceProjectMember {
+  return {
+    subjectType:
+      ((asString(dto.subjectType) ?? asString(dto.subject_type)) as WorkspaceProjectMember['subjectType']) ?? 'user',
+    subjectId: asString(dto.subjectId) ?? asString(dto.subject_id) ?? '',
+    role: (asString(dto.role) as WorkspaceProjectMember['role']) ?? 'none',
+    groupSlug: asString(dto.groupSlug) ?? asString(dto.group_slug) ?? null
+  };
 }

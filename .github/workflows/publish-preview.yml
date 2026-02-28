@@ -1,0 +1,70 @@
+name: Publish preview Docker image
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish-preview:
+    name: Publish CI branch tags to GHCR
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Validate branch ref
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF}" != refs/heads/* ]]; then
+            echo "Preview publish only supports branch refs."
+            echo "Current ref: ${GITHUB_REF}"
+            exit 1
+          fi
+          DEFAULT_BRANCH="refs/heads/${{ github.event.repository.default_branch }}"
+          if [[ "${GITHUB_REF}" == "${DEFAULT_BRANCH}" ]]; then
+            echo "Use publish.yml for default branch releases."
+            exit 1
+          fi
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "Use publish.yml for release tags."
+            exit 1
+          fi
+
+      - name: Compute preview tags
+        id: preview
+        run: |
+          set -euo pipefail
+          branch="${GITHUB_REF#refs/heads/}"
+          safe_branch="$(echo "${branch}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/-/g' | sed 's/-\\+/-/g' | sed 's/^-//; s/-$//')"
+          short_sha="${GITHUB_SHA::7}"
+          echo "branch_tag=ci-${safe_branch}" >> "${GITHUB_OUTPUT}"
+          echo "sha_tag=ci-${safe_branch}-sha-${short_sha}" >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push preview image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: |
+            VITE_API_BASE_URL=/api
+          tags: |
+            ghcr.io/bearlike/simple-secrets-manager:${{ steps.preview.outputs.branch_tag }}
+            ghcr.io/bearlike/simple-secrets-manager:${{ steps.preview.outputs.sha_tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -97,6 +97,29 @@ uv run ssm-cli --help
 
 Detailed CLI usage is documented in [`docs/CLI.md`](CLI.md).
 
+## Workspace RBAC model (v1.4.0)
+
+Authorization model:
+
+- Login uses username/password only to mint tokens (`/api/auth/tokens/...`).
+- All app endpoints are bearer token authorized with computed scopes.
+- Personal token scopes are computed from RBAC data each request (membership changes apply immediately).
+
+Roles:
+
+- Workspace: `owner`, `admin`, `collaborator`, `viewer`
+- Project: `admin`, `collaborator`, `viewer`, `none`
+- Effective project role is the highest of direct user assignment and group-derived assignment.
+
+Core RBAC API routes:
+
+- `/api/me`
+- `/api/workspace/settings`
+- `/api/workspace/members`
+- `/api/workspace/groups`
+- `/api/workspace/group-mappings`
+- `/api/workspace/projects/<project_slug>/members`
+
 ## Secret reference resolution
 
 Config export endpoint supports optional reference resolution:

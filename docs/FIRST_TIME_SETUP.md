@@ -75,6 +75,27 @@ ssm-cli auth set-token --profile dev --token "<token>"
 ssm-cli whoami --profile dev
 ```
 
+Optionally verify workspace endpoints with the same token:
+
+```bash
+curl -sS http://localhost:5000/api/me \
+  -H "Authorization: Bearer <token>"
+curl -sS http://localhost:5000/api/workspace/members \
+  -H "Authorization: Bearer <token>"
+```
+
+## Workspace RBAC quick notes (v1.4.0)
+
+- Default bootstrap user is created as workspace `owner`.
+- Workspace roles: `owner`, `admin`, `collaborator`, `viewer`.
+- Project roles: `admin`, `collaborator`, `viewer`, `none`.
+- Username/password is for token issuance only; app APIs are token-authorized.
+- Group-based project permissions are managed via:
+  - `/api/workspace/groups`
+  - `/api/workspace/groups/<slug>/members`
+  - `/api/workspace/projects/<project>/members`
+  - `/api/workspace/group-mappings`
+
 ## Common issues
 
 - `System already initialized`: bootstrap already completed.

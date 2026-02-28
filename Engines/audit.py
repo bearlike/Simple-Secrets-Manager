@@ -21,7 +21,7 @@ class AuditEvents:
         }
         self._events.insert_one(payload)
 
-    def query_events(self, project_slug=None, config_slug=None, since=None, limit=100, project_id=None, config_id=None):
+    def _build_query(self, project_slug=None, config_slug=None, since=None, project_id=None, config_id=None):
         clauses = []
         if project_slug is not None and project_id is not None:
             clauses.append({"$or": [{"project_slug": project_slug}, {"project_id": project_id}]})
@@ -40,5 +40,47 @@ class AuditEvents:
             query["$and"] = clauses
         if since is not None:
             query["ts"] = {"$gte": since}
+        return query
+
+    def query_events(self, project_slug=None, config_slug=None, since=None, limit=100, project_id=None, config_id=None):
+        query = self._build_query(
+            project_slug=project_slug,
+            config_slug=config_slug,
+            since=since,
+            project_id=project_id,
+            config_id=config_id,
+        )
         events = list(self._events.find(query, {"_id": 0}).sort("ts", -1).limit(limit))
         return [sanitize_doc(event) for event in events]
+
+    def query_events_page(
+        self,
+        project_slug=None,
+        config_slug=None,
+        since=None,
+        limit=50,
+        page=1,
+        project_id=None,
+        config_id=None,
+    ):
+        normalized_limit = max(1, min(int(limit), 100))
+        normalized_page = max(1, int(page))
+        skip = (normalized_page - 1) * normalized_limit
+
+        query = self._build_query(
+            project_slug=project_slug,
+            config_slug=config_slug,
+            since=since,
+            project_id=project_id,
+            config_id=config_id,
+        )
+        cursor = self._events.find(query, {"_id": 0}).sort("ts", -1).skip(skip).limit(normalized_limit + 1)
+        docs = list(cursor)
+        has_next = len(docs) > normalized_limit
+        events = docs[:normalized_limit]
+        return {
+            "events": [sanitize_doc(event) for event in events],
+            "page": normalized_page,
+            "limit": normalized_limit,
+            "has_next": has_next,
+        }

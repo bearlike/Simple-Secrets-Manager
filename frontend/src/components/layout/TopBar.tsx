@@ -1,12 +1,16 @@
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
   ChevronRightIcon,
   DownloadIcon,
   GithubIcon,
+  LogOutIcon,
   MoonIcon,
   SettingsIcon,
-  SunIcon
+  SunIcon,
+  UserCircle2Icon,
+  UsersIcon,
+  GroupIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -27,8 +31,11 @@ import { getProjects } from '../../lib/api/projects';
 import { getConfigs } from '../../lib/api/configs';
 import { bulkExport } from '../../lib/api/secrets';
 import { getAppVersion } from '../../lib/api/version';
+import { getMe } from '../../lib/api/me';
 import { queryKeys } from '../../lib/api/queryKeys';
 import { useTheme } from '../../lib/theme';
+import { useAuth } from '../../lib/auth';
+import { notifyApiError } from '../../lib/api/errorToast';
 
 const REPOSITORY_URL = 'https://github.com/bearlike/Simple-Secrets-Manager';
 
@@ -48,7 +55,10 @@ export function TopBar() {
     configSlug?: string;
   }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const { theme, toggleTheme } = useTheme();
+  const { logout } = useAuth();
+  const isCompareBySecretPage = Boolean(projectSlug) && location.pathname.endsWith('/compare/secret');
 
   const { data: projects = [] } = useQuery({
     queryKey: queryKeys.projects(),
@@ -65,6 +75,10 @@ export function TopBar() {
     queryKey: queryKeys.appVersion(),
     queryFn: getAppVersion,
     staleTime: 5 * 60 * 1000
+  });
+  const { data: me } = useQuery({
+    queryKey: queryKeys.me(),
+    queryFn: getMe
   });
 
   const currentProject = projects.find((project) => project.slug === projectSlug);
@@ -93,8 +107,8 @@ export function TopBar() {
         downloadFile(result.data, `${projectSlug}-${configSlug}.env`, 'text/plain');
       }
       toast.success(`Exported as ${format.toUpperCase()}${raw ? ' (raw)' : ''}`);
-    } catch {
-      toast.error('Export failed');
+    } catch (error) {
+      notifyApiError(error, 'Export failed');
     }
   };
 
@@ -124,6 +138,15 @@ export function TopBar() {
           <>
             <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <span className="font-medium text-foreground font-mono text-xs">{configSlug}</span>
+          </>
+        )}
+
+        {isCompareBySecretPage && (
+          <>
+            <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="text-muted-foreground">Compare</span>
+            <ChevronRightIcon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <span className="font-medium text-foreground text-xs">By Secret</span>
           </>
         )}
       </nav>
@@ -193,6 +216,38 @@ export function TopBar() {
           </DropdownMenuContent>
         </DropdownMenu>
       )}
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm" className="h-7 gap-1.5 px-2 text-xs">
+            <UserCircle2Icon className="h-4 w-4" />
+            <span className="max-w-28 truncate">{me?.username ?? 'Account'}</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => navigate('/account')}>
+            <UserCircle2Icon className="h-3.5 w-3.5 mr-2" />
+            Account
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate('/team')}>
+            <UsersIcon className="h-3.5 w-3.5 mr-2" />
+            Team
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => navigate('/groups')}>
+            <GroupIcon className="h-3.5 w-3.5 mr-2" />
+            Groups
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onClick={() => {
+              logout();
+              navigate('/login');
+            }}
+          >
+            <LogOutIcon className="h-3.5 w-3.5 mr-2" />
+            Sign Out
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
   );
 }

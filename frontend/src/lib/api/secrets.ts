@@ -8,11 +8,13 @@ import type {
 
 interface SecretValueInput {
   value: string;
+  iconSlug?: string | null;
 }
 
 export interface SecretUpsertInput {
   key: string;
   value: string;
+  iconSlug?: string | null;
 }
 
 export interface SecretExportOptions {
@@ -40,7 +42,17 @@ export async function getSecrets(
   configSlug: string,
   options?: SecretExportOptions
 ): Promise<Secret[]> {
-  return mapSecretsData(await getSecretsKeyMap(projectSlug, configSlug, true, options));
+  const response = await apiClient<SecretsJsonResponseDto>(
+    secretsEndpoint(projectSlug, configSlug, {
+      format: 'json',
+      include_parent: options?.includeParent ?? true,
+      include_meta: options?.includeMeta ?? true,
+      resolve_references: options?.resolveReferences ?? false,
+      raw: options?.raw ?? false
+    })
+  );
+
+  return mapSecretsData(response.data ?? {}, response.meta);
 }
 
 export async function getSecretsKeyMap(
@@ -67,18 +79,26 @@ export async function createSecret(
   configSlug: string,
   data: SecretUpsertInput
 ): Promise<Secret> {
+  const payload: { value: string; icon_slug?: string | null } = {
+    value: data.value
+  };
+  if (data.iconSlug !== undefined) {
+    payload.icon_slug = data.iconSlug;
+  }
+
   await apiClient<void>(
     `/projects/${projectSlug}/configs/${configSlug}/secrets/${encodeURIComponent(data.key)}`,
     {
       method: 'PUT',
-      body: JSON.stringify({ value: data.value })
+      body: JSON.stringify(payload)
     }
   );
 
   return {
     key: data.key,
     value: data.value,
-    updatedAt: undefined
+    updatedAt: undefined,
+    iconSlug: data.iconSlug ?? undefined
   };
 }
 
@@ -88,18 +108,26 @@ export async function updateSecret(
   key: string,
   data: SecretValueInput
 ): Promise<Secret> {
+  const payload: { value: string; icon_slug?: string | null } = {
+    value: data.value
+  };
+  if (data.iconSlug !== undefined) {
+    payload.icon_slug = data.iconSlug;
+  }
+
   await apiClient<void>(
     `/projects/${projectSlug}/configs/${configSlug}/secrets/${encodeURIComponent(key)}`,
     {
       method: 'PUT',
-      body: JSON.stringify({ value: data.value })
+      body: JSON.stringify(payload)
     }
   );
 
   return {
     key,
     value: data.value,
-    updatedAt: undefined
+    updatedAt: undefined,
+    iconSlug: data.iconSlug ?? undefined
   };
 }
 

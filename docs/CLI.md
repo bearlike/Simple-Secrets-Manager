@@ -47,7 +47,7 @@ uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli --
 Pin to tag:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git@v1.3.1 ssm-cli --help
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git@v1.4.0 ssm-cli --help
 ```
 
 ## 3) Quick Start
@@ -103,6 +103,16 @@ Validate current session:
 ssm-cli whoami --profile dev
 ```
 
+Workspace and RBAC operations:
+
+```bash
+ssm-cli workspace settings --profile dev
+ssm-cli workspace members --profile dev
+ssm-cli workspace member-add --username alice --password 'StrongPass123' --workspace-role viewer --profile dev
+ssm-cli workspace groups --profile dev
+ssm-cli workspace project-members --project scraper-handler --profile dev
+```
+
 Profile management:
 
 ```bash
@@ -154,6 +164,37 @@ Test overrides via env vars:
 - `SSM_LOCAL_CONFIG_FILE`
 - `SSM_CREDENTIALS_FILE`
 - `SSM_CACHE_DIR`
+
+## Workspace Commands (v1.4.0)
+
+`ssm-cli workspace ...` covers user/group/RBAC management:
+
+- Settings:
+  - `workspace settings`
+  - `workspace settings-set --default-workspace-role ... --default-project-role ... --referencing-enabled true|false`
+- Members:
+  - `workspace members`
+  - `workspace member-add`
+  - `workspace member-update`
+  - `workspace member-disable`
+- Groups:
+  - `workspace groups`
+  - `workspace group-add|group-update|group-delete`
+  - `workspace group-members|group-members-set`
+- Group mappings:
+  - `workspace mappings`
+  - `workspace mapping-add`
+  - `workspace mapping-delete`
+- Project role assignments:
+  - `workspace project-members --project <slug>`
+  - `workspace project-member-set --project <slug> --subject-type user|group --subject-id <username|group-slug> --role admin|collaborator|viewer|none`
+  - `workspace project-member-remove ...`
+
+Role behavior:
+
+- `owner`: full workspace and project management.
+- `admin`: manage projects/tokens/groups/project-memberships; cannot change workspace settings or create/modify workspace users.
+- `collaborator` and `viewer`: can list workspace members; project access comes from direct/group project role assignments.
 
 ## Exit Behavior
 

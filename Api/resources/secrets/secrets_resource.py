@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from typing import Optional
 
-from flask import Response, g
+from flask import Response, g, request
 from flask_restx import Resource, inputs
 
 from Api.api import api, conn
@@ -15,6 +15,7 @@ secrets_ns = api.namespace(
 )
 secret_parser = api.parser()
 secret_parser.add_argument("value", type=str, required=True, location="json")
+secret_parser.add_argument("icon_slug", type=str, required=False, location="json")
 secret_get_parser = api.parser()
 secret_get_parser.add_argument("raw", type=inputs.boolean, default=False, location="args")
 secret_get_parser.add_argument("resolve_references", type=inputs.boolean, default=False, location="args")
@@ -79,6 +80,12 @@ class SecretItemResource(Resource):
         require_scope("secrets:write", project_id=project["_id"], config_id=config["_id"])
         args = secret_parser.parse_args()
         value = args["value"]
+        raw_payload = request.get_json(silent=True)
+        payload = raw_payload if isinstance(raw_payload, dict) else {}
+        icon_slug_provided = "icon_slug" in payload
+        icon_slug = payload.get("icon_slug") if icon_slug_provided else None
+        if icon_slug is not None and not isinstance(icon_slug, str):
+            api.abort(400, "icon_slug must be a string or null")
 
         if "${" in value:
             exported, _, msg, code = conn.secrets_v2.export_config(
@@ -103,7 +110,14 @@ class SecretItemResource(Resource):
             if errors:
                 api.abort(400, "; ".join(errors))
 
-        result, code = conn.secrets_v2.put(config["_id"], key, value, g.actor.get("id"))
+        result, code = conn.secrets_v2.put(
+            config["_id"],
+            key,
+            value,
+            g.actor.get("id"),
+            icon_slug=icon_slug,
+            icon_slug_provided=icon_slug_provided,
+        )
         audit_event("secrets.write", project_slug=project_slug, config_slug=config_slug, key=key, status_code=code)
         if code >= 400:
             api.abort(code, result)
@@ -162,9 +176,9 @@ class SecretItemResource(Resource):
     @with_token
     def delete(self, project_slug, config_slug, key):
         project, config = resolve_project_config(project_slug, config_slug)
-        require_scope("secrets:write", project_id=project["_id"], config_id=config["_id"])
+        require_scope("secrets:delete", project_id=project["_id"], config_id=config["_id"])
         result, code = conn.secrets_v2.delete(config["_id"], key)
-        audit_event("secrets.write", project_slug=project_slug, config_slug=config_slug, key=key, status_code=code)
+        audit_event("secrets.delete", project_slug=project_slug, config_slug=config_slug, key=key, status_code=code)
         if code >= 400:
             api.abort(code, result)
         return result, code

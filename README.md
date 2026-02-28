@@ -38,6 +38,35 @@ API-only bootstrap steps are in [`docs/FIRST_TIME_SETUP.md`](docs/FIRST_TIME_SET
 
 ---
 
+### Workspace RBAC and Groups (v1.4.0)
+
+Simple Secrets Manager now uses token-scoped RBAC for app APIs.
+
+- Username/password is only used for login/token exchange.
+- All other API access uses bearer tokens and scope checks.
+- Workspace roles: `owner`, `admin`, `collaborator`, `viewer`.
+- Project roles: `admin`, `collaborator`, `viewer`, `none`.
+- Group-based project access is supported via workspace groups.
+- Group mappings (`provider + externalGroupKey -> groupSlug`) are available for manual mapping now and SSO/SCIM-style integrations later.
+
+Core workspace endpoints:
+
+- `GET/PATCH /api/workspace/settings`
+- `GET/POST /api/workspace/members`
+- `PATCH/DELETE /api/workspace/members/<username>`
+- `GET/POST/PATCH/DELETE /api/workspace/groups...`
+- `GET/POST/DELETE /api/workspace/group-mappings...`
+- `GET/PUT/DELETE /api/workspace/projects/<project>/members...`
+- `GET/PATCH /api/me`
+
+UI pages:
+
+- `Account` (`/account`)
+- `Team` (`/team`)
+- `Groups` (`/groups`)
+
+---
+
 ### 2️⃣ Installing `ssm-cli` locally
 
 `ssm-cli` is a lightweight command-line client that securely authenticates to Simple Secrets Manager and injects your project/config secrets into any command or runtime on demand.

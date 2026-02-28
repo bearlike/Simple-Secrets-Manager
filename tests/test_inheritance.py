@@ -11,6 +11,14 @@ class FakeSecrets:
     def find(self, query):
         return [d for d in self.docs if d["config_id"] == query["config_id"]]
 
+    def update_one(self, query, update, upsert=False):
+        for doc in self.docs:
+            if doc.get("config_id") == query.get("config_id") and doc.get("key") == query.get("key"):
+                for key, value in update.get("$set", {}).items():
+                    doc[key] = value
+                return None
+        return None
+
 
 class FakeConfigs:
     def __init__(self, cfgs):

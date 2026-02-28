@@ -8,9 +8,11 @@ import {
 } from '@tanstack/react-table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { useNavigate } from 'react-router-dom';
 import {
   EyeIcon,
   EyeOffIcon,
+  GitCompareArrowsIcon,
   PencilIcon,
   PlusIcon,
   SearchIcon,
@@ -43,6 +45,8 @@ import { SecretValueText } from './SecretValueEditor';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { EmptyState } from '../common/EmptyState';
 import { getConfigBadgeClass } from '../../lib/badgeStyles';
+import { AppIcon } from '../icons/AppIcon';
+import { notifyApiError } from '../../lib/api/errorToast';
 
 function formatRelativeTime(dateStr?: string): string {
   if (!dateStr) return '—';
@@ -68,6 +72,9 @@ interface SecretsTableProps {
 }
 
 function columnClass(columnId: string, header = false): string {
+  if (columnId === 'icon') {
+    return header ? 'w-14' : 'w-14 align-top';
+  }
   if (columnId === 'key') {
     return header ? 'w-56 max-w-[14rem]' : 'w-56 max-w-[14rem] align-top';
   }
@@ -78,13 +85,14 @@ function columnClass(columnId: string, header = false): string {
     return header ? 'w-28' : 'w-28 align-top';
   }
   if (columnId === 'actions') {
-    return header ? 'w-32 text-right' : 'w-32 align-top';
+    return header ? 'w-44 text-right' : 'w-44 align-top';
   }
   return header ? '' : 'align-top';
 }
 
 export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
@@ -110,8 +118,8 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
       toast.success('Secret deleted');
       setDeletingKey(null);
     },
-    onError: () => {
-      toast.error('Failed to delete secret');
+    onError: (error) => {
+      notifyApiError(error, 'Failed to delete secret');
     }
   });
 
@@ -149,8 +157,7 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
       );
     },
     onError: (error) => {
-      const message = error instanceof Error ? error.message : 'Failed to import .env file';
-      toast.error(message);
+      notifyApiError(error, 'Failed to import .env file');
     }
   });
 
@@ -237,13 +244,21 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
     try {
       await buildPreview(file);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to read .env file';
-      toast.error(message);
+      notifyApiError(error, 'Failed to read .env file');
     }
   };
 
   const columns = useMemo<ColumnDef<Secret>[]>(
     () => [
+      {
+        id: 'icon',
+        header: '',
+        cell: ({ row }) => (
+          <div className="flex h-full min-h-8 items-center justify-center">
+            <AppIcon icon={row.original.iconSlug} className="h-full w-full max-h-8 max-w-8 text-muted-foreground" />
+          </div>
+        )
+      },
       {
         accessorKey: 'key',
         header: 'KEY',
@@ -295,6 +310,19 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
               variant="ghost"
               size="sm"
               className="h-7 w-7 p-0"
+              onClick={() =>
+                navigate(
+                  `/projects/${projectSlug}/compare/secret?key=${encodeURIComponent(row.original.key)}`
+                )
+              }
+              aria-label="Compare secret"
+            >
+              <GitCompareArrowsIcon className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0"
               onClick={() => setEditingSecret(row.original)}
               aria-label="Edit secret"
             >
@@ -313,7 +341,7 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
         )
       }
     ],
-    [revealedKeys]
+    [navigate, projectSlug, revealedKeys]
   );
 
   const table = useReactTable({
@@ -370,14 +398,16 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
       />
 
       <div className="overflow-x-auto rounded-md border border-border">
-        <table className="min-w-[760px] w-full table-fixed text-sm">
+        <table className="min-w-[800px] w-full table-fixed text-sm">
           <thead>
             <tr className="bg-muted/40 border-b border-border">
               {table.getHeaderGroups().map((headerGroup) =>
                 headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className={`px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground ${columnClass(header.column.id, true)}`}
+                    className={`py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground ${
+                      header.column.id === 'icon' ? 'px-2' : 'px-4'
+                    } ${columnClass(header.column.id, true)}`}
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
@@ -387,8 +417,11 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
           </thead>
           <tbody>
             {isLoading
-              ? Array.from({ length: 5 }).map((_, index) => (
+                ? Array.from({ length: 5 }).map((_, index) => (
                   <tr key={index} className="border-b border-border last:border-0">
+                    <td className="px-2 py-2.5">
+                      <Skeleton className="h-8 w-8 rounded-md" />
+                    </td>
                     <td className="px-4 py-2.5">
                       <Skeleton className="h-4 w-40" />
                     </td>
@@ -406,7 +439,7 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
               : table.getRowModel().rows.length === 0
                 ? (
                     <tr>
-                      <td colSpan={4}>
+                      <td colSpan={5}>
                         <EmptyState
                           title={globalFilter ? 'No secrets match your filter' : 'No secrets yet'}
                           description={
@@ -430,7 +463,12 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
                       className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
                     >
                       {row.getVisibleCells().map((cell) => (
-                        <td key={cell.id} className={`px-4 py-2.5 ${columnClass(cell.column.id)}`}>
+                        <td
+                          key={cell.id}
+                          className={`py-2.5 ${cell.column.id === 'icon' ? 'px-2' : 'px-4'} ${columnClass(
+                            cell.column.id
+                          )}`}
+                        >
                           {flexRender(cell.column.columnDef.cell, cell.getContext())}
                         </td>
                       ))}

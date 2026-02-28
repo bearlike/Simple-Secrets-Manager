@@ -409,15 +409,16 @@ def whoami(base_url: str | None, profile: str | None) -> None:
     )
 
     client = ApiClient(resolution.base_url or "", token=resolution.token)
-    scope_message = ""
-    try:
-        projects = client.list_projects()
-        scope_message = f"projects:read available ({len(projects)} visible)"
-    except ApiError as exc:
-        if exc.status_code == 403:
-            scope_message = "token valid, but missing projects:read"
-        else:
-            raise
+    profile_payload = client.get_me()
+    username = str(profile_payload.get("username") or "unknown")
+    workspace_role = str(profile_payload.get("workspaceRole") or "unknown")
+    workspace_slug = str(profile_payload.get("workspaceSlug") or "default")
+    summary = profile_payload.get("effectivePermissionsSummary")
+    project_scope_count = 0
+    if isinstance(summary, dict):
+        raw = summary.get("projectScopeCount")
+        if isinstance(raw, int):
+            project_scope_count = raw
 
     token_preview = "[hidden]"
     if resolution.token and len(resolution.token) >= 8:
@@ -430,8 +431,410 @@ def whoami(base_url: str | None, profile: str | None) -> None:
     table.add_row("Base URL", resolution.base_url or "")
     table.add_row("Token Source", resolution.token_source or "unknown")
     table.add_row("Token", token_preview)
-    table.add_row("Scopes", scope_message)
+    table.add_row("Username", username)
+    table.add_row("Workspace", workspace_slug)
+    table.add_row("Workspace Role", workspace_role)
+    table.add_row("Project Scopes", str(project_scope_count))
     console.print(table)
+
+
+def _workspace_client(base_url: str | None, profile: str | None) -> ApiClient:
+    resolution = resolve_context(
+        base_url=base_url,
+        profile=profile,
+        require_base_url=True,
+        require_token=True,
+    )
+    return ApiClient(resolution.base_url or "", token=resolution.token)
+
+
+@cli.group(help="Manage workspace roles, members, groups, and mappings")
+def workspace() -> None:
+    pass
+
+
+@workspace.command("settings", help="Show workspace settings")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_settings(base_url: str | None, profile: str | None) -> None:
+    client = _workspace_client(base_url, profile)
+    payload = client.get_workspace_settings()
+    settings = payload.get("settings") if isinstance(payload, dict) else {}
+    table = Table(title="Workspace settings")
+    table.add_column("Setting", style="cyan")
+    table.add_column("Value", style="green")
+    if isinstance(settings, dict):
+        for key in sorted(settings.keys()):
+            table.add_row(key, str(settings[key]))
+    console.print(table)
+
+
+@workspace.command("settings-set", help="Update workspace settings")
+@click.option("--default-workspace-role", default=None, help="Role: owner|admin|collaborator|viewer")
+@click.option("--default-project-role", default=None, help="Role: admin|collaborator|viewer|none")
+@click.option(
+    "--referencing-enabled/--referencing-disabled",
+    default=None,
+    help="Enable or disable secret reference resolution",
+)
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_settings_set(
+    default_workspace_role: str | None,
+    default_project_role: str | None,
+    referencing_enabled: bool | None,
+    base_url: str | None,
+    profile: str | None,
+) -> None:
+    updates: dict[str, Any] = {}
+    if default_workspace_role is not None:
+        updates["defaultWorkspaceRole"] = default_workspace_role
+    if default_project_role is not None:
+        updates["defaultProjectRole"] = default_project_role
+    if referencing_enabled is not None:
+        updates["referencingEnabled"] = referencing_enabled
+    if not updates:
+        raise CliError("No changes requested. Provide at least one option.", exit_code=2)
+
+    client = _workspace_client(base_url, profile)
+    client.update_workspace_settings(updates)
+    console.print("Workspace settings updated.")
+
+
+@workspace.command("members", help="List workspace members")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_members(base_url: str | None, profile: str | None) -> None:
+    client = _workspace_client(base_url, profile)
+    members = client.list_workspace_members()
+    table = Table(title="Workspace members")
+    table.add_column("Username", style="cyan")
+    table.add_column("Role")
+    table.add_column("Disabled")
+    table.add_column("Email")
+    table.add_column("Full Name")
+    for member in members:
+        table.add_row(
+            str(member.get("username", "")),
+            str(member.get("workspaceRole", "")),
+            "yes" if member.get("disabled") else "",
+            str(member.get("email", "") or ""),
+            str(member.get("fullName", "") or ""),
+        )
+    console.print(table)
+
+
+@workspace.command("member-add", help="Add a workspace member")
+@click.option("--username", prompt=True, help="Username")
+@click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True, help="Initial password")
+@click.option("--email", default=None, help="Email")
+@click.option("--full-name", default=None, help="Full name")
+@click.option("--workspace-role", default=None, help="Role: owner|admin|collaborator|viewer")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_member_add(
+    username: str,
+    password: str,
+    email: str | None,
+    full_name: str | None,
+    workspace_role: str | None,
+    base_url: str | None,
+    profile: str | None,
+) -> None:
+    client = _workspace_client(base_url, profile)
+    client.create_workspace_member(
+        username=username.strip(),
+        password=password,
+        email=email,
+        full_name=full_name,
+        workspace_role=workspace_role,
+    )
+    console.print(f"Workspace member [bold]{username}[/bold] created.")
+
+
+@workspace.command("member-update", help="Update a workspace member")
+@click.argument("username")
+@click.option("--email", default=None, help="Email")
+@click.option("--full-name", default=None, help="Full name")
+@click.option("--workspace-role", default=None, help="Role: owner|admin|collaborator|viewer")
+@click.option("--disable/--enable", default=None, help="Disable or enable user")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_member_update(
+    username: str,
+    email: str | None,
+    full_name: str | None,
+    workspace_role: str | None,
+    disable: bool | None,
+    base_url: str | None,
+    profile: str | None,
+) -> None:
+    updates: dict[str, Any] = {}
+    if email is not None:
+        updates["email"] = email
+    if full_name is not None:
+        updates["fullName"] = full_name
+    if workspace_role is not None:
+        updates["workspaceRole"] = workspace_role
+    if disable is not None:
+        updates["disabled"] = disable
+    if not updates:
+        raise CliError("No changes requested. Provide at least one option.", exit_code=2)
+
+    client = _workspace_client(base_url, profile)
+    client.update_workspace_member(username, updates)
+    console.print(f"Workspace member [bold]{username}[/bold] updated.")
+
+
+@workspace.command("member-disable", help="Disable a workspace member")
+@click.argument("username")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_member_disable(username: str, base_url: str | None, profile: str | None) -> None:
+    client = _workspace_client(base_url, profile)
+    client.disable_workspace_member(username)
+    console.print(f"Workspace member [bold]{username}[/bold] disabled.")
+
+
+@workspace.command("groups", help="List workspace groups")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_groups(base_url: str | None, profile: str | None) -> None:
+    client = _workspace_client(base_url, profile)
+    groups = client.list_workspace_groups()
+    table = Table(title="Workspace groups")
+    table.add_column("Slug", style="cyan")
+    table.add_column("Name")
+    table.add_column("Description")
+    for group in groups:
+        table.add_row(
+            str(group.get("slug", "")),
+            str(group.get("name", "")),
+            str(group.get("description", "") or ""),
+        )
+    console.print(table)
+
+
+@workspace.command("group-add", help="Create a workspace group")
+@click.option("--slug", prompt=True, help="Group slug")
+@click.option("--name", default=None, help="Group name")
+@click.option("--description", default=None, help="Description")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_group_add(
+    slug: str,
+    name: str | None,
+    description: str | None,
+    base_url: str | None,
+    profile: str | None,
+) -> None:
+    client = _workspace_client(base_url, profile)
+    client.create_workspace_group(slug=slug.strip(), name=name, description=description)
+    console.print(f"Group [bold]{slug}[/bold] created.")
+
+
+@workspace.command("group-update", help="Update a workspace group")
+@click.argument("group_slug")
+@click.option("--name", default=None, help="Group name")
+@click.option("--description", default=None, help="Description")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_group_update(
+    group_slug: str,
+    name: str | None,
+    description: str | None,
+    base_url: str | None,
+    profile: str | None,
+) -> None:
+    client = _workspace_client(base_url, profile)
+    client.update_workspace_group(group_slug, name=name, description=description)
+    console.print(f"Group [bold]{group_slug}[/bold] updated.")
+
+
+@workspace.command("group-delete", help="Delete a workspace group")
+@click.argument("group_slug")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_group_delete(group_slug: str, base_url: str | None, profile: str | None) -> None:
+    client = _workspace_client(base_url, profile)
+    client.delete_workspace_group(group_slug)
+    console.print(f"Group [bold]{group_slug}[/bold] deleted.")
+
+
+@workspace.command("group-members", help="List members in a group")
+@click.argument("group_slug")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_group_members(group_slug: str, base_url: str | None, profile: str | None) -> None:
+    client = _workspace_client(base_url, profile)
+    members = client.list_workspace_group_members(group_slug)
+    table = Table(title=f"Group members: {group_slug}")
+    table.add_column("Username", style="cyan")
+    for username in members:
+        table.add_row(username)
+    console.print(table)
+
+
+@workspace.command("group-members-set", help="Add/remove members in a group")
+@click.argument("group_slug")
+@click.option("--add", "add_members", multiple=True, help="Username to add (repeatable)")
+@click.option("--remove", "remove_members", multiple=True, help="Username to remove (repeatable)")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_group_members_set(
+    group_slug: str,
+    add_members: tuple[str, ...],
+    remove_members: tuple[str, ...],
+    base_url: str | None,
+    profile: str | None,
+) -> None:
+    if not add_members and not remove_members:
+        raise CliError("Provide at least one --add or --remove value.", exit_code=2)
+    client = _workspace_client(base_url, profile)
+    client.update_workspace_group_members(
+        group_slug,
+        add=[item.strip() for item in add_members if item.strip()],
+        remove=[item.strip() for item in remove_members if item.strip()],
+    )
+    console.print(f"Group [bold]{group_slug}[/bold] members updated.")
+
+
+@workspace.command("mappings", help="List workspace group mappings")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_mappings(base_url: str | None, profile: str | None) -> None:
+    client = _workspace_client(base_url, profile)
+    mappings = client.list_workspace_group_mappings()
+    table = Table(title="Workspace group mappings")
+    table.add_column("ID", style="cyan")
+    table.add_column("Provider")
+    table.add_column("External Key")
+    table.add_column("Group")
+    for mapping in mappings:
+        table.add_row(
+            str(mapping.get("id", "")),
+            str(mapping.get("provider", "")),
+            str(mapping.get("externalGroupKey", "")),
+            str(mapping.get("groupSlug", "") or ""),
+        )
+    console.print(table)
+
+
+@workspace.command("mapping-add", help="Create a workspace group mapping")
+@click.option("--provider", default="manual", show_default=True, help="Mapping provider")
+@click.option("--external-group-key", prompt=True, help="External group key")
+@click.option("--group-slug", prompt=True, help="Target group slug")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_mapping_add(
+    provider: str,
+    external_group_key: str,
+    group_slug: str,
+    base_url: str | None,
+    profile: str | None,
+) -> None:
+    client = _workspace_client(base_url, profile)
+    client.create_workspace_group_mapping(
+        provider=provider,
+        external_group_key=external_group_key.strip(),
+        group_slug=group_slug.strip(),
+    )
+    console.print("Group mapping created.")
+
+
+@workspace.command("mapping-delete", help="Delete a workspace group mapping")
+@click.argument("mapping_id")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_mapping_delete(mapping_id: str, base_url: str | None, profile: str | None) -> None:
+    client = _workspace_client(base_url, profile)
+    client.delete_workspace_group_mapping(mapping_id)
+    console.print("Group mapping deleted.")
+
+
+@workspace.command("project-members", help="List project members")
+@click.option("--project", "project_slug", required=True, help="Project slug")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_project_members(project_slug: str, base_url: str | None, profile: str | None) -> None:
+    client = _workspace_client(base_url, profile)
+    members = client.list_workspace_project_members(project_slug)
+    table = Table(title=f"Project members: {project_slug}")
+    table.add_column("Subject Type", style="cyan")
+    table.add_column("Subject")
+    table.add_column("Role")
+    for member in members:
+        table.add_row(
+            str(member.get("subjectType", "")),
+            str(member.get("groupSlug") or member.get("subjectId") or ""),
+            str(member.get("role", "")),
+        )
+    console.print(table)
+
+
+@workspace.command("project-member-set", help="Assign user/group role for a project")
+@click.option("--project", "project_slug", required=True, help="Project slug")
+@click.option("--subject-type", required=True, type=click.Choice(["user", "group"]), help="Subject type")
+@click.option("--subject-id", required=True, help="Username (user) or group slug (group)")
+@click.option("--role", required=True, type=click.Choice(["admin", "collaborator", "viewer", "none"]), help="Role")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_project_member_set(
+    project_slug: str,
+    subject_type: str,
+    subject_id: str,
+    role: str,
+    base_url: str | None,
+    profile: str | None,
+) -> None:
+    client = _workspace_client(base_url, profile)
+    client.set_workspace_project_member(
+        project_slug=project_slug,
+        subject_type=subject_type,
+        subject_id=subject_id,
+        role=role,
+    )
+    console.print("Project member assignment updated.")
+
+
+@workspace.command("project-member-remove", help="Remove user/group project assignment")
+@click.option("--project", "project_slug", required=True, help="Project slug")
+@click.option("--subject-type", required=True, type=click.Choice(["user", "group"]), help="Subject type")
+@click.option("--subject-id", required=True, help="Username (user) or group slug (group)")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def workspace_project_member_remove(
+    project_slug: str,
+    subject_type: str,
+    subject_id: str,
+    base_url: str | None,
+    profile: str | None,
+) -> None:
+    client = _workspace_client(base_url, profile)
+    client.remove_workspace_project_member(
+        project_slug=project_slug,
+        subject_type=subject_type,
+        subject_id=subject_id,
+    )
+    console.print("Project member assignment removed.")
 
 
 @cli.group(help="Manage CLI profiles")
