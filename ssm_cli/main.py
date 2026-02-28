@@ -366,11 +366,11 @@ def run(
 
 
 @cli.group(help="Secret export and mount commands")
-def secrets() -> None:
+def secrets_cmd() -> None:
     pass
 
 
-@secrets.command("download", help="Download secrets to stdout")
+@secrets_cmd.command("download", help="Download secrets to stdout")
 @click.option(
     "--format",
     "output_format",
@@ -439,7 +439,7 @@ def secrets_download(
     console.print(render_env_lines(secrets_data), soft_wrap=True)
 
 
-@secrets.command("mount", help="Write secrets to a named pipe (FIFO)")
+@secrets_cmd.command("mount", help="Write secrets to a named pipe (FIFO)")
 @click.option(
     "--path",
     "fifo_path",
@@ -1058,11 +1058,11 @@ def workspace_project_member_remove(
 
 
 @cli.group(help="Manage CLI profiles")
-def profile() -> None:
+def profile_cmd() -> None:
     pass
 
 
-@profile.command("list", help="List profiles")
+@profile_cmd.command("list", help="List profiles")
 @_handle_errors
 def profile_list() -> None:
     cfg = load_global_config()
@@ -1089,7 +1089,7 @@ def profile_list() -> None:
     console.print(table)
 
 
-@profile.command("use", help="Set active profile")
+@profile_cmd.command("use", help="Set active profile")
 @click.argument("name")
 @_handle_errors
 def profile_use(name: str) -> None:
@@ -1104,7 +1104,7 @@ def profile_use(name: str) -> None:
     console.print(f"Active profile set to [bold]{profile_name}[/bold]")
 
 
-@profile.command("set", help="Set profile fields")
+@profile_cmd.command("set", help="Set profile fields")
 @click.argument("name")
 @click.option("--base-url", default=None, help="Base URL")
 @click.option("--project", default=None, help="Default project")

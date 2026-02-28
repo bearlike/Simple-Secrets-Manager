@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from flask_restx import Resource
 
-from Api.api import api, conn
+from Api.core import api, conn
 
 onboarding_ns = api.namespace("onboarding", description="First-time setup")
 

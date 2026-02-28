@@ -165,11 +165,11 @@ class ApiClient:
                 "Secrets response is invalid", status_code=1, body=payload
             )
 
-        parsed: dict[str, str] = {}
-        for key, value in data.items():
-            if isinstance(key, str) and isinstance(value, str):
-                parsed[key] = value
-        return parsed
+        return {
+            key: value
+            for key, value in data.items()
+            if isinstance(key, str) and isinstance(value, str)
+        }
 
     def list_projects(self) -> list[dict[str, Any]]:
         payload = self.request("GET", "/projects", accept="application/json")

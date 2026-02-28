@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from flask_restx import fields, Resource
 
-from Api.api import api, conn
+from Api.core import api, conn
 from Access.is_auth import require_token, require_scope
 
 userpass_ns = api.namespace(

@@ -4,7 +4,7 @@ from typing import Optional
 from flask import Response, g, request
 from flask_restx import Resource, inputs
 
-from Api.api import api, conn
+from Api.core import api, conn
 from Api.resources.helpers import resolve_project_config
 from Api.resources.secrets.references import (
     SecretReferenceError,

@@ -2,7 +2,7 @@
 from flask_restx import Resource, fields
 from flask import g
 
-from Api.api import api, conn
+from Api.core import api, conn
 from Access.is_auth import with_token, require_scope
 from Access.policy import authorize
 

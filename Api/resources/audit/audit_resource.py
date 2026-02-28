@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from flask_restx import Resource
 
-from Api.api import api, conn
+from Api.core import api, conn
 from Api.resources.helpers import resolve_project_config
 from Api.serialization import oid_to_str
 from Access.is_auth import with_token, require_scope

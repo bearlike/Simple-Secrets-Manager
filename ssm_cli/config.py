@@ -157,11 +157,11 @@ def load_credentials() -> dict[str, str]:
     tokens = raw.get("tokens")
     if not isinstance(tokens, dict):
         return {}
-    parsed: dict[str, str] = {}
-    for key, value in tokens.items():
-        if isinstance(key, str) and isinstance(value, str):
-            parsed[key] = value
-    return parsed
+    return {
+        key: value
+        for key, value in tokens.items()
+        if isinstance(key, str) and isinstance(value, str)
+    }
 
 
 def save_credentials(tokens: dict[str, str]) -> None:

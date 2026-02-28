@@ -2,7 +2,7 @@
 from flask import request
 from flask_restx import Resource
 
-from Api.api import api, conn
+from Api.core import api, conn
 from Api.serialization import oid_to_str, to_iso
 from Access.is_auth import with_token, require_scope
 
@@ -149,6 +149,48 @@ def _resolve_project(project_slug):
     return project
 
 
+def _parse_member_payload():
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        api.abort(400, "Invalid JSON payload")
+    return payload
+
+
+def _update_member_profile(username, payload):
+    if "email" not in payload and "fullName" not in payload:
+        return
+    _, msg, code = conn.users.update_profile(
+        username,
+        email=payload.get("email") if "email" in payload else None,
+        full_name=payload.get("fullName") if "fullName" in payload else None,
+    )
+    if code >= 400:
+        api.abort(code, msg)
+
+
+def _update_member_disabled(username, payload):
+    if "disabled" not in payload:
+        return
+    disabled = payload.get("disabled")
+    if not isinstance(disabled, bool):
+        api.abort(400, "disabled must be boolean")
+    _, msg, code = conn.users.set_disabled(username, disabled)
+    if code >= 400:
+        api.abort(code, msg)
+
+
+def _update_member_workspace_role(workspace_id, username, payload):
+    if "workspaceRole" not in payload:
+        return
+    _, msg, code = conn.memberships.upsert_workspace_membership(
+        workspace_id,
+        username,
+        payload.get("workspaceRole"),
+    )
+    if code >= 400:
+        api.abort(code, msg)
+
+
 @workspace_ns.route("/settings")
 class WorkspaceSettingsResource(Resource):
     @api.doc(security=["Bearer", "Token"])
@@ -268,40 +310,10 @@ class WorkspaceMemberItemResource(Resource):
                 workspace_id, username, "viewer"
             )
 
-        payload = request.get_json(silent=True)
-        if not isinstance(payload, dict):
-            api.abort(400, "Invalid JSON payload")
-
-        if "email" in payload or "fullName" in payload:
-            _, msg, code = conn.users.update_profile(
-                username,
-                email=payload.get("email") if "email" in payload else None,
-                full_name=payload.get("fullName")
-                if "fullName" in payload
-                else None,
-            )
-            if code >= 400:
-                api.abort(code, msg)
-
-        if "disabled" in payload:
-            if not isinstance(payload.get("disabled"), bool):
-                api.abort(400, "disabled must be boolean")
-            _, msg, code = conn.users.set_disabled(
-                username, payload.get("disabled")
-            )
-            if code >= 400:
-                api.abort(code, msg)
-
-        if "workspaceRole" in payload:
-            membership, msg, code = (
-                conn.memberships.upsert_workspace_membership(
-                    workspace_id,
-                    username,
-                    payload.get("workspaceRole"),
-                )
-            )
-            if code >= 400:
-                api.abort(code, msg)
+        payload = _parse_member_payload()
+        _update_member_profile(username, payload)
+        _update_member_disabled(username, payload)
+        _update_member_workspace_role(workspace_id, username, payload)
 
         user = conn.users.get(username)
         membership = conn.memberships.get_workspace_membership(

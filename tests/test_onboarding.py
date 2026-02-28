@@ -6,7 +6,7 @@ class FakeStateCollection:
     def __init__(self):
         self.docs = {}
 
-    def create_index(self, *args, **kwargs):
+    def create_index(self, *_args, **_kwargs):
         return None
 
     def find_one(self, query):
@@ -20,7 +20,6 @@ class FakeStateCollection:
         if doc_id in self.docs:
             raise DuplicateKeyError("duplicate key")
         self.docs[doc_id] = dict(doc)
-        return None
 
     def update_one(self, query, update):
         doc_id = query.get("_id")
@@ -31,7 +30,6 @@ class FakeStateCollection:
             target[key] = value
         for key in update.get("$unset", {}).keys():
             target.pop(key, None)
-        return None
 
 
 class FakeUserPass:
@@ -61,6 +59,7 @@ class FakeTokens:
         subject_service_name=None,
         expires_at=None,
     ):
+        _ = expires_at
         self.calls += 1
         username = subject_user or created_by or "user"
         return {

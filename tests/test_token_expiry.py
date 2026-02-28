@@ -7,7 +7,7 @@ class FakeCollection:
     def __init__(self, docs):
         self.docs = docs
 
-    def create_index(self, *args, **kwargs):
+    def create_index(self, *_args, **_kwargs):
         return None
 
     def find_one(self, query):
@@ -17,7 +17,7 @@ class FakeCollection:
         return None
 
     def update_one(self, query, update):
-        return None
+        _ = (query, update)
 
 
 def test_expired_token_is_rejected():

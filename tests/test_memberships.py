@@ -7,7 +7,7 @@ class FakeCollection:
     def __init__(self):
         self.last_query = None
 
-    def create_index(self, *args, **kwargs):
+    def create_index(self, *_args, **_kwargs):
         return None
 
     def find(self, query):

@@ -7,7 +7,7 @@ class FakeSecrets:
     def __init__(self, docs):
         self.docs = docs
 
-    def create_index(self, *args, **kwargs):
+    def create_index(self, *_args, **_kwargs):
         return None
 
     def find(self, query):

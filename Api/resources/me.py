@@ -2,7 +2,7 @@
 from flask import g, request
 from flask_restx import Resource
 
-from Api.api import api, conn
+from Api.core import api, conn
 from Access.is_auth import with_token
 
 me_ns = api.namespace("me", description="Current authenticated user")

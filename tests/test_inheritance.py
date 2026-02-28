@@ -5,13 +5,14 @@ class FakeSecrets:
     def __init__(self, docs):
         self.docs = docs
 
-    def create_index(self, *args, **kwargs):
+    def create_index(self, *_args, **_kwargs):
         return None
 
     def find(self, query):
         return [d for d in self.docs if d["config_id"] == query["config_id"]]
 
     def update_one(self, query, update, upsert=False):
+        _ = upsert
         for doc in self.docs:
             if doc.get("config_id") == query.get("config_id") and doc.get(
                 "key"

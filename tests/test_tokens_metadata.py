@@ -23,8 +23,26 @@ class FakeCollection:
     def __init__(self, docs):
         self.docs = docs
 
-    def create_index(self, *args, **kwargs):
+    def create_index(self, *_args, **_kwargs):
         return None
+
+    @staticmethod
+    def _is_gt(current, target):
+        if current is None:
+            return False
+        try:
+            return current > target
+        except TypeError:
+            return current.timestamp() > target.timestamp()
+
+    def _match_value(self, doc, key, value):
+        current = doc.get(key)
+        if isinstance(value, dict):
+            if "$gt" in value:
+                return self._is_gt(current, value["$gt"])
+            if "$exists" in value:
+                return (key in doc) == bool(value["$exists"])
+        return current == value
 
     def _match(self, doc, query):
         for key, value in query.items():
@@ -32,26 +50,7 @@ class FakeCollection:
                 if not any(self._match(doc, clause) for clause in value):
                     return False
                 continue
-
-            current = doc.get(key)
-            if isinstance(value, dict):
-                if "$gt" in value:
-                    if current is None:
-                        return False
-                    try:
-                        if current <= value["$gt"]:
-                            return False
-                    except TypeError:
-                        if current.timestamp() <= value["$gt"].timestamp():
-                            return False
-                    continue
-                if "$exists" in value:
-                    exists = key in doc
-                    if exists != bool(value["$exists"]):
-                        return False
-                    continue
-
-            if current != value:
+            if not self._match_value(doc, key, value):
                 return False
         return True
 
@@ -70,17 +69,14 @@ class FakeCollection:
         target = self.find_one(query)
         if target and "$set" in update:
             target.update(update["$set"])
-        return None
 
     def update_many(self, query, update):
         for doc in self.docs:
             if self._match(doc, query) and "$set" in update:
                 doc.update(update["$set"])
-        return None
 
     def insert_one(self, doc):
         self.docs.append(doc)
-        return None
 
 
 def test_list_tokens_serializes_metadata():

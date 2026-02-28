@@ -54,7 +54,7 @@ target-version = "py39"
 exclude = [".venv"]
 
 [tool.ruff.lint]
-select = ["E", "F"]
+select = ["E", "F", "C901", "SIM102", "PERF403"]
 
 [tool.mypy]
 python_version = "3.9"
