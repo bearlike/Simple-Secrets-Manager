@@ -18,8 +18,9 @@ COPY . .
 RUN uv sync --frozen --no-dev
 
 FROM python:3.13-slim-bookworm
+ARG APP_VERSION=unknown
 LABEL org.opencontainers.image.title="Simple Secrets Manager"
-LABEL org.opencontainers.image.version="1.4.0"
+LABEL org.opencontainers.image.version="${APP_VERSION}"
 LABEL org.opencontainers.image.authors="Krishnakanth Alagiri"
 LABEL org.opencontainers.image.url="https://github.com/bearlike/simple-secrets-manager"
 LABEL org.opencontainers.image.source="https://github.com/bearlike/simple-secrets-manager"

@@ -58,7 +58,7 @@ Open `http://localhost:5173`.
 ## Full stack with Docker Compose
 
 ```bash
-docker compose up -d --build
+./scripts/deploy_stack.sh
 ```
 
 - Frontend: `http://localhost:8080`
@@ -96,6 +96,14 @@ uv run ssm-cli --help
 ```
 
 Detailed CLI usage is documented in [`docs/CLI.md`](CLI.md).
+
+## Version source of truth
+
+- `VERSION` is the single editable application version source.
+- `scripts/version_sync.py --check` validates wiring and is used in CI before Docker builds/publish.
+- `scripts/deploy_stack.sh` is the local source-build deploy path and exports `APP_VERSION` from `VERSION` before running compose.
+- Docker images receive `APP_VERSION` build arg from CI, and `org.opencontainers.image.version` is labeled from that arg.
+- Release tags must match `VERSION` (for example `v1.4.0` for `VERSION=1.4.0`).
 
 ## Workspace RBAC model (v1.4.0)
 

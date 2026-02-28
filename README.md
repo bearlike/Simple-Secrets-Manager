@@ -17,8 +17,10 @@ Simple Secrets Manager is a lightweight, self-hosted secret manager for teams th
 Start the full stack with Docker Compose:
 
 ```bash
-docker compose up -d --build
+./scripts/deploy_stack.sh
 ```
+
+This script reads `VERSION`, exports `APP_VERSION`, and runs `docker compose up -d --build` with deterministic image labeling.
 
 Endpoints:
 
@@ -152,7 +154,7 @@ If you run from this repository source:
 
 ```bash
 git pull
-docker compose up -d --build
+./scripts/deploy_stack.sh
 ```
 
 If you run prebuilt images only:

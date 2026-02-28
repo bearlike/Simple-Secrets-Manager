@@ -1,6 +1,6 @@
 [project]
 name = "simple-secrets-manager"
-version = "1.4.0"
+dynamic = ["version"]
 description = "Securely store and deliver tokens, passwords, API keys, and other secrets using HTTP API, Swagger UI, or Python Package."
 authors = [
     { name = "Krishnakanth Alagiri", email = "39209037+bearlike@users.noreply.github.com" },
@@ -44,6 +44,9 @@ ssm-cli = "ssm_cli.main:cli"
 [tool.setuptools]
 packages = ["Access", "Api", "Engines", "ssm_cli"]
 py-modules = ["connection", "server"]
+
+[tool.setuptools.dynamic]
+version = { attr = "ssm_cli.__version__" }
 
 [tool.ruff]
 line-length = 120

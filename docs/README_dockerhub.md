@@ -31,7 +31,7 @@ Tag strategy from CI (`.github/workflows/ci.yml`):
 Use the repository `docker-compose.yml` directly:
 
 ```bash
-docker compose up -d --build
+./scripts/deploy_stack.sh
 ```
 
 Open:
@@ -53,7 +53,7 @@ If running from source and rebuilding locally:
 
 ```bash
 git pull
-docker compose up -d --build
+./scripts/deploy_stack.sh
 ```
 
 CLI from anywhere:

@@ -1,23 +1,12 @@
-from Api.versioning import _read_pyproject_version
+from Engines.versioning import read_version_file
 
 
-def test_read_pyproject_version_from_project_section(tmp_path):
-    pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text(
-        """
-[build-system]
-requires = ["setuptools"]
-
-[project]
-name = "simple-secrets-manager"
-version = "9.8.7"
-""".strip(),
-        encoding="utf-8",
-    )
-    assert _read_pyproject_version(pyproject) == "9.8.7"
+def test_read_version_file_returns_value(tmp_path):
+    version_file = tmp_path / "VERSION"
+    version_file.write_text("9.8.7\n", encoding="utf-8")
+    assert read_version_file(version_file) == "9.8.7"
 
 
-def test_read_pyproject_version_returns_none_when_missing(tmp_path):
-    pyproject = tmp_path / "pyproject.toml"
-    pyproject.write_text('[project]\nname = "ssm"\n', encoding="utf-8")
-    assert _read_pyproject_version(pyproject) is None
+def test_read_version_file_returns_none_when_missing(tmp_path):
+    missing_file = tmp_path / "MISSING_VERSION"
+    assert read_version_file(missing_file) is None

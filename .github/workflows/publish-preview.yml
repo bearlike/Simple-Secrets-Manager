@@ -20,6 +20,13 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Validate version wiring
+        run: python3 scripts/version_sync.py --check
+
+      - name: Resolve app version
+        id: version
+        run: python3 scripts/version_sync.py --github-output "${GITHUB_OUTPUT}"
+
       - name: Validate branch ref
         run: |
           set -euo pipefail
@@ -63,8 +70,13 @@ jobs:
           push: true
           build-args: |
             VITE_API_BASE_URL=/api
+            APP_VERSION=${{ steps.version.outputs.version }}
           tags: |
             ghcr.io/bearlike/simple-secrets-manager:${{ steps.preview.outputs.branch_tag }}
             ghcr.io/bearlike/simple-secrets-manager:${{ steps.preview.outputs.sha_tag }}
+          labels: |
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=https://github.com/bearlike/simple-secrets-manager
+            org.opencontainers.image.revision=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

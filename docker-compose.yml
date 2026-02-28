@@ -1,5 +1,5 @@
 # To start stack:
-# $ docker compose up -d --build
+# $ ./scripts/deploy_stack.sh
 #
 # To stop stack:
 # $ docker compose down
@@ -31,6 +31,7 @@ services:
       dockerfile: Dockerfile
       args:
         VITE_API_BASE_URL: /api
+        APP_VERSION: ${APP_VERSION:-dev}
     restart: always
     depends_on:
       - mongo

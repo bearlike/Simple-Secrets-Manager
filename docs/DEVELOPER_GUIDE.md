@@ -74,7 +74,7 @@ export PATH="$(uv tool dir --bin):$PATH"
 ## Full stack via Docker Compose
 
 ```bash
-docker compose up -d --build
+./scripts/deploy_stack.sh
 ```
 
 Endpoints:
