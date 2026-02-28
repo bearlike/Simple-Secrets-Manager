@@ -27,8 +27,12 @@ LABEL org.opencontainers.image.source="https://github.com/bearlike/simple-secret
 LABEL org.opencontainers.image.description="Simple Secrets Manager unified image with backend API and admin console."
 
 ARG DEBIAN_FRONTEND=noninteractive
+ARG NGINX_VERSION=1.22.*
+ARG SUPERVISOR_VERSION=4.2.*
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends nginx supervisor \
+    && apt-get install -y --no-install-recommends \
+        nginx=${NGINX_VERSION} \
+        supervisor=${SUPERVISOR_VERSION} \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

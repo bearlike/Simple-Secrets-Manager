@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from Api.api import api, conn
+from Api.core import api, conn
 
 
 def resolve_project_config(project_slug, config_slug=None):

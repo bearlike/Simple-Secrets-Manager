@@ -5,7 +5,7 @@ from time import perf_counter
 from flask import g, request
 from flask_httpauth import HTTPBasicAuth
 
-from Api.api import conn, api
+from Api.core import conn, api
 from Access.policy import authorize
 
 userpass: HTTPBasicAuth = HTTPBasicAuth()

@@ -6,7 +6,7 @@ class FakeSecrets:
     def __init__(self, docs):
         self.docs = docs
 
-    def create_index(self, *args, **kwargs):
+    def create_index(self, *_args, **_kwargs):
         return None
 
     def _match(self, doc, query):
@@ -61,7 +61,6 @@ class FakeSecrets:
                 continue
             for key, value in update.get("$set", {}).items():
                 doc[key] = value
-        return None
 
 
 class FakeConfigs:

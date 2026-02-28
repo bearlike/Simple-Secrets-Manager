@@ -28,7 +28,7 @@ class FakeCollection:
     def __init__(self, docs):
         self.docs = docs
 
-    def create_index(self, *args, **kwargs):
+    def create_index(self, *_args, **_kwargs):
         return None
 
     def _match(self, doc, query):
@@ -43,16 +43,16 @@ class FakeCollection:
                 continue
 
             current = doc.get(key)
-            if isinstance(value, dict):
-                if "$gte" in value:
-                    if current is None or current < value["$gte"]:
-                        return False
-                    continue
+            if isinstance(value, dict) and "$gte" in value:
+                if current is None or current < value["$gte"]:
+                    return False
+                continue
             if current != value:
                 return False
         return True
 
     def find(self, query, projection=None):
+        _ = projection
         return FakeCursor(
             [doc for doc in self.docs if self._match(doc, query)]
         )

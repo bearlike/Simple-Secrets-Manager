@@ -26,10 +26,11 @@ class FakeCollection:
     def __init__(self, docs):
         self.docs = docs
 
-    def create_index(self, *args, **kwargs):
+    def create_index(self, *_args, **_kwargs):
         return None
 
     def find(self, query, projection):
+        _ = projection
         project_id = query.get("project_id")
         docs = [
             doc for doc in self.docs if doc.get("project_id") == project_id
@@ -37,6 +38,7 @@ class FakeCollection:
         return FakeCursor(list(docs))
 
     def find_one(self, query, projection=None):
+        _ = projection
         for doc in self.docs:
             if query.get("_id") == doc.get("_id") and query.get(
                 "project_id"

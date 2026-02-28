@@ -53,8 +53,8 @@ def load_secret_cache(
         if age > max_age_seconds:
             return None
 
-    parsed: dict[str, str] = {}
-    for key, value in data.items():
-        if isinstance(key, str) and isinstance(value, str):
-            parsed[key] = value
-    return parsed
+    return {
+        key: value
+        for key, value in data.items()
+        if isinstance(key, str) and isinstance(value, str)
+    }

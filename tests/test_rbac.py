@@ -107,6 +107,7 @@ class ProjectsStub:
         self.docs = docs
 
     def list_docs(self, workspace_id=None):
+        _ = workspace_id
         return list(self.docs)
 
 

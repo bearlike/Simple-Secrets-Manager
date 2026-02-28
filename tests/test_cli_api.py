@@ -81,7 +81,7 @@ def test_export_secrets_json_raw_mode_disables_resolution(monkeypatch):
 def test_request_raises_api_error_on_http_failure(monkeypatch):
     client = ApiClient("http://localhost:8080", token="t")
 
-    def fake_request(**kwargs):
+    def fake_request(**_kwargs):
         return _response(401, {"message": "Not Authorized"})
 
     monkeypatch.setattr(client.session, "request", fake_request)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Token Authentication API Resource
 from flask_restx import fields, Resource
-from Api.api import api, conn
+from Api.core import api, conn
 from Access.is_auth import userpass
 
 # tokens Namespace

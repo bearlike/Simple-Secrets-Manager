@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from flask import g
 from flask_restx import Resource, inputs
 
-from Api.api import api, conn
+from Api.core import api, conn
 from Api.resources.helpers import resolve_project_config
 from Access.is_auth import with_token, require_scope, audit_event
 

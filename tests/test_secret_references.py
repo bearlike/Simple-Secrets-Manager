@@ -42,7 +42,6 @@ class _Fixture:
 
     def require_scope(self, action: str, project_id, config_id):
         self.scope_checks.append((action, str(project_id), str(config_id)))
-        return None
 
 
 def test_resolves_same_config_cross_config_and_cross_project_references():

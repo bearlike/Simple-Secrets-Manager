@@ -2,7 +2,7 @@
 from flask import g
 from flask_restx import Resource, inputs
 
-from Api.api import api, conn
+from Api.core import api, conn
 from Api.resources.helpers import resolve_project_config
 from Api.resources.secrets.references import (
     SecretReferenceError,
@@ -80,6 +80,187 @@ def _build_compare_reference_resolver(
     )
 
 
+def _parse_compare_args():
+    args = compare_secret_parser.parse_args()
+    limit_configs = args["limit_configs"]
+    if limit_configs < 1:
+        api.abort(400, "limit_configs must be >= 1")
+    if limit_configs > 500:
+        api.abort(400, "limit_configs must be <= 500")
+    return args, limit_configs
+
+
+def _authorized_configs_for_actor(
+    actor, project_id, all_configs, limit_configs
+):
+    authorized = []
+    for cfg in all_configs:
+        if authorize(
+            actor,
+            "secrets:export",
+            project_id=project_id,
+            config_id=cfg.get("_id"),
+        ):
+            authorized.append(cfg)
+        if len(authorized) >= limit_configs:
+            break
+    return authorized
+
+
+def _load_exported_config(config_id, include_parent, exported_cache):
+    if config_id not in exported_cache:
+        exported, _, export_msg, export_code = conn.secrets_v2.export_config(
+            config_id,
+            include_parent=include_parent,
+            include_metadata=False,
+        )
+        exported_cache[config_id] = (exported, export_msg, export_code)
+    return exported_cache[config_id]
+
+
+def _row_value_issues(effective):
+    value = effective.get("value")
+    if value is None:
+        return (
+            value,
+            [
+                build_issue(
+                    ISSUE_MISSING_EFFECTIVE_VALUE,
+                    "Key is missing in this config and its inheritance chain.",
+                )
+            ],
+            True,
+        )
+    if not isinstance(value, str) or "${" not in value:
+        return value, [], True
+    return value, [], False
+
+
+def _collect_validation_issues(resolver, key, value):
+    issues = []
+    seen_codes = set()
+    for error_message in resolver.validate_value_references(
+        key=key, value=value
+    ):
+        code_for_error = classify_reference_error(error_message)
+        if code_for_error in seen_codes:
+            continue
+        seen_codes.add(code_for_error)
+        issues.append(build_issue(code_for_error, error_message))
+    return issues, seen_codes
+
+
+def _resolve_value_if_allowed(
+    *,
+    resolve_references,
+    issues,
+    resolver,
+    exported,
+    effective,
+    key,
+    seen_codes,
+):
+    if not resolve_references or has_broken_reference(issues):
+        return
+    try:
+        resolved = resolver.resolve_map(exported)
+    except SecretReferenceError as exc:
+        code_for_error = classify_reference_error(exc.message)
+        if code_for_error not in seen_codes:
+            issues.append(build_issue(code_for_error, exc.message))
+    else:
+        effective["value"] = resolved.get(key)
+
+
+def _annotate_row_issues(
+    row,
+    *,
+    actor,
+    project_slug,
+    key,
+    args,
+    resolve_references,
+    config_id_by_slug,
+    exported_cache,
+):
+    effective = row.get("effective", {})
+    value, issues, done = _row_value_issues(effective)
+    if done:
+        return issues
+
+    config_id = config_id_by_slug.get(row.get("configSlug"))
+    if config_id is None:
+        issues.append(
+            build_issue(
+                ISSUE_BROKEN_REFERENCE_UNRESOLVED,
+                "Unable to validate references for this config.",
+            )
+        )
+        return issues
+
+    exported, export_msg, export_code = _load_exported_config(
+        config_id,
+        include_parent=args["include_parent"],
+        exported_cache=exported_cache,
+    )
+    if export_code >= 400 or exported is None:
+        issues.append(
+            build_issue(
+                ISSUE_BROKEN_REFERENCE_UNRESOLVED,
+                f"Unable to evaluate references: {export_msg}",
+            )
+        )
+        return issues
+
+    resolver = _build_compare_reference_resolver(
+        actor=actor,
+        project_slug=project_slug,
+        config_slug=row.get("configSlug"),
+        max_depth=args["placeholder_max_depth"],
+        root_data=exported,
+    )
+    validation_issues, seen_codes = _collect_validation_issues(
+        resolver, key, value
+    )
+    issues.extend(validation_issues)
+    _resolve_value_if_allowed(
+        resolve_references=resolve_references,
+        issues=issues,
+        resolver=resolver,
+        exported=exported,
+        effective=effective,
+        key=key,
+        seen_codes=seen_codes,
+    )
+    return issues
+
+
+def _annotate_rows(
+    rows,
+    *,
+    actor,
+    project_slug,
+    key,
+    args,
+    resolve_references,
+    config_id_by_slug,
+):
+    exported_cache = {}
+    for row in rows:
+        issues = _annotate_row_issues(
+            row,
+            actor=actor,
+            project_slug=project_slug,
+            key=key,
+            args=args,
+            resolve_references=resolve_references,
+            config_id_by_slug=config_id_by_slug,
+            exported_cache=exported_cache,
+        )
+        row["issues"] = issues
+        row["hasIssues"] = len(issues) > 0
+
+
 @compare_ns.route("/secrets/<string:key>")
 class CompareSecretResource(Resource):
     @api.doc(security=["Bearer", "Token"], parser=compare_secret_parser)
@@ -88,26 +269,16 @@ class CompareSecretResource(Resource):
         if not is_valid_env_key(key):
             api.abort(400, "Invalid secret key")
 
-        args = compare_secret_parser.parse_args()
-        limit_configs = args["limit_configs"]
-        if limit_configs < 1:
-            api.abort(400, "limit_configs must be >= 1")
-        if limit_configs > 500:
-            api.abort(400, "limit_configs must be <= 500")
-
+        args, limit_configs = _parse_compare_args()
         project, _ = resolve_project_config(project_slug)
         all_configs = conn.configs.list_raw(project["_id"])
         actor = g.actor
-        authorized_configs = [
-            cfg
-            for cfg in all_configs
-            if authorize(
-                actor,
-                "secrets:export",
-                project_id=project["_id"],
-                config_id=cfg.get("_id"),
-            )
-        ][:limit_configs]
+        authorized_configs = _authorized_configs_for_actor(
+            actor,
+            project_id=project["_id"],
+            all_configs=all_configs,
+            limit_configs=limit_configs,
+        )
 
         rows, msg, code = conn.secrets_v2.compare_key_across_configs(
             authorized_configs,
@@ -127,93 +298,15 @@ class CompareSecretResource(Resource):
             for cfg in authorized_configs
             if "slug" in cfg and "_id" in cfg
         }
-        exported_cache = {}
-        for row in rows:
-            effective = row.get("effective", {})
-            value = effective.get("value")
-            issues = []
-
-            if value is None:
-                issues.append(
-                    build_issue(
-                        ISSUE_MISSING_EFFECTIVE_VALUE,
-                        "Key is missing in this config and its inheritance "
-                        "chain.",
-                    )
-                )
-                row["issues"] = issues
-                row["hasIssues"] = True
-                continue
-
-            if not isinstance(value, str) or "${" not in value:
-                row["issues"] = issues
-                row["hasIssues"] = False
-                continue
-
-            config_slug = row.get("configSlug")
-            config_id = config_id_by_slug.get(config_slug)
-            if config_id is None:
-                issues.append(
-                    build_issue(
-                        ISSUE_BROKEN_REFERENCE_UNRESOLVED,
-                        "Unable to validate references for this config.",
-                    )
-                )
-                row["issues"] = issues
-                row["hasIssues"] = True
-                continue
-
-            if config_id not in exported_cache:
-                exported, _, export_msg, export_code = (
-                    conn.secrets_v2.export_config(
-                        config_id,
-                        include_parent=args["include_parent"],
-                        include_metadata=False,
-                    )
-                )
-                exported_cache[config_id] = (exported, export_msg, export_code)
-            exported, export_msg, export_code = exported_cache[config_id]
-            if export_code >= 400 or exported is None:
-                issues.append(
-                    build_issue(
-                        ISSUE_BROKEN_REFERENCE_UNRESOLVED,
-                        f"Unable to evaluate references: {export_msg}",
-                    )
-                )
-                row["issues"] = issues
-                row["hasIssues"] = True
-                continue
-
-            resolver = _build_compare_reference_resolver(
-                actor=actor,
-                project_slug=project_slug,
-                config_slug=config_slug,
-                max_depth=args["placeholder_max_depth"],
-                root_data=exported,
-            )
-            validation_errors = resolver.validate_value_references(
-                key=key, value=value
-            )
-            seen_codes = set()
-            for error_message in validation_errors:
-                code_for_error = classify_reference_error(error_message)
-                if code_for_error in seen_codes:
-                    continue
-                seen_codes.add(code_for_error)
-                issues.append(build_issue(code_for_error, error_message))
-
-            if resolve_references and not has_broken_reference(issues):
-                try:
-                    resolved = resolver.resolve_map(exported)
-                except SecretReferenceError as exc:
-                    code_for_error = classify_reference_error(exc.message)
-                    if code_for_error not in seen_codes:
-                        issues.append(build_issue(code_for_error, exc.message))
-                else:
-                    effective["value"] = resolved.get(key)
-
-            row["issues"] = issues
-            row["hasIssues"] = len(issues) > 0
+        _annotate_rows(
+            rows,
+            actor=actor,
+            project_slug=project_slug,
+            key=key,
+            args=args,
+            resolve_references=resolve_references,
+            config_id_by_slug=config_id_by_slug,
+        )
 
         response_configs = []
         unique_effective_values = set()
