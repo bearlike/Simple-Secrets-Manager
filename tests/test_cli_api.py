@@ -5,7 +5,9 @@ import requests  # type: ignore[import-untyped]
 from ssm_cli.api import ApiClient, ApiError, normalize_base_url
 
 
-def _response(status_code: int, payload, content_type: str = "application/json") -> requests.Response:
+def _response(
+    status_code: int, payload, content_type: str = "application/json"
+) -> requests.Response:
     response = requests.Response()
     response.status_code = status_code
     response.headers["content-type"] = content_type
@@ -21,8 +23,14 @@ def _response(status_code: int, payload, content_type: str = "application/json")
 
 def test_normalize_base_url_appends_api_path():
     assert normalize_base_url("localhost:8080") == "http://localhost:8080/api"
-    assert normalize_base_url("http://localhost:8080/") == "http://localhost:8080/api"
-    assert normalize_base_url("http://localhost:8080/api") == "http://localhost:8080/api"
+    assert (
+        normalize_base_url("http://localhost:8080/")
+        == "http://localhost:8080/api"
+    )
+    assert (
+        normalize_base_url("http://localhost:8080/api")
+        == "http://localhost:8080/api"
+    )
 
 
 def test_login_userpass_parses_token(monkeypatch):
@@ -46,7 +54,9 @@ def test_export_secrets_json_parses_values(monkeypatch):
         assert kwargs["params"]["format"] == "json"
         assert kwargs["params"]["resolve_references"] == "true"
         assert kwargs["params"]["raw"] == "false"
-        return _response(200, {"data": {"API_KEY": "value", "PORT": "8080"}, "status": "OK"})
+        return _response(
+            200, {"data": {"API_KEY": "value", "PORT": "8080"}, "status": "OK"}
+        )
 
     monkeypatch.setattr(client.session, "request", fake_request)
 
@@ -89,7 +99,10 @@ def test_get_me_returns_profile_payload(monkeypatch):
 
     def fake_request(**kwargs):
         assert kwargs["headers"]["Authorization"] == "Bearer t"
-        return _response(200, {"status": "OK", "username": "alice", "workspaceRole": "owner"})
+        return _response(
+            200,
+            {"status": "OK", "username": "alice", "workspaceRole": "owner"},
+        )
 
     monkeypatch.setattr(client.session, "request", fake_request)
 

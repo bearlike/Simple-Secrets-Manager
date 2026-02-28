@@ -38,7 +38,9 @@ def set_token(profile: str, base_url: str, token: str) -> str:
     return "file"
 
 
-def get_token(profile: str, base_url: str) -> Tuple[Optional[str], Optional[str]]:
+def get_token(
+    profile: str, base_url: str
+) -> Tuple[Optional[str], Optional[str]]:
     key = _token_key(profile, base_url)
 
     if keyring is not None:

@@ -49,16 +49,23 @@ class MembershipsStub:
         return self.workspace_memberships.get((workspace_id, username))
 
     def count_workspace_members(self, workspace_id):
-        return len([1 for key in self.workspace_memberships if key[0] == workspace_id])
+        return len(
+            [1 for key in self.workspace_memberships if key[0] == workspace_id]
+        )
 
     def has_workspace_role(self, workspace_id, workspace_role):
         return any(
             value.get("workspace_role") == workspace_role
-            for (member_workspace_id, _), value in self.workspace_memberships.items()
+            for (
+                member_workspace_id,
+                _,
+            ), value in self.workspace_memberships.items()
             if member_workspace_id == workspace_id
         )
 
-    def upsert_workspace_membership(self, workspace_id, username, workspace_role):
+    def upsert_workspace_membership(
+        self, workspace_id, username, workspace_role
+    ):
         doc = {
             "workspace_id": workspace_id,
             "username": username,
@@ -67,15 +74,22 @@ class MembershipsStub:
         self.workspace_memberships[(workspace_id, username)] = doc
         return doc, "OK", 200
 
-    def list_project_memberships_for_subjects(self, workspace_id, username, group_ids):
+    def list_project_memberships_for_subjects(
+        self, workspace_id, username, group_ids
+    ):
         resolved = []
         for doc in self.project_memberships:
             if doc.get("workspace_id") != workspace_id:
                 continue
-            if doc.get("subject_type") == "user" and doc.get("subject_id") == username:
+            if (
+                doc.get("subject_type") == "user"
+                and doc.get("subject_id") == username
+            ):
                 resolved.append(doc)
                 continue
-            if doc.get("subject_type") == "group" and doc.get("subject_id") in set(group_ids or []):
+            if doc.get("subject_type") == "group" and doc.get(
+                "subject_id"
+            ) in set(group_ids or []):
                 resolved.append(doc)
         return resolved
 
@@ -115,7 +129,14 @@ def _build_rbac(initialized_by=None):
     groups = GroupsStub()
     projects = ProjectsStub([{"_id": "p1"}, {"_id": "p2"}])
     onboarding_state = OnboardingStateStub(initialized_by=initialized_by)
-    engine = RBAC(workspaces, users, memberships, groups, projects, onboarding_state_col=onboarding_state)
+    engine = RBAC(
+        workspaces,
+        users,
+        memberships,
+        groups,
+        projects,
+        onboarding_state_col=onboarding_state,
+    )
     return engine, users, memberships, groups
 
 
@@ -127,10 +148,13 @@ def test_first_workspace_member_becomes_owner():
     assert actor["workspace_role"] == "owner"
     assert "users:manage" in actor["scopes"][0]["actions"]
     assert set(actor["visible_project_ids"]) == {"p1", "p2"}
-    assert memberships.get_workspace_membership("w1", "alice")["workspace_role"] == "owner"
+    assert (
+        memberships.get_workspace_membership("w1", "alice")["workspace_role"]
+        == "owner"
+    )
 
 
-def test_collaborator_uses_highest_project_role_from_direct_and_group_memberships():
+def test_collaborator_uses_highest_role_from_direct_and_group_members():
     engine, users, memberships, groups = _build_rbac()
     users.ensure("alice")
     memberships.upsert_workspace_membership("w1", "alice", "collaborator")
@@ -164,7 +188,9 @@ def test_collaborator_uses_highest_project_role_from_direct_and_group_membership
     assert actor["workspace_role"] == "collaborator"
     assert actor["visible_project_ids"] == ["p1"]
     assert actor["project_roles"]["p1"] == "admin"
-    scope = next(item for item in actor["scopes"] if item.get("project_id") == "p1")
+    scope = next(
+        item for item in actor["scopes"] if item.get("project_id") == "p1"
+    )
     assert scope["project_id"] == "p1"
     assert "secrets:delete" in scope["actions"]
 
@@ -205,6 +231,7 @@ def test_viewer_gets_workspace_members_read_scope():
 
     assert actor["workspace_role"] == "viewer"
     assert any(
-        "workspace:members:read" in (scope.get("actions") or []) and scope.get("project_id") is None
+        "workspace:members:read" in (scope.get("actions") or [])
+        and scope.get("project_id") is None
         for scope in actor["scopes"]
     )

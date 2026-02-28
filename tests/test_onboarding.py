@@ -100,21 +100,27 @@ class FakeMemberships:
 
 
 def test_onboarding_status_default_not_initialized():
-    onboarding = Onboarding(FakeStateCollection(), FakeUserPass(), FakeTokens())
+    onboarding = Onboarding(
+        FakeStateCollection(), FakeUserPass(), FakeTokens()
+    )
     state = onboarding.get_state()
     assert state["isInitialized"] is False
     assert state["state"] == "not_initialized"
 
 
 def test_bootstrap_success_and_lock_after_completion():
-    onboarding = Onboarding(FakeStateCollection(), FakeUserPass(), FakeTokens())
+    onboarding = Onboarding(
+        FakeStateCollection(), FakeUserPass(), FakeTokens()
+    )
     result, code = onboarding.bootstrap("admin", "password", issue_token=True)
     assert code == 201
     assert result["status"] == "OK"
     assert result["token"] == "token-admin"
     assert result["onboarding"]["isInitialized"] is True
 
-    second_result, second_code = onboarding.bootstrap("admin2", "password2", issue_token=True)
+    second_result, second_code = onboarding.bootstrap(
+        "admin2", "password2", issue_token=True
+    )
     assert second_code == 409
     assert second_result["status"] == "System already initialized"
 

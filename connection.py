@@ -45,7 +45,9 @@ class __connection:
             memberships_engine=self.memberships,
         )
 
-        self.projects = _Projects(self.__data["projects"], workspaces_engine=self.workspaces)
+        self.projects = _Projects(
+            self.__data["projects"], workspaces_engine=self.workspaces
+        )
         self.configs = _Configs(self.__data["configs"])
         self.secrets_v2 = _SecretsV2(self.__data["secrets"], self.configs)
         self.audit = _AuditEvents(self.__data["audit_events"])
@@ -58,7 +60,10 @@ class __connection:
             self.projects,
             onboarding_state_col=self.__auth["system_state"],
         )
-        self.tokens = _Tokens(self.__auth["tokens"], personal_actor_resolver=self.rbac.resolve_personal_actor)
+        self.tokens = _Tokens(
+            self.__auth["tokens"],
+            personal_actor_resolver=self.rbac.resolve_personal_actor,
+        )
         self.userpass = _User_Pass(self.__auth["userpass"])
         self.onboarding = _Onboarding(
             self.__auth["system_state"],

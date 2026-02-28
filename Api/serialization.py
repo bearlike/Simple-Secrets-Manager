@@ -11,7 +11,11 @@ def to_iso(value):
         dt_value = value
         if dt_value.tzinfo is None:
             dt_value = dt_value.replace(tzinfo=timezone.utc)
-        return dt_value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+        return (
+            dt_value.astimezone(timezone.utc)
+            .isoformat()
+            .replace("+00:00", "Z")
+        )
     if isinstance(value, date):
         return value.isoformat()
     return str(value)

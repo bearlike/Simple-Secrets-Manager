@@ -8,8 +8,12 @@ from Access.is_auth import with_token
 me_ns = api.namespace("me", description="Current authenticated user")
 
 profile_update_parser = api.parser()
-profile_update_parser.add_argument("email", type=str, required=False, location="json")
-profile_update_parser.add_argument("fullName", type=str, required=False, location="json")
+profile_update_parser.add_argument(
+    "email", type=str, required=False, location="json"
+)
+profile_update_parser.add_argument(
+    "fullName", type=str, required=False, location="json"
+)
 
 
 def _serialize_me(username):
@@ -22,7 +26,9 @@ def _serialize_me(username):
         "fullName": user.get("full_name"),
         "workspaceRole": actor_context.get("workspace_role"),
         "workspaceSlug": actor_context.get("workspace_slug"),
-        "effectivePermissionsSummary": conn.rbac.summarize_scopes(actor_context.get("scopes") or []),
+        "effectivePermissionsSummary": conn.rbac.summarize_scopes(
+            actor_context.get("scopes") or []
+        ),
     }
 
 
@@ -50,12 +56,16 @@ class MeResource(Resource):
         allowed = {"email", "fullName"}
         unknown_fields = [field for field in payload if field not in allowed]
         if unknown_fields:
-            api.abort(400, f"Unknown fields: {', '.join(sorted(unknown_fields))}")
+            api.abort(
+                400, f"Unknown fields: {', '.join(sorted(unknown_fields))}"
+            )
 
         email = payload.get("email") if "email" in payload else None
         full_name = payload.get("fullName") if "fullName" in payload else None
 
-        _, msg, code = conn.users.update_profile(username, email=email, full_name=full_name)
+        _, msg, code = conn.users.update_profile(
+            username, email=email, full_name=full_name
+        )
         if code >= 400:
             api.abort(code, msg)
 

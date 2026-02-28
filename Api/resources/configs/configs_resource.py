@@ -5,11 +5,19 @@ from Api.api import api, conn
 from Api.resources.helpers import resolve_project_config
 from Access.is_auth import with_token, require_scope
 
-configs_ns = api.namespace("projects/<string:project_slug>/configs", description="Config management")
+configs_ns = api.namespace(
+    "projects/<string:project_slug>/configs", description="Config management"
+)
 config_create_parser = api.parser()
-config_create_parser.add_argument("slug", type=str, required=True, location="json")
-config_create_parser.add_argument("name", type=str, required=False, location="json")
-config_create_parser.add_argument("parent", type=str, required=False, location="json")
+config_create_parser.add_argument(
+    "slug", type=str, required=True, location="json"
+)
+config_create_parser.add_argument(
+    "name", type=str, required=False, location="json"
+)
+config_create_parser.add_argument(
+    "parent", type=str, required=False, location="json"
+)
 
 
 @configs_ns.route("")
@@ -29,9 +37,16 @@ class ConfigsResource(Resource):
         args = config_create_parser.parse_args()
         parent_id = None
         if args.get("parent"):
-            _, parent_cfg = resolve_project_config(project_slug, args["parent"])
+            _, parent_cfg = resolve_project_config(
+                project_slug, args["parent"]
+            )
             parent_id = parent_cfg["_id"]
-        result, code = conn.configs.create(project["_id"], args["slug"], args.get("name"), parent_id)
+        result, code = conn.configs.create(
+            project["_id"], args["slug"], args.get("name"), parent_id
+        )
         if code >= 400:
             api.abort(code, result)
-        return {"status": "OK", "config": {"slug": result["slug"], "name": result["name"]}}, 201
+        return {
+            "status": "OK",
+            "config": {"slug": result["slug"], "name": result["name"]},
+        }, 201

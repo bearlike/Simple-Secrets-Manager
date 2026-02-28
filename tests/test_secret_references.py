@@ -1,4 +1,7 @@
-from Api.resources.secrets.references import SecretReferenceError, SecretReferenceResolver
+from Api.resources.secrets.references import (
+    SecretReferenceError,
+    SecretReferenceResolver,
+)
 
 
 class _Fixture:
@@ -78,7 +81,9 @@ def test_unresolved_references_render_as_empty_string():
         max_depth=8,
     )
 
-    resolved = resolver.resolve_map({"A": "value-${MISSING}-suffix", "B": "${bad.token.with.extra.parts}"})
+    resolved = resolver.resolve_map(
+        {"A": "value-${MISSING}-suffix", "B": "${bad.token.with.extra.parts}"}
+    )
     assert resolved["A"] == "value--suffix"
     assert resolved["B"] == ""
 
@@ -95,7 +100,9 @@ def test_missing_context_reference_renders_empty_string():
         max_depth=8,
     )
 
-    resolved = resolver.resolve_map({"A": "${missing.dev.API_HOST}", "B": "${app.missing.API_HOST}"})
+    resolved = resolver.resolve_map(
+        {"A": "${missing.dev.API_HOST}", "B": "${app.missing.API_HOST}"}
+    )
     assert resolved["A"] == ""
     assert resolved["B"] == ""
 
@@ -151,7 +158,9 @@ def test_validate_value_references_fails_for_unresolved_and_invalid_tokens():
         root_data=dict(fixture.exports["c-dev"]),
     )
 
-    errors = resolver.validate_value_references(key="BROKEN", value="${missing.dev.API_HOST}:${bad-token}")
+    errors = resolver.validate_value_references(
+        key="BROKEN", value="${missing.dev.API_HOST}:${bad-token}"
+    )
     assert any("Unresolved reference" in item for item in errors)
     assert any("Invalid reference syntax" in item for item in errors)
 
@@ -172,5 +181,7 @@ def test_validate_value_references_detects_nested_broken_reference():
         root_data=root_data,
     )
 
-    errors = resolver.validate_value_references(key="DATABASE_URL", value=root_data["DATABASE_URL"])
+    errors = resolver.validate_value_references(
+        key="DATABASE_URL", value=root_data["DATABASE_URL"]
+    )
     assert any("Unresolved reference" in item for item in errors)

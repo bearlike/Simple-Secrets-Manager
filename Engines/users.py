@@ -47,7 +47,9 @@ class Users:
         existing = self.get(username)
         if existing:
             return existing
-        payload, _, code = self.create(username, email=email, full_name=full_name)
+        payload, _, code = self.create(
+            username, email=email, full_name=full_name
+        )
         if code >= 400:
             return self.get(username)
         return payload
@@ -75,7 +77,9 @@ class Users:
             return None, "User not found", 404
 
         updates = {"updated_at": datetime.now(timezone.utc)}
-        updates["disabled_at"] = datetime.now(timezone.utc) if disabled else None
+        updates["disabled_at"] = (
+            datetime.now(timezone.utc) if disabled else None
+        )
         self._users.update_one({"username": username}, {"$set": updates})
         return self.get(username), "OK", 200
 

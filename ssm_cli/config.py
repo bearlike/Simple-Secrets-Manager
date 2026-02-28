@@ -69,7 +69,9 @@ def _read_json(path: Path) -> dict[str, Any]:
     return data
 
 
-def _atomic_write_json(path: Path, data: dict[str, Any], mode: int = 0o600) -> None:
+def _atomic_write_json(
+    path: Path, data: dict[str, Any], mode: int = 0o600
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(path.suffix + ".tmp")
     with temp.open("w", encoding="utf-8") as handle:
@@ -82,7 +84,9 @@ def _atomic_write_json(path: Path, data: dict[str, Any], mode: int = 0o600) -> N
 def load_global_config() -> GlobalConfig:
     raw = _read_json(global_config_path())
     profiles_raw_obj = raw.get("profiles")
-    profiles_raw = profiles_raw_obj if isinstance(profiles_raw_obj, dict) else {}
+    profiles_raw = (
+        profiles_raw_obj if isinstance(profiles_raw_obj, dict) else {}
+    )
     profiles: dict[str, ProfileConfig] = {}
     for name, value in profiles_raw.items():
         if not isinstance(name, str) or not isinstance(value, dict):

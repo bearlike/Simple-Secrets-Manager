@@ -42,7 +42,9 @@ class Key_Value_Secrets:
             _ = self._kv.insert_one(finder)
         if key not in finder["data"].keys():
             # After Creating path, add kv
-            self._kv.update_one({"path": path}, {"$set": {f"data.{key}": value}})
+            self._kv.update_one(
+                {"path": path}, {"$set": {f"data.{key}": value}}
+            )
             result = {
                 "status": "success",
                 "path": path,

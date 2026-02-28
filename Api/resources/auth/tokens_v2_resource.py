@@ -8,27 +8,55 @@ from Api.api import api, conn
 from Api.resources.helpers import resolve_project_config
 from Access.is_auth import with_token, require_scope, audit_event
 
-tokens_v2_ns = api.namespace("auth/tokens/v2", description="Scoped token management")
+tokens_v2_ns = api.namespace(
+    "auth/tokens/v2", description="Scoped token management"
+)
 
 service_parser = api.parser()
-service_parser.add_argument("service_name", type=str, required=True, location="json")
-service_parser.add_argument("project", type=str, required=False, location="json")
-service_parser.add_argument("config", type=str, required=False, location="json")
-service_parser.add_argument("actions", type=list, required=True, location="json")
-service_parser.add_argument("ttl_seconds", type=int, required=False, default=3600, location="json")
+service_parser.add_argument(
+    "service_name", type=str, required=True, location="json"
+)
+service_parser.add_argument(
+    "project", type=str, required=False, location="json"
+)
+service_parser.add_argument(
+    "config", type=str, required=False, location="json"
+)
+service_parser.add_argument(
+    "actions", type=list, required=True, location="json"
+)
+service_parser.add_argument(
+    "ttl_seconds", type=int, required=False, default=3600, location="json"
+)
 
 personal_parser = api.parser()
-personal_parser.add_argument("actions", type=list, required=False, location="json")
-personal_parser.add_argument("project", type=str, required=False, location="json")
-personal_parser.add_argument("config", type=str, required=False, location="json")
-personal_parser.add_argument("ttl_seconds", type=int, required=False, default=86400, location="json")
+personal_parser.add_argument(
+    "actions", type=list, required=False, location="json"
+)
+personal_parser.add_argument(
+    "project", type=str, required=False, location="json"
+)
+personal_parser.add_argument(
+    "config", type=str, required=False, location="json"
+)
+personal_parser.add_argument(
+    "ttl_seconds", type=int, required=False, default=86400, location="json"
+)
 
 revoke_parser = api.parser()
-revoke_parser.add_argument("token_id", type=str, required=False, location="json")
+revoke_parser.add_argument(
+    "token_id", type=str, required=False, location="json"
+)
 revoke_parser.add_argument("token", type=str, required=False, location="json")
 
 list_parser = api.parser()
-list_parser.add_argument("include_revoked", type=inputs.boolean, required=False, default=False, location="args")
+list_parser.add_argument(
+    "include_revoked",
+    type=inputs.boolean,
+    required=False,
+    default=False,
+    location="args",
+)
 
 
 def _scope_from_request(project_slug, config_slug, actions):
@@ -48,11 +76,15 @@ class ServiceTokenResource(Resource):
     def post(self):
         require_scope("tokens:manage")
         args = service_parser.parse_args()
-        scopes = _scope_from_request(args.get("project"), args.get("config"), args["actions"])
+        scopes = _scope_from_request(
+            args.get("project"), args.get("config"), args["actions"]
+        )
         expires_at = datetime.utcnow() + timedelta(seconds=args["ttl_seconds"])
         result = conn.tokens.create_token(
             token_type="service",
-            created_by=g.actor.get("subject_user") or g.actor.get("subject_service_name") or "system",
+            created_by=g.actor.get("subject_user")
+            or g.actor.get("subject_service_name")
+            or "system",
             subject_service_name=args["service_name"],
             scopes=scopes,
             expires_at=expires_at,
@@ -69,12 +101,16 @@ class PersonalTokenResource(Resource):
     def post(self):
         require_scope("tokens:manage")
         args = personal_parser.parse_args()
-        scopes = _scope_from_request(args.get("project"), args.get("config"), args.get("actions") or [])
+        scopes = _scope_from_request(
+            args.get("project"), args.get("config"), args.get("actions") or []
+        )
         ttl_seconds = max(1, min(int(args["ttl_seconds"]), 24 * 60 * 60))
         expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds)
         result = conn.tokens.create_token(
             token_type="personal",
-            created_by=g.actor.get("subject_user") or g.actor.get("subject_service_name") or "system",
+            created_by=g.actor.get("subject_user")
+            or g.actor.get("subject_service_name")
+            or "system",
             subject_user=g.actor.get("subject_user") or "managed-user",
             scopes=scopes,
             expires_at=expires_at,
@@ -91,7 +127,12 @@ class ListTokensResource(Resource):
     def get(self):
         require_scope("tokens:manage")
         args = list_parser.parse_args()
-        return {"tokens": conn.tokens.list_tokens(include_revoked=bool(args["include_revoked"])), "status": "OK"}, 200
+        return {
+            "tokens": conn.tokens.list_tokens(
+                include_revoked=bool(args["include_revoked"])
+            ),
+            "status": "OK",
+        }, 200
 
 
 @tokens_v2_ns.route("/revoke")

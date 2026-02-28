@@ -6,7 +6,10 @@ from flask_restx import Resource, inputs
 
 from Api.api import api, conn
 from Api.resources.helpers import resolve_project_config
-from Api.resources.secrets.references import SecretReferenceError, SecretReferenceResolver
+from Api.resources.secrets.references import (
+    SecretReferenceError,
+    SecretReferenceResolver,
+)
 from Access.is_auth import with_token, require_scope, audit_event
 
 secrets_ns = api.namespace(
@@ -15,18 +18,42 @@ secrets_ns = api.namespace(
 )
 secret_parser = api.parser()
 secret_parser.add_argument("value", type=str, required=True, location="json")
-secret_parser.add_argument("icon_slug", type=str, required=False, location="json")
+secret_parser.add_argument(
+    "icon_slug", type=str, required=False, location="json"
+)
 secret_get_parser = api.parser()
-secret_get_parser.add_argument("raw", type=inputs.boolean, default=False, location="args")
-secret_get_parser.add_argument("resolve_references", type=inputs.boolean, default=False, location="args")
-secret_get_parser.add_argument("placeholder_max_depth", type=int, default=8, location="args")
+secret_get_parser.add_argument(
+    "raw", type=inputs.boolean, default=False, location="args"
+)
+secret_get_parser.add_argument(
+    "resolve_references", type=inputs.boolean, default=False, location="args"
+)
+secret_get_parser.add_argument(
+    "placeholder_max_depth", type=int, default=8, location="args"
+)
 export_parser = api.parser()
-export_parser.add_argument("format", type=str, choices=("json", "env"), default="json", location="args")
-export_parser.add_argument("include_parent", type=inputs.boolean, default=True, location="args")
-export_parser.add_argument("include_meta", type=inputs.boolean, default=True, location="args")
-export_parser.add_argument("raw", type=inputs.boolean, default=False, location="args")
-export_parser.add_argument("resolve_references", type=inputs.boolean, default=False, location="args")
-export_parser.add_argument("placeholder_max_depth", type=int, default=8, location="args")
+export_parser.add_argument(
+    "format",
+    type=str,
+    choices=("json", "env"),
+    default="json",
+    location="args",
+)
+export_parser.add_argument(
+    "include_parent", type=inputs.boolean, default=True, location="args"
+)
+export_parser.add_argument(
+    "include_meta", type=inputs.boolean, default=True, location="args"
+)
+export_parser.add_argument(
+    "raw", type=inputs.boolean, default=False, location="args"
+)
+export_parser.add_argument(
+    "resolve_references", type=inputs.boolean, default=False, location="args"
+)
+export_parser.add_argument(
+    "placeholder_max_depth", type=int, default=8, location="args"
+)
 
 
 def _resolve_reference_map(
@@ -77,7 +104,9 @@ class SecretItemResource(Resource):
     @with_token
     def put(self, project_slug, config_slug, key):
         project, config = resolve_project_config(project_slug, config_slug)
-        require_scope("secrets:write", project_id=project["_id"], config_id=config["_id"])
+        require_scope(
+            "secrets:write", project_id=project["_id"], config_id=config["_id"]
+        )
         args = secret_parser.parse_args()
         value = args["value"]
         raw_payload = request.get_json(silent=True)
@@ -104,7 +133,9 @@ class SecretItemResource(Resource):
                 root_data=staged,
             )
             try:
-                errors = resolver.validate_value_references(key=key, value=value)
+                errors = resolver.validate_value_references(
+                    key=key, value=value
+                )
             except SecretReferenceError as exc:
                 api.abort(exc.status_code, exc.message)
             if errors:
@@ -118,7 +149,13 @@ class SecretItemResource(Resource):
             icon_slug=icon_slug,
             icon_slug_provided=icon_slug_provided,
         )
-        audit_event("secrets.write", project_slug=project_slug, config_slug=config_slug, key=key, status_code=code)
+        audit_event(
+            "secrets.write",
+            project_slug=project_slug,
+            config_slug=config_slug,
+            key=key,
+            status_code=code,
+        )
         if code >= 400:
             api.abort(code, result)
         return result, code
@@ -127,13 +164,23 @@ class SecretItemResource(Resource):
     @with_token
     def get(self, project_slug, config_slug, key):
         project, config = resolve_project_config(project_slug, config_slug)
-        require_scope("secrets:read", project_id=project["_id"], config_id=config["_id"])
+        require_scope(
+            "secrets:read", project_id=project["_id"], config_id=config["_id"]
+        )
         args = secret_get_parser.parse_args()
-        resolve_references = bool(args["resolve_references"]) and not bool(args["raw"])
+        resolve_references = bool(args["resolve_references"]) and not bool(
+            args["raw"]
+        )
 
         result, code = conn.secrets_v2.get(config["_id"], key)
         if code >= 400:
-            audit_event("secrets.read", project_slug=project_slug, config_slug=config_slug, key=key, status_code=code)
+            audit_event(
+                "secrets.read",
+                project_slug=project_slug,
+                config_slug=config_slug,
+                key=key,
+                status_code=code,
+            )
             api.abort(code, result)
         if resolve_references:
             exported, _, msg, export_code = conn.secrets_v2.export_config(
@@ -169,16 +216,32 @@ class SecretItemResource(Resource):
                 api.abort(exc.status_code, exc.message)
             if key in resolved:
                 result = {"key": key, "value": resolved[key], "status": "OK"}
-        audit_event("secrets.read", project_slug=project_slug, config_slug=config_slug, key=key, status_code=200)
+        audit_event(
+            "secrets.read",
+            project_slug=project_slug,
+            config_slug=config_slug,
+            key=key,
+            status_code=200,
+        )
         return result, code
 
     @api.doc(security=["Bearer", "Token"])
     @with_token
     def delete(self, project_slug, config_slug, key):
         project, config = resolve_project_config(project_slug, config_slug)
-        require_scope("secrets:delete", project_id=project["_id"], config_id=config["_id"])
+        require_scope(
+            "secrets:delete",
+            project_id=project["_id"],
+            config_id=config["_id"],
+        )
         result, code = conn.secrets_v2.delete(config["_id"], key)
-        audit_event("secrets.delete", project_slug=project_slug, config_slug=config_slug, key=key, status_code=code)
+        audit_event(
+            "secrets.delete",
+            project_slug=project_slug,
+            config_slug=config_slug,
+            key=key,
+            status_code=code,
+        )
         if code >= 400:
             api.abort(code, result)
         return result, code
@@ -190,9 +253,15 @@ class SecretExportResource(Resource):
     @with_token
     def get(self, project_slug, config_slug):
         project, config = resolve_project_config(project_slug, config_slug)
-        require_scope("secrets:export", project_id=project["_id"], config_id=config["_id"])
+        require_scope(
+            "secrets:export",
+            project_id=project["_id"],
+            config_id=config["_id"],
+        )
         args = export_parser.parse_args()
-        resolve_references = bool(args["resolve_references"]) and not bool(args["raw"])
+        resolve_references = bool(args["resolve_references"]) and not bool(
+            args["raw"]
+        )
         data, meta, msg, code = conn.secrets_v2.export_config(
             config["_id"],
             include_parent=args["include_parent"],

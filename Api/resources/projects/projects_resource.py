@@ -15,8 +15,12 @@ project_model = api.model(
     },
 )
 project_create_parser = api.parser()
-project_create_parser.add_argument("slug", type=str, required=True, location="json")
-project_create_parser.add_argument("name", type=str, required=False, location="json")
+project_create_parser.add_argument(
+    "slug", type=str, required=True, location="json"
+)
+project_create_parser.add_argument(
+    "name", type=str, required=False, location="json"
+)
 
 
 @projects_ns.route("")
@@ -43,7 +47,14 @@ class ProjectsResource(Resource):
             actions = set(scope.get("actions") or [])
             if project_id is None:
                 continue
-            if actions.intersection({"projects:read", "configs:read", "secrets:read", "secrets:export"}):
+            if actions.intersection(
+                {
+                    "projects:read",
+                    "configs:read",
+                    "secrets:read",
+                    "secrets:export",
+                }
+            ):
                 project_ids.add(str(project_id))
         return list(project_ids)
 
@@ -54,7 +65,10 @@ class ProjectsResource(Resource):
         workspace_role = actor.get("workspace_role")
         workspace_id = actor.get("workspace_id")
 
-        if workspace_role in ("owner", "admin") or self._has_global_projects_read(actor):
+        if workspace_role in (
+            "owner",
+            "admin",
+        ) or self._has_global_projects_read(actor):
             candidate_docs = conn.projects.list_docs(workspace_id=workspace_id)
         else:
             visible_project_ids = self._visible_project_ids_from_actor(actor)
@@ -62,16 +76,25 @@ class ProjectsResource(Resource):
                 return {"projects": []}
             candidate_docs = conn.projects.list_by_ids(visible_project_ids)
             if workspace_id is not None:
-                candidate_docs = [doc for doc in candidate_docs if doc.get("workspace_id") in (None, workspace_id)]
+                candidate_docs = [
+                    doc
+                    for doc in candidate_docs
+                    if doc.get("workspace_id") in (None, workspace_id)
+                ]
 
         authorized_project_ids = [
             str(doc.get("_id"))
             for doc in candidate_docs
-            if doc.get("_id") is not None and authorize(actor, "projects:read", project_id=doc.get("_id"))
+            if doc.get("_id") is not None
+            and authorize(actor, "projects:read", project_id=doc.get("_id"))
         ]
         if not authorized_project_ids:
             return {"projects": []}
-        return {"projects": conn.projects.list(workspace_id=workspace_id, project_ids=authorized_project_ids)}
+        return {
+            "projects": conn.projects.list(
+                workspace_id=workspace_id, project_ids=authorized_project_ids
+            )
+        }
 
     @api.doc(security=["Bearer", "Token"], parser=project_create_parser)
     @with_token
@@ -94,4 +117,7 @@ class ProjectsResource(Resource):
                 "latency_ms": 0,
             }
         )
-        return {"status": "OK", "project": {"slug": result["slug"], "name": result["name"]}}, 201
+        return {
+            "status": "OK",
+            "project": {"slug": result["slug"], "name": result["name"]},
+        }, 201

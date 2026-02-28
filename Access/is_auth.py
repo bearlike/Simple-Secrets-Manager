@@ -26,7 +26,10 @@ def _audit_request(event):
             "ip": request.remote_addr,
             "user_agent": request.user_agent.string,
             "status_code": event.get("status_code", 200),
-            "latency_ms": int((perf_counter() - g.get("request_started", perf_counter())) * 1000),
+            "latency_ms": int(
+                (perf_counter() - g.get("request_started", perf_counter()))
+                * 1000
+            ),
         }
     )
     conn.audit.write_event(event)
@@ -48,14 +51,18 @@ def require_token():
                 "reason": err,
             }
         )
-        api.abort(401, f"Not Authorized to access the requested resource ({err})")
+        api.abort(
+            401, f"Not Authorized to access the requested resource ({err})"
+        )
     g.actor = actor
     return actor
 
 
 def require_scope(action, project_id=None, config_id=None):
     actor = getattr(g, "actor", None) or require_token()
-    if not authorize(actor, action, project_id=project_id, config_id=config_id):
+    if not authorize(
+        actor, action, project_id=project_id, config_id=config_id
+    ):
         api.abort(403, f"Missing scope: {action}")
     return actor
 
@@ -65,7 +72,9 @@ def audit_event(action, **kwargs):
     _audit_request(
         {
             "actor_type": "token" if actor.get("type") == "token" else "user",
-            "actor_id": actor.get("subject_user") or actor.get("subject_service_name") or actor.get("id"),
+            "actor_id": actor.get("subject_user")
+            or actor.get("subject_service_name")
+            or actor.get("id"),
             "token_id": actor.get("token_id"),
             "action": action,
             **kwargs,
@@ -76,7 +85,11 @@ def audit_event(action, **kwargs):
 @userpass.verify_password
 def verify_userpass(username, password):
     if conn.userpass.is_authorized(username, password):
-        g.actor = {"type": "userpass", "subject_user": username, "id": username}
+        g.actor = {
+            "type": "userpass",
+            "subject_user": username,
+            "id": username,
+        }
         return username
     api.abort(401, "Not Authorized to access the requested resource")
     return None

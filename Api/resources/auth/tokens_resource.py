@@ -5,7 +5,10 @@ from Api.api import api, conn
 from Access.is_auth import userpass
 
 # tokens Namespace
-tokens_ns = api.namespace(name="auth/tokens", description="Allows users to authenticate using a token.")
+tokens_ns = api.namespace(
+    name="auth/tokens",
+    description="Allows users to authenticate using a token.",
+)
 tokens_model = api.model(
     "Auth Method - Token",
     {
@@ -15,7 +18,9 @@ tokens_model = api.model(
             min_length=8,
             description="Token for API authentication",
         ),
-        "status": fields.String(required=False, description="Operation Status"),
+        "status": fields.String(
+            required=False, description="Operation Status"
+        ),
     },
 )
 
@@ -47,7 +52,9 @@ class Auth_Tokens(Resource):
         """Revoke a given API token"""
         # TODO: Add support for userpass
         args = tokens_parser.parse_args()
-        result, code = conn.tokens.revoke(username=userpass.current_user(), token=args["token"])
+        result, code = conn.tokens.revoke(
+            username=userpass.current_user(), token=args["token"]
+        )
         if code != 200:
             api.abort(code, result.get("status"))
         return result

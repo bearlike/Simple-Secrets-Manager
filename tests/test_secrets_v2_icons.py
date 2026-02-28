@@ -72,32 +72,55 @@ class FakeConfigs:
         return self.cfgs.get(cfg_id)
 
     def list_ids(self, project_id):
-        return [cfg["_id"] for cfg in self.cfgs.values() if cfg.get("project_id") == project_id]
+        return [
+            cfg["_id"]
+            for cfg in self.cfgs.values()
+            if cfg.get("project_id") == project_id
+        ]
 
 
 def _engine_with_docs(docs):
-    cfgs = {"cfg": {"_id": "cfg", "project_id": "p1", "parent_config_id": None}}
+    cfgs = {
+        "cfg": {"_id": "cfg", "project_id": "p1", "parent_config_id": None}
+    }
     return SecretsV2(FakeSecrets(docs), FakeConfigs(cfgs))
 
 
 def _engine_with_project_docs(docs):
     cfgs = {
-        "cfg-a": {"_id": "cfg-a", "project_id": "p1", "parent_config_id": None},
-        "cfg-b": {"_id": "cfg-b", "project_id": "p1", "parent_config_id": None},
+        "cfg-a": {
+            "_id": "cfg-a",
+            "project_id": "p1",
+            "parent_config_id": None,
+        },
+        "cfg-b": {
+            "_id": "cfg-b",
+            "project_id": "p1",
+            "parent_config_id": None,
+        },
     }
     return SecretsV2(FakeSecrets(docs), FakeConfigs(cfgs))
 
 
 def test_put_sets_auto_icon_when_missing():
     engine = _engine_with_docs([])
-    _, code = engine.put("cfg", "SQLALCHEMY_DATABASE_URI", "postgres://", "actor")
+    _, code = engine.put(
+        "cfg", "SQLALCHEMY_DATABASE_URI", "postgres://", "actor"
+    )
     assert code == 200
     doc = engine._secrets.docs[0]
     assert doc["icon_slug"] == "simple-icons:sqlalchemy"
 
 
 def test_put_preserves_existing_icon_without_override():
-    docs = [{"config_id": "cfg", "key": "DATABASE_URL", "value_enc": "v", "icon_slug": "simple-icons:postgresql"}]
+    docs = [
+        {
+            "config_id": "cfg",
+            "key": "DATABASE_URL",
+            "value_enc": "v",
+            "icon_slug": "simple-icons:postgresql",
+        }
+    ]
     engine = _engine_with_docs(docs)
     _, code = engine.put("cfg", "DATABASE_URL", "next", "actor")
     assert code == 200
@@ -119,26 +142,62 @@ def test_put_accepts_manual_override():
 
 
 def test_put_empty_override_recomputes_auto_icon():
-    docs = [{"config_id": "cfg", "key": "DATABASE_URL", "value_enc": "v", "icon_slug": "simple-icons:mysql"}]
+    docs = [
+        {
+            "config_id": "cfg",
+            "key": "DATABASE_URL",
+            "value_enc": "v",
+            "icon_slug": "simple-icons:mysql",
+        }
+    ]
     engine = _engine_with_docs(docs)
-    _, code = engine.put("cfg", "DATABASE_URL", "v2", "actor", icon_slug="", icon_slug_provided=True)
+    _, code = engine.put(
+        "cfg",
+        "DATABASE_URL",
+        "v2",
+        "actor",
+        icon_slug="",
+        icon_slug_provided=True,
+    )
     assert code == 200
     assert docs[0]["icon_slug"] == resolve_icon_slug("DATABASE_URL", None)
 
 
 def test_export_metadata_backfills_missing_icon_slug():
-    docs = [{"_id": "1", "config_id": "cfg", "key": "SQLALCHEMY_DATABASE_URI", "value_enc": "v"}]
+    docs = [
+        {
+            "_id": "1",
+            "config_id": "cfg",
+            "key": "SQLALCHEMY_DATABASE_URI",
+            "value_enc": "v",
+        }
+    ]
     engine = _engine_with_docs(docs)
-    _, meta, _, code = engine.export_config("cfg", include_parent=True, include_metadata=True)
+    _, meta, _, code = engine.export_config(
+        "cfg", include_parent=True, include_metadata=True
+    )
     assert code == 200
     assert docs[0]["icon_slug"] == "simple-icons:sqlalchemy"
-    assert meta["SQLALCHEMY_DATABASE_URI"]["iconSlug"] == "simple-icons:sqlalchemy"
+    assert (
+        meta["SQLALCHEMY_DATABASE_URI"]["iconSlug"]
+        == "simple-icons:sqlalchemy"
+    )
 
 
 def test_put_syncs_icon_slug_across_project_configs():
     docs = [
-        {"config_id": "cfg-a", "key": "DATABASE_URL", "value_enc": "a", "icon_slug": "simple-icons:postgresql"},
-        {"config_id": "cfg-b", "key": "DATABASE_URL", "value_enc": "b", "icon_slug": "simple-icons:mysql"},
+        {
+            "config_id": "cfg-a",
+            "key": "DATABASE_URL",
+            "value_enc": "a",
+            "icon_slug": "simple-icons:postgresql",
+        },
+        {
+            "config_id": "cfg-b",
+            "key": "DATABASE_URL",
+            "value_enc": "b",
+            "icon_slug": "simple-icons:mysql",
+        },
     ]
     engine = _engine_with_project_docs(docs)
     _, code = engine.put(
@@ -156,7 +215,12 @@ def test_put_syncs_icon_slug_across_project_configs():
 
 def test_put_without_override_reuses_existing_project_icon():
     docs = [
-        {"config_id": "cfg-a", "key": "DATABASE_URL", "value_enc": "a", "icon_slug": "simple-icons:postgresql"},
+        {
+            "config_id": "cfg-a",
+            "key": "DATABASE_URL",
+            "value_enc": "a",
+            "icon_slug": "simple-icons:postgresql",
+        },
         {"config_id": "cfg-b", "key": "DATABASE_URL", "value_enc": "b"},
     ]
     engine = _engine_with_project_docs(docs)

@@ -15,7 +15,7 @@ class FakeCollection:
         return []
 
 
-def test_list_project_memberships_normalizes_group_ids_for_string_and_objectid_storage():
+def test_list_project_memberships_normalizes_group_ids_for_str_and_objectid():
     workspace_memberships = FakeCollection()
     project_memberships = FakeCollection()
     engine = Memberships(workspace_memberships, project_memberships)
@@ -29,7 +29,9 @@ def test_list_project_memberships_normalizes_group_ids_for_string_and_objectid_s
 
     assert project_memberships.last_query is not None
     clauses = project_memberships.last_query["$or"]
-    group_clause = next(item for item in clauses if item.get("subject_type") == "group")
+    group_clause = next(
+        item for item in clauses if item.get("subject_type") == "group"
+    )
     values = set(group_clause["subject_id"]["$in"])
     assert group_id in values
     assert str(group_id) in values

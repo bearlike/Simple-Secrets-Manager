@@ -15,8 +15,16 @@ class FakeSecrets:
         key = query.get("key")
         if isinstance(config_id, dict) and "$in" in config_id:
             config_ids = set(config_id["$in"])
-            return [doc for doc in self.docs if doc.get("config_id") in config_ids and doc.get("key") == key]
-        return [doc for doc in self.docs if doc.get("config_id") == config_id and doc.get("key") == key]
+            return [
+                doc
+                for doc in self.docs
+                if doc.get("config_id") in config_ids and doc.get("key") == key
+            ]
+        return [
+            doc
+            for doc in self.docs
+            if doc.get("config_id") == config_id and doc.get("key") == key
+        ]
 
 
 class FakeConfigs:
@@ -63,23 +71,47 @@ def test_compare_key_across_configs_resolves_inherited_and_missing():
         {
             "configId": "base",
             "configSlug": "base",
-            "effective": {"value": "base.example.com", "source": "base", "isInherited": False},
+            "effective": {
+                "value": "base.example.com",
+                "source": "base",
+                "isInherited": False,
+            },
             "direct": {"exists": True, "value": "base.example.com"},
-            "meta": {"updatedAt": "2026-01-01T00:00:00Z", "updatedBy": "system", "iconSlug": ""},
+            "meta": {
+                "updatedAt": "2026-01-01T00:00:00Z",
+                "updatedBy": "system",
+                "iconSlug": "",
+            },
         },
         {
             "configId": "dev",
             "configSlug": "dev",
-            "effective": {"value": "base.example.com", "source": "base", "isInherited": True},
+            "effective": {
+                "value": "base.example.com",
+                "source": "base",
+                "isInherited": True,
+            },
             "direct": {"exists": False, "value": None},
-            "meta": {"updatedAt": "2026-01-01T00:00:00Z", "updatedBy": "system", "iconSlug": ""},
+            "meta": {
+                "updatedAt": "2026-01-01T00:00:00Z",
+                "updatedBy": "system",
+                "iconSlug": "",
+            },
         },
         {
             "configId": "prod",
             "configSlug": "prod",
-            "effective": {"value": "prod.example.com", "source": "prod", "isInherited": False},
+            "effective": {
+                "value": "prod.example.com",
+                "source": "prod",
+                "isInherited": False,
+            },
             "direct": {"exists": True, "value": "prod.example.com"},
-            "meta": {"updatedAt": "2026-01-02T00:00:00Z", "updatedBy": "alice", "iconSlug": ""},
+            "meta": {
+                "updatedAt": "2026-01-02T00:00:00Z",
+                "updatedBy": "alice",
+                "iconSlug": "",
+            },
         },
         {
             "configId": "qa",
@@ -91,7 +123,7 @@ def test_compare_key_across_configs_resolves_inherited_and_missing():
     ]
 
 
-def test_compare_key_across_configs_skips_missing_when_include_empty_is_false():
+def test_compare_key_across_configs_skips_missing_when_include_empty_false():
     docs = [
         {
             "config_id": "base",
@@ -119,13 +151,21 @@ def test_compare_key_across_configs_skips_missing_when_include_empty_is_false():
         {
             "configId": "base",
             "configSlug": "base",
-            "effective": {"value": "base.example.com", "source": "base", "isInherited": False},
+            "effective": {
+                "value": "base.example.com",
+                "source": "base",
+                "isInherited": False,
+            },
             "direct": {"exists": True, "value": "base.example.com"},
         },
         {
             "configId": "dev",
             "configSlug": "dev",
-            "effective": {"value": "base.example.com", "source": "base", "isInherited": True},
+            "effective": {
+                "value": "base.example.com",
+                "source": "base",
+                "isInherited": True,
+            },
             "direct": {"exists": False, "value": None},
         },
     ]
@@ -152,7 +192,9 @@ def test_compare_key_across_configs_handles_inheritance_cycle():
 
 def test_compare_key_across_configs_rejects_invalid_key():
     engine = SecretsV2(FakeSecrets([]), FakeConfigs())
-    rows, msg, code = engine.compare_key_across_configs([], "not-valid", include_parent=True)
+    rows, msg, code = engine.compare_key_across_configs(
+        [], "not-valid", include_parent=True
+    )
     assert rows is None
     assert code == 400
     assert msg == "Invalid secret key"

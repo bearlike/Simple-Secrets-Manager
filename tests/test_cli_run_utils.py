@@ -20,7 +20,10 @@ def test_run_with_env_injects_into_child_process():
     command = [
         sys.executable,
         "-c",
-        "import os,sys; sys.exit(0 if os.getenv('SSM_TEST_KEY') == 'injected' else 7)",
+        (
+            "import os,sys; "
+            "sys.exit(0 if os.getenv('SSM_TEST_KEY') == 'injected' else 7)"
+        ),
     ]
     code = run_with_env(command, {"SSM_TEST_KEY": "injected"})
     assert code == 0

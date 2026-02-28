@@ -31,14 +31,18 @@ def _extract_terms(icon_name: str) -> Iterable[str]:
         return []
     tokens = TOKEN_PATTERN.findall(icon_name)
     terms = {icon_name}
-    terms.update(token for token in tokens if len(token) >= 3 and not token.isdigit())
+    terms.update(
+        token for token in tokens if len(token) >= 3 and not token.isdigit()
+    )
     compact = "".join(tokens)
     if len(compact) >= 5:
         terms.add(compact)
     return terms
 
 
-def _rank(prefix: str, icon_name: str, term: str, slug: str) -> Tuple[int, int, int, str]:
+def _rank(
+    prefix: str, icon_name: str, term: str, slug: str
+) -> Tuple[int, int, int, str]:
     return (
         1 if prefix == "simple-icons" else 0,
         1 if icon_name == term else 0,
@@ -49,10 +53,16 @@ def _rank(prefix: str, icon_name: str, term: str, slug: str) -> Tuple[int, int, 
 
 def build_index() -> dict:
     session = requests.Session()
-    session.headers.update({"User-Agent": "simple-secrets-manager-icon-index/1.0"})
+    session.headers.update(
+        {"User-Agent": "simple-secrets-manager-icon-index/1.0"}
+    )
 
     collections = _fetch_json(session, "/collections")
-    prefixes = sorted(prefix for prefix, details in collections.items() if isinstance(details, dict))
+    prefixes = sorted(
+        prefix
+        for prefix, details in collections.items()
+        if isinstance(details, dict)
+    )
 
     term_best: Dict[str, Tuple[Tuple[int, int, int, str], str]] = {}
     term_count: Dict[str, int] = {}
@@ -82,7 +92,9 @@ def build_index() -> dict:
     }
     return {
         "version": 1,
-        "generatedAt": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "generatedAt": datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat(),
         "source": ICONIFY_BASE_URL,
         "terms": terms,
     }
@@ -100,7 +112,10 @@ def main() -> int:
     output_path = Path(args.output)
     payload = build_index()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(payload, separators=(",", ":"), sort_keys=True), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(payload, separators=(",", ":"), sort_keys=True),
+        encoding="utf-8",
+    )
     print(f"Wrote icon index to {output_path} ({len(payload['terms'])} terms)")
     return 0
 

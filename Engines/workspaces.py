@@ -2,7 +2,11 @@
 from datetime import datetime, timezone
 
 from Engines.common import is_valid_slug
-from Engines.rbac import WORKSPACE_ROLES, PROJECT_ROLES, WORKSPACE_DEFAULT_SETTINGS
+from Engines.rbac import (
+    WORKSPACE_ROLES,
+    PROJECT_ROLES,
+    WORKSPACE_DEFAULT_SETTINGS,
+)
 
 DEFAULT_WORKSPACE_SLUG = "default"
 DEFAULT_WORKSPACE_NAME = "Default Workspace"
@@ -80,7 +84,12 @@ class Workspaces:
 
         self._workspaces.update_one(
             {"_id": workspace_id},
-            {"$set": {"settings": settings, "updated_at": datetime.now(timezone.utc)}},
+            {
+                "$set": {
+                    "settings": settings,
+                    "updated_at": datetime.now(timezone.utc),
+                }
+            },
         )
         return settings, "OK", 200
 

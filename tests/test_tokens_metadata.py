@@ -56,7 +56,9 @@ class FakeCollection:
         return True
 
     def find(self, query):
-        return FakeCursor([doc for doc in self.docs if self._match(doc, query)])
+        return FakeCursor(
+            [doc for doc in self.docs if self._match(doc, query)]
+        )
 
     def find_one(self, query):
         for doc in self.docs:
@@ -90,7 +92,9 @@ def test_list_tokens_serializes_metadata():
                 "type": "service",
                 "subject_user": None,
                 "subject_service_name": "api",
-                "scopes": [{"project_id": ObjectId(), "actions": ["secrets:read"]}],
+                "scopes": [
+                    {"project_id": ObjectId(), "actions": ["secrets:read"]}
+                ],
                 "expires_at": datetime(2030, 1, 1, tzinfo=timezone.utc),
                 "last_used_at": None,
                 "revoked_at": None,
@@ -111,7 +115,13 @@ def test_list_tokens_hides_revoked_and_expired_by_default():
     now = datetime.now(timezone.utc)
     collection = FakeCollection(
         [
-            {"_id": ObjectId(), "type": "personal", "revoked_at": now, "expires_at": now, "created_at": now},
+            {
+                "_id": ObjectId(),
+                "type": "personal",
+                "revoked_at": now,
+                "expires_at": now,
+                "created_at": now,
+            },
             {
                 "_id": ObjectId(),
                 "type": "personal",
@@ -166,7 +176,9 @@ def test_generate_personal_token_has_default_scopes():
     assert collection.docs[0]["subject_user"] == "alice"
     assert collection.docs[0]["scopes"] == global_scopes()
     actions = set(collection.docs[0]["scopes"][0]["actions"])
-    assert {"projects:write", "configs:write", "secrets:write"}.issubset(actions)
+    assert {"projects:write", "configs:write", "secrets:write"}.issubset(
+        actions
+    )
 
 
 def test_generate_rotates_session_tokens_and_caps_ttl():
@@ -248,7 +260,9 @@ def test_authenticate_personal_token_uses_dynamic_rbac_scopes():
     assert actor["workspace_role"] == "collaborator"
     assert actor["workspace_slug"] == "default"
     assert actor["visible_project_ids"] == ["p1"]
-    assert actor["scopes"] == [{"project_id": "p1", "actions": ["secrets:read"]}]
+    assert actor["scopes"] == [
+        {"project_id": "p1", "actions": ["secrets:read"]}
+    ]
     assert actor["token_scopes"] == [{"actions": ["projects:read"]}]
 
 
@@ -272,7 +286,14 @@ def test_authenticate_personal_session_token_ignores_static_token_scopes():
     def resolver(username):
         assert username == "alice"
         return {
-            "scopes": [{"actions": ["workspace:settings:read", "workspace:groups:read"]}],
+            "scopes": [
+                {
+                    "actions": [
+                        "workspace:settings:read",
+                        "workspace:groups:read",
+                    ]
+                }
+            ],
             "workspace_role": "owner",
             "workspace_id": "w1",
             "workspace_slug": "default",
@@ -286,11 +307,13 @@ def test_authenticate_personal_session_token_ignores_static_token_scopes():
     actor, err = tokens.authenticate(plain)
 
     assert err is None
-    assert actor["scopes"] == [{"actions": ["workspace:settings:read", "workspace:groups:read"]}]
+    assert actor["scopes"] == [
+        {"actions": ["workspace:settings:read", "workspace:groups:read"]}
+    ]
     assert actor["token_scopes"] is None
 
 
-def test_authenticate_legacy_personal_token_without_purpose_ignores_static_token_scopes():
+def test_authenticate_legacy_personal_token_without_purpose_ignores_scopes():
     plain = "plain-token-legacy"
     collection = FakeCollection(
         [
@@ -308,7 +331,14 @@ def test_authenticate_legacy_personal_token_without_purpose_ignores_static_token
 
     def resolver(_username):
         return {
-            "scopes": [{"actions": ["workspace:settings:read", "workspace:groups:read"]}],
+            "scopes": [
+                {
+                    "actions": [
+                        "workspace:settings:read",
+                        "workspace:groups:read",
+                    ]
+                }
+            ],
             "workspace_role": "owner",
             "workspace_id": "w1",
             "workspace_slug": "default",
@@ -323,7 +353,10 @@ def test_authenticate_legacy_personal_token_without_purpose_ignores_static_token
 
     assert err is None
     assert actor["token_scopes"] is None
-    assert actor["scopes"][0]["actions"] == ["workspace:settings:read", "workspace:groups:read"]
+    assert actor["scopes"][0]["actions"] == [
+        "workspace:settings:read",
+        "workspace:groups:read",
+    ]
 
 
 def test_authenticate_personal_token_fails_for_disabled_user():
@@ -344,7 +377,10 @@ def test_authenticate_personal_token_fails_for_disabled_user():
 
     tokens = Tokens(
         collection,
-        personal_actor_resolver=lambda _username: {"disabled": True, "scopes": []},
+        personal_actor_resolver=lambda _username: {
+            "disabled": True,
+            "scopes": [],
+        },
     )
     collection.docs[0]["token_hash"] = tokens._hash_token(plain)
 

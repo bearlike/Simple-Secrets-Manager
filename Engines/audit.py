@@ -21,16 +21,37 @@ class AuditEvents:
         }
         self._events.insert_one(payload)
 
-    def _build_query(self, project_slug=None, config_slug=None, since=None, project_id=None, config_id=None):
+    def _build_query(
+        self,
+        project_slug=None,
+        config_slug=None,
+        since=None,
+        project_id=None,
+        config_id=None,
+    ):
         clauses = []
         if project_slug is not None and project_id is not None:
-            clauses.append({"$or": [{"project_slug": project_slug}, {"project_id": project_id}]})
+            clauses.append(
+                {
+                    "$or": [
+                        {"project_slug": project_slug},
+                        {"project_id": project_id},
+                    ]
+                }
+            )
         elif project_slug is not None:
             clauses.append({"project_slug": project_slug})
         elif project_id is not None:
             clauses.append({"project_id": project_id})
         if config_slug is not None and config_id is not None:
-            clauses.append({"$or": [{"config_slug": config_slug}, {"config_id": config_id}]})
+            clauses.append(
+                {
+                    "$or": [
+                        {"config_slug": config_slug},
+                        {"config_id": config_id},
+                    ]
+                }
+            )
         elif config_slug is not None:
             clauses.append({"config_slug": config_slug})
         elif config_id is not None:
@@ -42,7 +63,15 @@ class AuditEvents:
             query["ts"] = {"$gte": since}
         return query
 
-    def query_events(self, project_slug=None, config_slug=None, since=None, limit=100, project_id=None, config_id=None):
+    def query_events(
+        self,
+        project_slug=None,
+        config_slug=None,
+        since=None,
+        limit=100,
+        project_id=None,
+        config_id=None,
+    ):
         query = self._build_query(
             project_slug=project_slug,
             config_slug=config_slug,
@@ -50,7 +79,9 @@ class AuditEvents:
             project_id=project_id,
             config_id=config_id,
         )
-        events = list(self._events.find(query, {"_id": 0}).sort("ts", -1).limit(limit))
+        events = list(
+            self._events.find(query, {"_id": 0}).sort("ts", -1).limit(limit)
+        )
         return [sanitize_doc(event) for event in events]
 
     def query_events_page(
@@ -74,7 +105,12 @@ class AuditEvents:
             project_id=project_id,
             config_id=config_id,
         )
-        cursor = self._events.find(query, {"_id": 0}).sort("ts", -1).skip(skip).limit(normalized_limit + 1)
+        cursor = (
+            self._events.find(query, {"_id": 0})
+            .sort("ts", -1)
+            .skip(skip)
+            .limit(normalized_limit + 1)
+        )
         docs = list(cursor)
         has_next = len(docs) > normalized_limit
         events = docs[:normalized_limit]

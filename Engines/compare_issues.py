@@ -25,7 +25,9 @@ def classify_reference_error(message):
 
 
 def has_broken_reference(issues):
-    return any(issue["code"].startswith("broken_reference_") for issue in issues)
+    return any(
+        issue["code"].startswith("broken_reference_") for issue in issues
+    )
 
 
 def build_issue_summary(rows):
@@ -40,5 +42,8 @@ def build_issue_summary(rows):
     return {
         "totalIssues": sum(by_code.values()),
         "affectedConfigs": affected_configs,
-        "byCode": [{"code": code, "count": count} for code, count in sorted(by_code.items())],
+        "byCode": [
+            {"code": code, "count": count}
+            for code, count in sorted(by_code.items())
+        ],
     }

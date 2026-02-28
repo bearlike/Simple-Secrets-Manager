@@ -28,7 +28,9 @@ kv_model = api.model(
             required=True,
             description="Secret (value) for the corresponding Key in Path",
         ),
-        "status": fields.String(required=False, description="Operation Status"),
+        "status": fields.String(
+            required=False, description="Operation Status"
+        ),
     },
 )
 
@@ -54,7 +56,9 @@ kv_parser.add_argument(
 class Engine_KV(Resource):
     """Key-Value API operations"""
 
-    @api.doc(description="Update a kv in a path", security="Token", parser=kv_parser)
+    @api.doc(
+        description="Update a kv in a path", security="Token", parser=kv_parser
+    )
     @api.marshal_with(kv_model)
     def put(self, path, key):
         """Update a given resource"""
@@ -80,7 +84,9 @@ class Engine_KV(Resource):
             return None
         return status
 
-    @api.doc(description="Add a KV to a path", security="Token", parser=kv_parser)
+    @api.doc(
+        description="Add a KV to a path", security="Token", parser=kv_parser
+    )
     @api.marshal_with(kv_model)
     def post(self, path, key):
         """Add a new kv to a path"""

@@ -51,7 +51,9 @@ def _handle_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
 
 def _profile_name(override: str | None, cfg: GlobalConfig) -> str:
     env = os.getenv("SSM_PROFILE")
-    return (override or env or cfg.active_profile or DEFAULT_PROFILE).strip() or DEFAULT_PROFILE
+    return (
+        override or env or cfg.active_profile or DEFAULT_PROFILE
+    ).strip() or DEFAULT_PROFILE
 
 
 def _ensure_profile(cfg: GlobalConfig, profile_name: str) -> ProfileConfig:
@@ -70,8 +72,14 @@ def _fetch_secrets(
     resolve_references: bool = True,
     raw: bool = False,
 ) -> tuple[dict[str, str], str]:
-    if not resolution.base_url or not resolution.project or not resolution.config:
-        raise CliError("Missing base_url/project/config for secret retrieval", exit_code=2)
+    if (
+        not resolution.base_url
+        or not resolution.project
+        or not resolution.config
+    ):
+        raise CliError(
+            "Missing base_url/project/config for secret retrieval", exit_code=2
+        )
 
     if offline:
         cached = load_secret_cache(
@@ -81,7 +89,9 @@ def _fetch_secrets(
             max_age_seconds=cache_ttl,
         )
         if cached is None:
-            raise CliError("No cached secrets found for offline mode", exit_code=4)
+            raise CliError(
+                "No cached secrets found for offline mode", exit_code=4
+            )
         return cached, "cache"
 
     client = ApiClient(resolution.base_url, token=resolution.token)
@@ -92,7 +102,9 @@ def _fetch_secrets(
             resolve_references=resolve_references,
             raw=raw,
         )
-        save_secret_cache(resolution.base_url, resolution.project, resolution.config, data)
+        save_secret_cache(
+            resolution.base_url, resolution.project, resolution.config, data
+        )
         return data, "remote"
     except ApiError:
         cached = load_secret_cache(
@@ -102,7 +114,10 @@ def _fetch_secrets(
             max_age_seconds=cache_ttl,
         )
         if cached is not None:
-            console.print("[yellow]Using cached secrets because live fetch failed.[/yellow]")
+            console.print(
+                "[yellow]Using cached secrets because live fetch "
+                "failed.[/yellow]"
+            )
             return cached, "cache-fallback"
         raise
 
@@ -123,9 +138,15 @@ def cli() -> None:
 
 
 @cli.command(help="Configure API base URL for a profile")
-@click.option("--base-url", required=True, help="Base URL (for example http://localhost:8080/api)")
+@click.option(
+    "--base-url",
+    required=True,
+    help="Base URL (for example http://localhost:8080/api)",
+)
 @click.option("--profile", default=None, help="Profile name")
-@click.option("--activate/--no-activate", default=True, help="Set profile as active")
+@click.option(
+    "--activate/--no-activate", default=True, help="Set profile as active"
+)
 @_handle_errors
 def configure(base_url: str, profile: str | None, activate: bool) -> None:
     cfg = load_global_config()
@@ -145,15 +166,26 @@ def auth_cmd() -> None:
     pass
 
 
-@auth_cmd.command("set-token", help="Store a token for the current base URL/profile")
+@auth_cmd.command(
+    "set-token", help="Store a token for the current base URL/profile"
+)
 @click.option("--token", prompt=True, hide_input=True, help="Token value")
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--profile", default=None, help="Profile name")
 @_handle_errors
-def auth_set_token(token: str, base_url: str | None, profile: str | None) -> None:
-    resolution = resolve_context(base_url=base_url, profile=profile, require_base_url=True)
-    storage = auth.set_token(resolution.profile, resolution.base_url or "", token.strip())
-    console.print(f"Token saved for profile [bold]{resolution.profile}[/bold] ({storage})")
+def auth_set_token(
+    token: str, base_url: str | None, profile: str | None
+) -> None:
+    resolution = resolve_context(
+        base_url=base_url, profile=profile, require_base_url=True
+    )
+    storage = auth.set_token(
+        resolution.profile, resolution.base_url or "", token.strip()
+    )
+    console.print(
+        "Token saved for profile "
+        f"[bold]{resolution.profile}[/bold] ({storage})"
+    )
 
 
 @cli.command(help="Login with username/password and store returned token")
@@ -162,15 +194,21 @@ def auth_set_token(token: str, base_url: str | None, profile: str | None) -> Non
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--profile", default=None, help="Profile name")
 @_handle_errors
-def login(username: str, password: str, base_url: str | None, profile: str | None) -> None:
-    resolution = resolve_context(base_url=base_url, profile=profile, require_base_url=True)
+def login(
+    username: str, password: str, base_url: str | None, profile: str | None
+) -> None:
+    resolution = resolve_context(
+        base_url=base_url, profile=profile, require_base_url=True
+    )
     client = ApiClient(resolution.base_url or "")
     token_payload = client.login_userpass(username.strip(), password)
     token = token_payload.get("token")
     if not isinstance(token, str):
         raise CliError("Login response did not include a token")
 
-    storage = auth.set_token(resolution.profile, resolution.base_url or "", token)
+    storage = auth.set_token(
+        resolution.profile, resolution.base_url or "", token
+    )
 
     cfg = load_global_config()
     profile_cfg = _ensure_profile(cfg, resolution.profile)
@@ -182,7 +220,9 @@ def login(username: str, password: str, base_url: str | None, profile: str | Non
 
     expires = token_payload.get("expires_at")
     if isinstance(expires, str) and expires:
-        console.print(f"Logged in. Token stored in {storage}. Expires at {expires}")
+        console.print(
+            f"Logged in. Token stored in {storage}. Expires at {expires}"
+        )
     else:
         console.print(f"Logged in. Token stored in {storage}.")
 
@@ -190,28 +230,51 @@ def login(username: str, password: str, base_url: str | None, profile: str | Non
 @cli.command(help="Remove locally stored token")
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--profile", default=None, help="Profile name")
-@click.option("--all-profiles", is_flag=True, default=False, help="Remove all file-backed tokens")
+@click.option(
+    "--all-profiles",
+    is_flag=True,
+    default=False,
+    help="Remove all file-backed tokens",
+)
 @_handle_errors
-def logout(base_url: str | None, profile: str | None, all_profiles: bool) -> None:
+def logout(
+    base_url: str | None, profile: str | None, all_profiles: bool
+) -> None:
     if all_profiles:
         auth.clear_all_tokens()
         console.print("Cleared all locally stored tokens.")
         return
 
-    resolution = resolve_context(base_url=base_url, profile=profile, require_base_url=True)
+    resolution = resolve_context(
+        base_url=base_url, profile=profile, require_base_url=True
+    )
     auth.clear_token(resolution.profile, resolution.base_url or "")
-    console.print(f"Cleared token for profile [bold]{resolution.profile}[/bold].")
+    console.print(
+        f"Cleared token for profile [bold]{resolution.profile}[/bold]."
+    )
 
 
 @cli.command(help="Set project/config defaults for current directory")
 @click.option("--project", prompt=True, help="Project slug")
 @click.option("--config", "config_name", prompt=True, help="Config slug")
 @click.option("--profile", default=None, help="Profile name")
-@click.option("--sync-profile/--local-only", default=True, help="Also save as profile defaults")
+@click.option(
+    "--sync-profile/--local-only",
+    default=True,
+    help="Also save as profile defaults",
+)
 @_handle_errors
-def setup(project: str, config_name: str, profile: str | None, sync_profile: bool) -> None:
+def setup(
+    project: str, config_name: str, profile: str | None, sync_profile: bool
+) -> None:
     resolution = resolve_context(profile=profile)
-    save_local_config(LocalConfig(profile=resolution.profile, project=project.strip(), config=config_name.strip()))
+    save_local_config(
+        LocalConfig(
+            profile=resolution.profile,
+            project=project.strip(),
+            config=config_name.strip(),
+        )
+    )
 
     if sync_profile:
         cfg = load_global_config()
@@ -226,17 +289,40 @@ def setup(project: str, config_name: str, profile: str | None, sync_profile: boo
 
 
 @cli.command(
-    context_settings={"ignore_unknown_options": True, "allow_interspersed_args": False},
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_interspersed_args": False,
+    },
     help="Run command with secrets injected into child process environment",
 )
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--project", default=None, help="Project slug override")
-@click.option("--config", "config_name", default=None, help="Config slug override")
+@click.option(
+    "--config", "config_name", default=None, help="Config slug override"
+)
 @click.option("--profile", default=None, help="Profile name")
-@click.option("--offline", is_flag=True, default=False, help="Use cached secrets only")
-@click.option("--cache-ttl", default=3600, show_default=True, type=int, help="Cache max age in seconds")
-@click.option("--print-env", is_flag=True, default=False, help="Print resolved keys before execution")
-@click.option("--show-values", is_flag=True, default=False, help="Show values with --print-env")
+@click.option(
+    "--offline", is_flag=True, default=False, help="Use cached secrets only"
+)
+@click.option(
+    "--cache-ttl",
+    default=3600,
+    show_default=True,
+    type=int,
+    help="Cache max age in seconds",
+)
+@click.option(
+    "--print-env",
+    is_flag=True,
+    default=False,
+    help="Print resolved keys before execution",
+)
+@click.option(
+    "--show-values",
+    is_flag=True,
+    default=False,
+    help="Show values with --print-env",
+)
 @click.argument("command", nargs=-1, type=click.UNPROCESSED)
 @_handle_errors
 def run(
@@ -285,14 +371,35 @@ def secrets() -> None:
 
 
 @secrets.command("download", help="Download secrets to stdout")
-@click.option("--format", "output_format", type=click.Choice(["json", "env"]), default="json", show_default=True)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["json", "env"]),
+    default="json",
+    show_default=True,
+)
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--project", default=None, help="Project slug override")
-@click.option("--config", "config_name", default=None, help="Config slug override")
+@click.option(
+    "--config", "config_name", default=None, help="Config slug override"
+)
 @click.option("--profile", default=None, help="Profile name")
-@click.option("--offline", is_flag=True, default=False, help="Use cached secrets only")
-@click.option("--cache-ttl", default=3600, show_default=True, type=int, help="Cache max age in seconds")
-@click.option("--raw", is_flag=True, default=False, help="Fetch raw values without resolving references")
+@click.option(
+    "--offline", is_flag=True, default=False, help="Use cached secrets only"
+)
+@click.option(
+    "--cache-ttl",
+    default=3600,
+    show_default=True,
+    type=int,
+    help="Cache max age in seconds",
+)
+@click.option(
+    "--raw",
+    is_flag=True,
+    default=False,
+    help="Fetch raw values without resolving references",
+)
 @_handle_errors
 def secrets_download(
     output_format: str,
@@ -321,7 +428,9 @@ def secrets_download(
         raw=raw,
     )
     if source != "remote":
-        console.print(f"Using secrets from [bold]{source}[/bold].", style="yellow")
+        console.print(
+            f"Using secrets from [bold]{source}[/bold].", style="yellow"
+        )
 
     if output_format == "json":
         console.print_json(json.dumps(secrets_data, sort_keys=True))
@@ -331,16 +440,45 @@ def secrets_download(
 
 
 @secrets.command("mount", help="Write secrets to a named pipe (FIFO)")
-@click.option("--path", "fifo_path", required=True, type=click.Path(path_type=Path), help="FIFO path")
-@click.option("--format", "output_format", type=click.Choice(["json", "env"]), default="env", show_default=True)
+@click.option(
+    "--path",
+    "fifo_path",
+    required=True,
+    type=click.Path(path_type=Path),
+    help="FIFO path",
+)
+@click.option(
+    "--format",
+    "output_format",
+    type=click.Choice(["json", "env"]),
+    default="env",
+    show_default=True,
+)
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--project", default=None, help="Project slug override")
-@click.option("--config", "config_name", default=None, help="Config slug override")
+@click.option(
+    "--config", "config_name", default=None, help="Config slug override"
+)
 @click.option("--profile", default=None, help="Profile name")
-@click.option("--offline", is_flag=True, default=False, help="Use cached secrets only")
-@click.option("--cache-ttl", default=3600, show_default=True, type=int, help="Cache max age in seconds")
-@click.option("--raw", is_flag=True, default=False, help="Fetch raw values without resolving references")
-@click.option("--keep", is_flag=True, default=False, help="Keep FIFO after write")
+@click.option(
+    "--offline", is_flag=True, default=False, help="Use cached secrets only"
+)
+@click.option(
+    "--cache-ttl",
+    default=3600,
+    show_default=True,
+    type=int,
+    help="Cache max age in seconds",
+)
+@click.option(
+    "--raw",
+    is_flag=True,
+    default=False,
+    help="Fetch raw values without resolving references",
+)
+@click.option(
+    "--keep", is_flag=True, default=False, help="Keep FIFO after write"
+)
 @_handle_errors
 def secrets_mount(
     fifo_path: Path,
@@ -371,7 +509,11 @@ def secrets_mount(
         raw=raw,
     )
 
-    payload = json.dumps(secrets_data, sort_keys=True) if output_format == "json" else render_env_lines(secrets_data)
+    payload = (
+        json.dumps(secrets_data, sort_keys=True)
+        if output_format == "json"
+        else render_env_lines(secrets_data)
+    )
 
     if fifo_path.exists():
         file_mode = fifo_path.stat().st_mode
@@ -384,7 +526,9 @@ def secrets_mount(
 
     console.print(f"FIFO created at {fifo_path}. Waiting for reader...")
     if source != "remote":
-        console.print(f"Using secrets from [bold]{source}[/bold].", style="yellow")
+        console.print(
+            f"Using secrets from [bold]{source}[/bold].", style="yellow"
+        )
 
     try:
         with fifo_path.open("w", encoding="utf-8") as handle:
@@ -471,8 +615,16 @@ def workspace_settings(base_url: str | None, profile: str | None) -> None:
 
 
 @workspace.command("settings-set", help="Update workspace settings")
-@click.option("--default-workspace-role", default=None, help="Role: owner|admin|collaborator|viewer")
-@click.option("--default-project-role", default=None, help="Role: admin|collaborator|viewer|none")
+@click.option(
+    "--default-workspace-role",
+    default=None,
+    help="Role: owner|admin|collaborator|viewer",
+)
+@click.option(
+    "--default-project-role",
+    default=None,
+    help="Role: admin|collaborator|viewer|none",
+)
 @click.option(
     "--referencing-enabled/--referencing-disabled",
     default=None,
@@ -496,7 +648,9 @@ def workspace_settings_set(
     if referencing_enabled is not None:
         updates["referencingEnabled"] = referencing_enabled
     if not updates:
-        raise CliError("No changes requested. Provide at least one option.", exit_code=2)
+        raise CliError(
+            "No changes requested. Provide at least one option.", exit_code=2
+        )
 
     client = _workspace_client(base_url, profile)
     client.update_workspace_settings(updates)
@@ -529,10 +683,20 @@ def workspace_members(base_url: str | None, profile: str | None) -> None:
 
 @workspace.command("member-add", help="Add a workspace member")
 @click.option("--username", prompt=True, help="Username")
-@click.option("--password", prompt=True, hide_input=True, confirmation_prompt=True, help="Initial password")
+@click.option(
+    "--password",
+    prompt=True,
+    hide_input=True,
+    confirmation_prompt=True,
+    help="Initial password",
+)
 @click.option("--email", default=None, help="Email")
 @click.option("--full-name", default=None, help="Full name")
-@click.option("--workspace-role", default=None, help="Role: owner|admin|collaborator|viewer")
+@click.option(
+    "--workspace-role",
+    default=None,
+    help="Role: owner|admin|collaborator|viewer",
+)
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--profile", default=None, help="Profile name")
 @_handle_errors
@@ -560,8 +724,14 @@ def workspace_member_add(
 @click.argument("username")
 @click.option("--email", default=None, help="Email")
 @click.option("--full-name", default=None, help="Full name")
-@click.option("--workspace-role", default=None, help="Role: owner|admin|collaborator|viewer")
-@click.option("--disable/--enable", default=None, help="Disable or enable user")
+@click.option(
+    "--workspace-role",
+    default=None,
+    help="Role: owner|admin|collaborator|viewer",
+)
+@click.option(
+    "--disable/--enable", default=None, help="Disable or enable user"
+)
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--profile", default=None, help="Profile name")
 @_handle_errors
@@ -584,7 +754,9 @@ def workspace_member_update(
     if disable is not None:
         updates["disabled"] = disable
     if not updates:
-        raise CliError("No changes requested. Provide at least one option.", exit_code=2)
+        raise CliError(
+            "No changes requested. Provide at least one option.", exit_code=2
+        )
 
     client = _workspace_client(base_url, profile)
     client.update_workspace_member(username, updates)
@@ -596,7 +768,9 @@ def workspace_member_update(
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--profile", default=None, help="Profile name")
 @_handle_errors
-def workspace_member_disable(username: str, base_url: str | None, profile: str | None) -> None:
+def workspace_member_disable(
+    username: str, base_url: str | None, profile: str | None
+) -> None:
     client = _workspace_client(base_url, profile)
     client.disable_workspace_member(username)
     console.print(f"Workspace member [bold]{username}[/bold] disabled.")
@@ -637,7 +811,9 @@ def workspace_group_add(
     profile: str | None,
 ) -> None:
     client = _workspace_client(base_url, profile)
-    client.create_workspace_group(slug=slug.strip(), name=name, description=description)
+    client.create_workspace_group(
+        slug=slug.strip(), name=name, description=description
+    )
     console.print(f"Group [bold]{slug}[/bold] created.")
 
 
@@ -656,7 +832,9 @@ def workspace_group_update(
     profile: str | None,
 ) -> None:
     client = _workspace_client(base_url, profile)
-    client.update_workspace_group(group_slug, name=name, description=description)
+    client.update_workspace_group(
+        group_slug, name=name, description=description
+    )
     console.print(f"Group [bold]{group_slug}[/bold] updated.")
 
 
@@ -665,7 +843,9 @@ def workspace_group_update(
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--profile", default=None, help="Profile name")
 @_handle_errors
-def workspace_group_delete(group_slug: str, base_url: str | None, profile: str | None) -> None:
+def workspace_group_delete(
+    group_slug: str, base_url: str | None, profile: str | None
+) -> None:
     client = _workspace_client(base_url, profile)
     client.delete_workspace_group(group_slug)
     console.print(f"Group [bold]{group_slug}[/bold] deleted.")
@@ -676,7 +856,9 @@ def workspace_group_delete(group_slug: str, base_url: str | None, profile: str |
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--profile", default=None, help="Profile name")
 @_handle_errors
-def workspace_group_members(group_slug: str, base_url: str | None, profile: str | None) -> None:
+def workspace_group_members(
+    group_slug: str, base_url: str | None, profile: str | None
+) -> None:
     client = _workspace_client(base_url, profile)
     members = client.list_workspace_group_members(group_slug)
     table = Table(title=f"Group members: {group_slug}")
@@ -688,8 +870,15 @@ def workspace_group_members(group_slug: str, base_url: str | None, profile: str 
 
 @workspace.command("group-members-set", help="Add/remove members in a group")
 @click.argument("group_slug")
-@click.option("--add", "add_members", multiple=True, help="Username to add (repeatable)")
-@click.option("--remove", "remove_members", multiple=True, help="Username to remove (repeatable)")
+@click.option(
+    "--add", "add_members", multiple=True, help="Username to add (repeatable)"
+)
+@click.option(
+    "--remove",
+    "remove_members",
+    multiple=True,
+    help="Username to remove (repeatable)",
+)
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--profile", default=None, help="Profile name")
 @_handle_errors
@@ -701,7 +890,9 @@ def workspace_group_members_set(
     profile: str | None,
 ) -> None:
     if not add_members and not remove_members:
-        raise CliError("Provide at least one --add or --remove value.", exit_code=2)
+        raise CliError(
+            "Provide at least one --add or --remove value.", exit_code=2
+        )
     client = _workspace_client(base_url, profile)
     client.update_workspace_group_members(
         group_slug,
@@ -734,7 +925,9 @@ def workspace_mappings(base_url: str | None, profile: str | None) -> None:
 
 
 @workspace.command("mapping-add", help="Create a workspace group mapping")
-@click.option("--provider", default="manual", show_default=True, help="Mapping provider")
+@click.option(
+    "--provider", default="manual", show_default=True, help="Mapping provider"
+)
 @click.option("--external-group-key", prompt=True, help="External group key")
 @click.option("--group-slug", prompt=True, help="Target group slug")
 @click.option("--base-url", default=None, help="Base URL override")
@@ -761,7 +954,9 @@ def workspace_mapping_add(
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--profile", default=None, help="Profile name")
 @_handle_errors
-def workspace_mapping_delete(mapping_id: str, base_url: str | None, profile: str | None) -> None:
+def workspace_mapping_delete(
+    mapping_id: str, base_url: str | None, profile: str | None
+) -> None:
     client = _workspace_client(base_url, profile)
     client.delete_workspace_group_mapping(mapping_id)
     console.print("Group mapping deleted.")
@@ -772,7 +967,9 @@ def workspace_mapping_delete(mapping_id: str, base_url: str | None, profile: str
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--profile", default=None, help="Profile name")
 @_handle_errors
-def workspace_project_members(project_slug: str, base_url: str | None, profile: str | None) -> None:
+def workspace_project_members(
+    project_slug: str, base_url: str | None, profile: str | None
+) -> None:
     client = _workspace_client(base_url, profile)
     members = client.list_workspace_project_members(project_slug)
     table = Table(title=f"Project members: {project_slug}")
@@ -788,11 +985,25 @@ def workspace_project_members(project_slug: str, base_url: str | None, profile: 
     console.print(table)
 
 
-@workspace.command("project-member-set", help="Assign user/group role for a project")
+@workspace.command(
+    "project-member-set", help="Assign user/group role for a project"
+)
 @click.option("--project", "project_slug", required=True, help="Project slug")
-@click.option("--subject-type", required=True, type=click.Choice(["user", "group"]), help="Subject type")
-@click.option("--subject-id", required=True, help="Username (user) or group slug (group)")
-@click.option("--role", required=True, type=click.Choice(["admin", "collaborator", "viewer", "none"]), help="Role")
+@click.option(
+    "--subject-type",
+    required=True,
+    type=click.Choice(["user", "group"]),
+    help="Subject type",
+)
+@click.option(
+    "--subject-id", required=True, help="Username (user) or group slug (group)"
+)
+@click.option(
+    "--role",
+    required=True,
+    type=click.Choice(["admin", "collaborator", "viewer", "none"]),
+    help="Role",
+)
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--profile", default=None, help="Profile name")
 @_handle_errors
@@ -814,10 +1025,19 @@ def workspace_project_member_set(
     console.print("Project member assignment updated.")
 
 
-@workspace.command("project-member-remove", help="Remove user/group project assignment")
+@workspace.command(
+    "project-member-remove", help="Remove user/group project assignment"
+)
 @click.option("--project", "project_slug", required=True, help="Project slug")
-@click.option("--subject-type", required=True, type=click.Choice(["user", "group"]), help="Subject type")
-@click.option("--subject-id", required=True, help="Username (user) or group slug (group)")
+@click.option(
+    "--subject-type",
+    required=True,
+    type=click.Choice(["user", "group"]),
+    help="Subject type",
+)
+@click.option(
+    "--subject-id", required=True, help="Username (user) or group slug (group)"
+)
 @click.option("--base-url", default=None, help="Base URL override")
 @click.option("--profile", default=None, help="Profile name")
 @_handle_errors
@@ -889,11 +1109,21 @@ def profile_use(name: str) -> None:
 @click.option("--base-url", default=None, help="Base URL")
 @click.option("--project", default=None, help="Default project")
 @click.option("--config", "config_name", default=None, help="Default config")
-@click.option("--activate", is_flag=True, default=False, help="Set as active profile")
+@click.option(
+    "--activate", is_flag=True, default=False, help="Set as active profile"
+)
 @_handle_errors
-def profile_set(name: str, base_url: str | None, project: str | None, config_name: str | None, activate: bool) -> None:
+def profile_set(
+    name: str,
+    base_url: str | None,
+    project: str | None,
+    config_name: str | None,
+    activate: bool,
+) -> None:
     if not any([base_url, project, config_name, activate]):
-        raise CliError("No changes requested. Provide at least one option.", exit_code=2)
+        raise CliError(
+            "No changes requested. Provide at least one option.", exit_code=2
+        )
 
     profile_name = name.strip()
     if not profile_name:

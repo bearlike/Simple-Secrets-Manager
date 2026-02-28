@@ -3,7 +3,11 @@ from datetime import datetime, timezone
 
 from Api.serialization import to_iso
 from Engines.common import is_valid_env_key
-from Engines.secret_icons import normalize_icon_slug, is_valid_icon_slug, resolve_icon_slug
+from Engines.secret_icons import (
+    normalize_icon_slug,
+    is_valid_icon_slug,
+    resolve_icon_slug,
+)
 
 
 class SecretCodec:
@@ -25,7 +29,9 @@ class SecretsV2:
         self._secrets.create_index([("config_id", 1), ("key", 1)], unique=True)
 
     def _existing_icon_slug(self, config_id, key):
-        existing = self._secrets.find_one({"config_id": config_id, "key": key}, {"icon_slug": 1})
+        existing = self._secrets.find_one(
+            {"config_id": config_id, "key": key}, {"icon_slug": 1}
+        )
         if not existing:
             return ""
         return normalize_icon_slug(existing.get("icon_slug"))
@@ -49,7 +55,9 @@ class SecretsV2:
         return [config_id_value]
 
     def _existing_project_icon_slug(self, config_id, key):
-        for current_config_id in self._project_config_ids_for_config(config_id):
+        for current_config_id in self._project_config_ids_for_config(
+            config_id
+        ):
             icon_slug = self._existing_icon_slug(current_config_id, key)
             if is_valid_icon_slug(icon_slug):
                 return icon_slug
@@ -62,7 +70,10 @@ class SecretsV2:
 
         update_many = getattr(self._secrets, "update_many", None)
         if callable(update_many):
-            update_many({"config_id": {"$in": config_ids}, "key": key}, {"$set": {"icon_slug": icon_slug}})
+            update_many(
+                {"config_id": {"$in": config_ids}, "key": key},
+                {"$set": {"icon_slug": icon_slug}},
+            )
             return
 
         for current_config_id in config_ids:
@@ -71,26 +82,42 @@ class SecretsV2:
                 {"$set": {"icon_slug": icon_slug}},
             )
 
-    def _resolve_icon_slug_for_put(self, config_id, key, icon_slug, icon_slug_provided):
+    def _resolve_icon_slug_for_put(
+        self, config_id, key, icon_slug, icon_slug_provided
+    ):
         if icon_slug_provided:
             if icon_slug is not None and not isinstance(icon_slug, str):
                 return None, "Invalid icon slug", 400
             normalized_icon_slug = normalize_icon_slug(icon_slug)
-            if normalized_icon_slug and not is_valid_icon_slug(normalized_icon_slug):
+            if normalized_icon_slug and not is_valid_icon_slug(
+                normalized_icon_slug
+            ):
                 return None, "Invalid icon slug", 400
             if normalized_icon_slug:
                 return normalized_icon_slug, None, None
             return resolve_icon_slug(key, None), None, None
 
-        existing_project_icon_slug = self._existing_project_icon_slug(config_id, key)
+        existing_project_icon_slug = self._existing_project_icon_slug(
+            config_id, key
+        )
         if is_valid_icon_slug(existing_project_icon_slug):
             return existing_project_icon_slug, None, None
         return resolve_icon_slug(key, None), None, None
 
-    def put(self, config_id, key, value, actor, icon_slug=None, icon_slug_provided=False):
+    def put(
+        self,
+        config_id,
+        key,
+        value,
+        actor,
+        icon_slug=None,
+        icon_slug_provided=False,
+    ):
         if not is_valid_env_key(key):
             return "Invalid secret key", 400
-        resolved_icon_slug, err, code = self._resolve_icon_slug_for_put(config_id, key, icon_slug, icon_slug_provided)
+        resolved_icon_slug, err, code = self._resolve_icon_slug_for_put(
+            config_id, key, icon_slug, icon_slug_provided
+        )
         if err:
             return err, code
 
@@ -103,7 +130,9 @@ class SecretsV2:
             }
         }
 
-        self._secrets.update_one({"config_id": config_id, "key": key}, update_doc, upsert=True)
+        self._secrets.update_one(
+            {"config_id": config_id, "key": key}, update_doc, upsert=True
+        )
         self._sync_project_icon_slug(config_id, key, resolved_icon_slug)
         return {"status": "OK", "key": key}, 200
 
@@ -113,7 +142,11 @@ class SecretsV2:
         doc = self._secrets.find_one({"config_id": config_id, "key": key})
         if not doc:
             return "Secret not found", 404
-        return {"key": key, "value": SecretCodec.decrypt(doc["value_enc"]), "status": "OK"}, 200
+        return {
+            "key": key,
+            "value": SecretCodec.decrypt(doc["value_enc"]),
+            "status": "OK",
+        }, 200
 
     def delete(self, config_id, key):
         if not is_valid_env_key(key):
@@ -159,7 +192,14 @@ class SecretsV2:
             current = parent.get("parent_config_id")
         return None, None, None, None
 
-    def compare_key_across_configs(self, configs, key, include_parent=True, include_metadata=True, include_empty=True):
+    def compare_key_across_configs(
+        self,
+        configs,
+        key,
+        include_parent=True,
+        include_metadata=True,
+        include_empty=True,
+    ):
         if not is_valid_env_key(key):
             return None, "Invalid secret key", 400
 
@@ -169,7 +209,9 @@ class SecretsV2:
 
         config_by_id = {cfg["_id"]: cfg for cfg in normalized_configs}
         config_ids = list(config_by_id.keys())
-        direct_docs = list(self._secrets.find({"config_id": {"$in": config_ids}, "key": key}))
+        direct_docs = list(
+            self._secrets.find({"config_id": {"$in": config_ids}, "key": key})
+        )
         direct_by_config_id = {doc["config_id"]: doc for doc in direct_docs}
 
         rows = []
@@ -181,8 +223,10 @@ class SecretsV2:
             is_inherited = False
 
             if effective_doc is None and include_parent:
-                inherited_source, inherited_doc, err, code = self._find_effective_for_config(
-                    config, config_by_id, direct_by_config_id
+                inherited_source, inherited_doc, err, code = (
+                    self._find_effective_for_config(
+                        config, config_by_id, direct_by_config_id
+                    )
                 )
                 if err:
                     return None, err, code
@@ -198,21 +242,35 @@ class SecretsV2:
                 "configId": str(config_id),
                 "configSlug": config["slug"],
                 "effective": {
-                    "value": SecretCodec.decrypt(effective_doc["value_enc"]) if effective_doc is not None else None,
-                    "source": source_config["slug"] if effective_doc is not None else None,
-                    "isInherited": is_inherited if effective_doc is not None else False,
+                    "value": SecretCodec.decrypt(effective_doc["value_enc"])
+                    if effective_doc is not None
+                    else None,
+                    "source": source_config["slug"]
+                    if effective_doc is not None
+                    else None,
+                    "isInherited": is_inherited
+                    if effective_doc is not None
+                    else False,
                 },
                 "direct": {
                     "exists": direct_doc is not None,
-                    "value": SecretCodec.decrypt(direct_doc["value_enc"]) if direct_doc is not None else None,
+                    "value": SecretCodec.decrypt(direct_doc["value_enc"])
+                    if direct_doc is not None
+                    else None,
                 },
             }
             if include_metadata:
                 row["meta"] = {
-                    "updatedAt": to_iso(effective_doc.get("updated_at")) if effective_doc is not None else None,
-                    "updatedBy": effective_doc.get("updated_by") if effective_doc is not None else None,
+                    "updatedAt": to_iso(effective_doc.get("updated_at"))
+                    if effective_doc is not None
+                    else None,
+                    "updatedBy": effective_doc.get("updated_by")
+                    if effective_doc is not None
+                    else None,
                     "iconSlug": (
-                        normalize_icon_slug(effective_doc.get("icon_slug")) if effective_doc is not None else ""
+                        normalize_icon_slug(effective_doc.get("icon_slug"))
+                        if effective_doc is not None
+                        else ""
                     ),
                 }
             rows.append(row)
@@ -234,7 +292,9 @@ class SecretsV2:
         chain.reverse()
         return chain, None, None
 
-    def export_config(self, config_id, include_parent=True, include_metadata=False):
+    def export_config(
+        self, config_id, include_parent=True, include_metadata=False
+    ):
         chain = [self._configs.get_by_id(config_id)]
         if chain[0] is None:
             return None, None, "Config not found", 404
@@ -269,7 +329,9 @@ class SecretsV2:
                     }
 
         for key in keys_needing_sync:
-            self._sync_project_icon_slug(config_id, key, project_icon_by_key[key])
+            self._sync_project_icon_slug(
+                config_id, key, project_icon_by_key[key]
+            )
         return merged, meta if include_metadata else None, "OK", 200
 
     @staticmethod
@@ -277,6 +339,11 @@ class SecretsV2:
         lines = []
         for key, value in data.items():
             if "\n" in value:
-                return None, f"Value for {key} contains newline; env format does not support it", 400
+                return (
+                    None,
+                    f"Value for {key} contains newline; "
+                    "env format does not support it",
+                    400,
+                )
             lines.append(f"{key}={value}")
         return "\n".join(lines), "OK", 200

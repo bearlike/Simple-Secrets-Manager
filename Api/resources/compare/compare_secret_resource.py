@@ -4,7 +4,10 @@ from flask_restx import Resource, inputs
 
 from Api.api import api, conn
 from Api.resources.helpers import resolve_project_config
-from Api.resources.secrets.references import SecretReferenceError, SecretReferenceResolver
+from Api.resources.secrets.references import (
+    SecretReferenceError,
+    SecretReferenceResolver,
+)
 from Access.is_auth import with_token
 from Access.policy import authorize
 from Engines.common import is_valid_env_key
@@ -17,27 +20,50 @@ from Engines.compare_issues import (
     has_broken_reference,
 )
 
-compare_ns = api.namespace("projects/<string:project_slug>/compare", description="Project secret comparison")
+compare_ns = api.namespace(
+    "projects/<string:project_slug>/compare",
+    description="Project secret comparison",
+)
 compare_secret_parser = api.parser()
-compare_secret_parser.add_argument("include_parent", type=inputs.boolean, default=True, location="args")
-compare_secret_parser.add_argument("include_meta", type=inputs.boolean, default=True, location="args")
-compare_secret_parser.add_argument("include_empty", type=inputs.boolean, default=True, location="args")
-compare_secret_parser.add_argument("raw", type=inputs.boolean, default=False, location="args")
-compare_secret_parser.add_argument("resolve_references", type=inputs.boolean, default=True, location="args")
-compare_secret_parser.add_argument("limit_configs", type=int, default=200, location="args")
-compare_secret_parser.add_argument("placeholder_max_depth", type=int, default=8, location="args")
+compare_secret_parser.add_argument(
+    "include_parent", type=inputs.boolean, default=True, location="args"
+)
+compare_secret_parser.add_argument(
+    "include_meta", type=inputs.boolean, default=True, location="args"
+)
+compare_secret_parser.add_argument(
+    "include_empty", type=inputs.boolean, default=True, location="args"
+)
+compare_secret_parser.add_argument(
+    "raw", type=inputs.boolean, default=False, location="args"
+)
+compare_secret_parser.add_argument(
+    "resolve_references", type=inputs.boolean, default=True, location="args"
+)
+compare_secret_parser.add_argument(
+    "limit_configs", type=int, default=200, location="args"
+)
+compare_secret_parser.add_argument(
+    "placeholder_max_depth", type=int, default=8, location="args"
+)
 
 
 def _require_reference_scope(actor):
     def _check(action, project_id, config_id):
-        if authorize(actor, action, project_id=project_id, config_id=config_id):
+        if authorize(
+            actor, action, project_id=project_id, config_id=config_id
+        ):
             return None
-        raise SecretReferenceError("Unresolved reference due to missing access scope", status_code=403)
+        raise SecretReferenceError(
+            "Unresolved reference due to missing access scope", status_code=403
+        )
 
     return _check
 
 
-def _build_compare_reference_resolver(actor, project_slug, config_slug, max_depth, root_data):
+def _build_compare_reference_resolver(
+    actor, project_slug, config_slug, max_depth, root_data
+):
     return SecretReferenceResolver(
         project_slug=project_slug,
         config_slug=config_slug,
@@ -75,7 +101,12 @@ class CompareSecretResource(Resource):
         authorized_configs = [
             cfg
             for cfg in all_configs
-            if authorize(actor, "secrets:export", project_id=project["_id"], config_id=cfg.get("_id"))
+            if authorize(
+                actor,
+                "secrets:export",
+                project_id=project["_id"],
+                config_id=cfg.get("_id"),
+            )
         ][:limit_configs]
 
         rows, msg, code = conn.secrets_v2.compare_key_across_configs(
@@ -88,8 +119,14 @@ class CompareSecretResource(Resource):
         if code >= 400:
             api.abort(code, msg)
 
-        resolve_references = bool(args["resolve_references"]) and not bool(args["raw"])
-        config_id_by_slug = {cfg["slug"]: cfg["_id"] for cfg in authorized_configs if "slug" in cfg and "_id" in cfg}
+        resolve_references = bool(args["resolve_references"]) and not bool(
+            args["raw"]
+        )
+        config_id_by_slug = {
+            cfg["slug"]: cfg["_id"]
+            for cfg in authorized_configs
+            if "slug" in cfg and "_id" in cfg
+        }
         exported_cache = {}
         for row in rows:
             effective = row.get("effective", {})
@@ -100,7 +137,8 @@ class CompareSecretResource(Resource):
                 issues.append(
                     build_issue(
                         ISSUE_MISSING_EFFECTIVE_VALUE,
-                        "Key is missing in this config and its inheritance chain.",
+                        "Key is missing in this config and its inheritance "
+                        "chain.",
                     )
                 )
                 row["issues"] = issues
@@ -126,10 +164,12 @@ class CompareSecretResource(Resource):
                 continue
 
             if config_id not in exported_cache:
-                exported, _, export_msg, export_code = conn.secrets_v2.export_config(
-                    config_id,
-                    include_parent=args["include_parent"],
-                    include_metadata=False,
+                exported, _, export_msg, export_code = (
+                    conn.secrets_v2.export_config(
+                        config_id,
+                        include_parent=args["include_parent"],
+                        include_metadata=False,
+                    )
                 )
                 exported_cache[config_id] = (exported, export_msg, export_code)
             exported, export_msg, export_code = exported_cache[config_id]
@@ -151,7 +191,9 @@ class CompareSecretResource(Resource):
                 max_depth=args["placeholder_max_depth"],
                 root_data=exported,
             )
-            validation_errors = resolver.validate_value_references(key=key, value=value)
+            validation_errors = resolver.validate_value_references(
+                key=key, value=value
+            )
             seen_codes = set()
             for error_message in validation_errors:
                 code_for_error = classify_reference_error(error_message)
@@ -182,7 +224,9 @@ class CompareSecretResource(Resource):
                 missing_count += 1
             else:
                 unique_effective_values.add(value)
-            response_configs.append({k: v for k, v in row.items() if k != "configId"})
+            response_configs.append(
+                {k: v for k, v in row.items() if k != "configId"}
+            )
 
         return {
             "status": "OK",

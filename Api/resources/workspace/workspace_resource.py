@@ -6,48 +6,100 @@ from Api.api import api, conn
 from Api.serialization import oid_to_str, to_iso
 from Access.is_auth import with_token, require_scope
 
-workspace_ns = api.namespace("workspace", description="Workspace RBAC management")
+workspace_ns = api.namespace(
+    "workspace", description="Workspace RBAC management"
+)
 
 settings_parser = api.parser()
-settings_parser.add_argument("defaultWorkspaceRole", type=str, required=False, location="json")
-settings_parser.add_argument("defaultProjectRole", type=str, required=False, location="json")
-settings_parser.add_argument("referencingEnabled", type=bool, required=False, location="json")
+settings_parser.add_argument(
+    "defaultWorkspaceRole", type=str, required=False, location="json"
+)
+settings_parser.add_argument(
+    "defaultProjectRole", type=str, required=False, location="json"
+)
+settings_parser.add_argument(
+    "referencingEnabled", type=bool, required=False, location="json"
+)
 
 member_create_parser = api.parser()
-member_create_parser.add_argument("username", type=str, required=True, location="json")
-member_create_parser.add_argument("password", type=str, required=True, location="json")
-member_create_parser.add_argument("email", type=str, required=False, location="json")
-member_create_parser.add_argument("fullName", type=str, required=False, location="json")
-member_create_parser.add_argument("workspaceRole", type=str, required=False, location="json")
+member_create_parser.add_argument(
+    "username", type=str, required=True, location="json"
+)
+member_create_parser.add_argument(
+    "password", type=str, required=True, location="json"
+)
+member_create_parser.add_argument(
+    "email", type=str, required=False, location="json"
+)
+member_create_parser.add_argument(
+    "fullName", type=str, required=False, location="json"
+)
+member_create_parser.add_argument(
+    "workspaceRole", type=str, required=False, location="json"
+)
 
 member_update_parser = api.parser()
-member_update_parser.add_argument("email", type=str, required=False, location="json")
-member_update_parser.add_argument("fullName", type=str, required=False, location="json")
-member_update_parser.add_argument("workspaceRole", type=str, required=False, location="json")
-member_update_parser.add_argument("disabled", type=bool, required=False, location="json")
+member_update_parser.add_argument(
+    "email", type=str, required=False, location="json"
+)
+member_update_parser.add_argument(
+    "fullName", type=str, required=False, location="json"
+)
+member_update_parser.add_argument(
+    "workspaceRole", type=str, required=False, location="json"
+)
+member_update_parser.add_argument(
+    "disabled", type=bool, required=False, location="json"
+)
 
 project_member_put_parser = api.parser()
-project_member_put_parser.add_argument("subjectType", type=str, required=True, location="json")
-project_member_put_parser.add_argument("subjectId", type=str, required=True, location="json")
-project_member_put_parser.add_argument("role", type=str, required=True, location="json")
+project_member_put_parser.add_argument(
+    "subjectType", type=str, required=True, location="json"
+)
+project_member_put_parser.add_argument(
+    "subjectId", type=str, required=True, location="json"
+)
+project_member_put_parser.add_argument(
+    "role", type=str, required=True, location="json"
+)
 
 group_create_parser = api.parser()
-group_create_parser.add_argument("slug", type=str, required=True, location="json")
-group_create_parser.add_argument("name", type=str, required=False, location="json")
-group_create_parser.add_argument("description", type=str, required=False, location="json")
+group_create_parser.add_argument(
+    "slug", type=str, required=True, location="json"
+)
+group_create_parser.add_argument(
+    "name", type=str, required=False, location="json"
+)
+group_create_parser.add_argument(
+    "description", type=str, required=False, location="json"
+)
 
 group_update_parser = api.parser()
-group_update_parser.add_argument("name", type=str, required=False, location="json")
-group_update_parser.add_argument("description", type=str, required=False, location="json")
+group_update_parser.add_argument(
+    "name", type=str, required=False, location="json"
+)
+group_update_parser.add_argument(
+    "description", type=str, required=False, location="json"
+)
 
 group_members_put_parser = api.parser()
-group_members_put_parser.add_argument("add", type=list, required=False, location="json")
-group_members_put_parser.add_argument("remove", type=list, required=False, location="json")
+group_members_put_parser.add_argument(
+    "add", type=list, required=False, location="json"
+)
+group_members_put_parser.add_argument(
+    "remove", type=list, required=False, location="json"
+)
 
 mapping_create_parser = api.parser()
-mapping_create_parser.add_argument("provider", type=str, required=True, location="json")
-mapping_create_parser.add_argument("externalGroupKey", type=str, required=True, location="json")
-mapping_create_parser.add_argument("groupSlug", type=str, required=True, location="json")
+mapping_create_parser.add_argument(
+    "provider", type=str, required=True, location="json"
+)
+mapping_create_parser.add_argument(
+    "externalGroupKey", type=str, required=True, location="json"
+)
+mapping_create_parser.add_argument(
+    "groupSlug", type=str, required=True, location="json"
+)
 
 
 def _workspace_context():
@@ -116,7 +168,9 @@ class WorkspaceSettingsResource(Resource):
         if not isinstance(payload, dict):
             api.abort(400, "Invalid JSON payload")
 
-        settings, msg, code = conn.workspaces.update_settings(workspace_id, payload)
+        settings, msg, code = conn.workspaces.update_settings(
+            workspace_id, payload
+        )
         if code >= 400:
             api.abort(code, msg)
 
@@ -132,7 +186,9 @@ class WorkspaceMembersResource(Resource):
         _, workspace_id = _workspace_context()
 
         memberships = conn.memberships.list_workspace_memberships(workspace_id)
-        users_by_username = {doc.get("username"): doc for doc in conn.users.list()}
+        users_by_username = {
+            doc.get("username"): doc for doc in conn.users.list()
+        }
 
         members = []
         for membership in memberships:
@@ -157,26 +213,39 @@ class WorkspaceMembersResource(Resource):
         if conn.users.get(username):
             api.abort(400, "User already exists")
 
-        userpass_status, userpass_code = conn.userpass.register(username=username, password=args["password"])
+        userpass_status, userpass_code = conn.userpass.register(
+            username=username, password=args["password"]
+        )
         if userpass_code >= 400:
             api.abort(userpass_code, userpass_status)
 
-        user, msg, code = conn.users.create(username, email=args.get("email"), full_name=args.get("fullName"))
+        user, msg, code = conn.users.create(
+            username, email=args.get("email"), full_name=args.get("fullName")
+        )
         if code >= 400:
             conn.userpass.remove(username)
             api.abort(code, msg)
 
         settings = conn.workspaces.get_settings(workspace_id) or {}
-        role = args.get("workspaceRole") or settings.get("defaultWorkspaceRole") or "viewer"
-        membership, membership_msg, membership_code = conn.memberships.upsert_workspace_membership(
-            workspace_id, username, role
+        role = (
+            args.get("workspaceRole")
+            or settings.get("defaultWorkspaceRole")
+            or "viewer"
+        )
+        membership, membership_msg, membership_code = (
+            conn.memberships.upsert_workspace_membership(
+                workspace_id, username, role
+            )
         )
         if membership_code >= 400:
             conn.userpass.remove(username)
             conn.users.delete(username)
             api.abort(membership_code, membership_msg)
 
-        return {"status": "OK", "member": _serialize_member_row(user, membership)}, 201
+        return {
+            "status": "OK",
+            "member": _serialize_member_row(user, membership),
+        }, 201
 
 
 @workspace_ns.route("/members/<string:username>")
@@ -191,9 +260,13 @@ class WorkspaceMemberItemResource(Resource):
         if not user:
             api.abort(404, "User not found")
 
-        membership = conn.memberships.get_workspace_membership(workspace_id, username)
+        membership = conn.memberships.get_workspace_membership(
+            workspace_id, username
+        )
         if not membership:
-            membership, _, _ = conn.memberships.upsert_workspace_membership(workspace_id, username, "viewer")
+            membership, _, _ = conn.memberships.upsert_workspace_membership(
+                workspace_id, username, "viewer"
+            )
 
         payload = request.get_json(silent=True)
         if not isinstance(payload, dict):
@@ -203,7 +276,9 @@ class WorkspaceMemberItemResource(Resource):
             _, msg, code = conn.users.update_profile(
                 username,
                 email=payload.get("email") if "email" in payload else None,
-                full_name=payload.get("fullName") if "fullName" in payload else None,
+                full_name=payload.get("fullName")
+                if "fullName" in payload
+                else None,
             )
             if code >= 400:
                 api.abort(code, msg)
@@ -211,22 +286,31 @@ class WorkspaceMemberItemResource(Resource):
         if "disabled" in payload:
             if not isinstance(payload.get("disabled"), bool):
                 api.abort(400, "disabled must be boolean")
-            _, msg, code = conn.users.set_disabled(username, payload.get("disabled"))
+            _, msg, code = conn.users.set_disabled(
+                username, payload.get("disabled")
+            )
             if code >= 400:
                 api.abort(code, msg)
 
         if "workspaceRole" in payload:
-            membership, msg, code = conn.memberships.upsert_workspace_membership(
-                workspace_id,
-                username,
-                payload.get("workspaceRole"),
+            membership, msg, code = (
+                conn.memberships.upsert_workspace_membership(
+                    workspace_id,
+                    username,
+                    payload.get("workspaceRole"),
+                )
             )
             if code >= 400:
                 api.abort(code, msg)
 
         user = conn.users.get(username)
-        membership = conn.memberships.get_workspace_membership(workspace_id, username)
-        return {"status": "OK", "member": _serialize_member_row(user, membership)}, 200
+        membership = conn.memberships.get_workspace_membership(
+            workspace_id, username
+        )
+        return {
+            "status": "OK",
+            "member": _serialize_member_row(user, membership),
+        }, 200
 
     @api.doc(security=["Bearer", "Token"])
     @with_token
@@ -242,8 +326,15 @@ class WorkspaceMemberItemResource(Resource):
         if code >= 400:
             api.abort(code, msg)
 
-        membership = conn.memberships.get_workspace_membership(workspace_id, username)
-        return {"status": "OK", "member": _serialize_member_row(conn.users.get(username), membership)}, 200
+        membership = conn.memberships.get_workspace_membership(
+            workspace_id, username
+        )
+        return {
+            "status": "OK",
+            "member": _serialize_member_row(
+                conn.users.get(username), membership
+            ),
+        }, 200
 
 
 @workspace_ns.route("/projects/<string:project_slug>/members")
@@ -254,7 +345,9 @@ class WorkspaceProjectMembersResource(Resource):
         require_scope("workspace:project-members:read")
         _, workspace_id = _workspace_context()
         project = _resolve_project(project_slug)
-        memberships = conn.memberships.list_project_memberships(workspace_id, project["_id"])
+        memberships = conn.memberships.list_project_memberships(
+            workspace_id, project["_id"]
+        )
 
         items = []
         for item in memberships:
@@ -309,7 +402,9 @@ class WorkspaceProjectMembersResource(Resource):
         return {"status": "OK"}, 200
 
 
-@workspace_ns.route("/projects/<string:project_slug>/members/<string:subject_type>/<string:subject_id>")
+@workspace_ns.route(
+    "/projects/<string:project_slug>/members/<string:subject_type>/<string:subject_id>"
+)
 class WorkspaceProjectMemberItemResource(Resource):
     @api.doc(security=["Bearer", "Token"])
     @with_token
@@ -343,7 +438,10 @@ class WorkspaceGroupsResource(Resource):
         require_scope("workspace:groups:read")
         _, workspace_id = _workspace_context()
         groups = conn.groups.list_groups(workspace_id)
-        return {"status": "OK", "groups": [_group_doc_to_payload(doc) for doc in groups]}, 200
+        return {
+            "status": "OK",
+            "groups": [_group_doc_to_payload(doc) for doc in groups],
+        }, 200
 
     @api.doc(security=["Bearer", "Token"], parser=group_create_parser)
     @with_token
@@ -406,7 +504,9 @@ class WorkspaceGroupMembersResource(Resource):
         members = conn.groups.list_group_members(workspace_id, group["_id"])
         return {
             "status": "OK",
-            "members": [doc.get("username") for doc in members if doc.get("username")],
+            "members": [
+                doc.get("username") for doc in members if doc.get("username")
+            ],
         }, 200
 
     @api.doc(security=["Bearer", "Token"], parser=group_members_put_parser)
@@ -433,7 +533,9 @@ class WorkspaceGroupMembersResource(Resource):
 
         return {
             "status": "OK",
-            "members": [doc.get("username") for doc in members if doc.get("username")],
+            "members": [
+                doc.get("username") for doc in members if doc.get("username")
+            ],
         }, 200
 
 
@@ -448,7 +550,9 @@ class WorkspaceGroupMappingsResource(Resource):
 
         payload = []
         for mapping in mappings:
-            group = conn.groups.get_by_id(workspace_id, mapping.get("group_id"))
+            group = conn.groups.get_by_id(
+                workspace_id, mapping.get("group_id")
+            )
             payload.append(
                 {
                     "id": oid_to_str(mapping.get("_id")),

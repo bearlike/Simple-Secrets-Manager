@@ -24,7 +24,11 @@ api = Api(
 app = Flask(__name__)
 app.register_blueprint(api_v1)
 
-cors_origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip()]
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
 CORS(
     app,
     resources={r"/api/*": {"origins": cors_origins or "*"}},
@@ -50,7 +54,9 @@ if True:
         SecretItemResource,
         SecretExportResource,
     )
-    from Api.resources.compare.compare_secret_resource import CompareSecretResource  # noqa: F401
+    from Api.resources.compare.compare_secret_resource import (
+        CompareSecretResource,  # noqa: F401
+    )
     from Api.resources.audit.audit_resource import AuditEventsResource  # noqa: F401
     from Api.resources.me import MeResource  # noqa: F401
     from Api.resources.workspace.workspace_resource import (  # noqa: F401

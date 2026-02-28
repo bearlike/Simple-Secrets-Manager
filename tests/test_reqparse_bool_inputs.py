@@ -14,6 +14,8 @@ def test_default_bool_type_misparses_false_string():
 
 def test_inputs_boolean_parses_false_and_true_strings():
     parser = reqparse.RequestParser()
-    parser.add_argument("flag", type=inputs.boolean, default=False, location="args")
+    parser.add_argument(
+        "flag", type=inputs.boolean, default=False, location="args"
+    )
     assert _convert_with(parser, "flag", "false") is False
     assert _convert_with(parser, "flag", "true") is True

@@ -58,7 +58,9 @@ def _load_index() -> Dict[str, Dict[str, object]]:
 
 
 def _candidate_terms(tokens: Iterable[str]) -> Iterable[Tuple[str, int]]:
-    normalized_tokens = [token for token in tokens if token and token not in STOP_TOKENS]
+    normalized_tokens = [
+        token for token in tokens if token and token not in STOP_TOKENS
+    ]
     for token in normalized_tokens:
         if len(token) >= 3:
             yield token, 1
@@ -79,7 +81,9 @@ def guess_icon_slug(key: str) -> str:
     if not index:
         return DEFAULT_ICON_SLUG
 
-    tokens = [token for token in TOKEN_SPLIT_PATTERN.split(key.lower()) if token]
+    tokens = [
+        token for token in TOKEN_SPLIT_PATTERN.split(key.lower()) if token
+    ]
     if not tokens:
         return DEFAULT_ICON_SLUG
 

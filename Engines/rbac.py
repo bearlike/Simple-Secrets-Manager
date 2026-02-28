@@ -111,7 +111,12 @@ class RBAC:
         if self._onboarding_state is None:
             return None
         try:
-            doc = self._onboarding_state.find_one({"_id": self.ONBOARDING_DOC_ID}) or {}
+            doc = (
+                self._onboarding_state.find_one(
+                    {"_id": self.ONBOARDING_DOC_ID}
+                )
+                or {}
+            )
         except Exception:
             return None
         username = doc.get("initialized_by")
@@ -124,7 +129,9 @@ class RBAC:
         if workspace_id is None:
             return None, None, None
 
-        membership = self._memberships.get_workspace_membership(workspace_id, username)
+        membership = self._memberships.get_workspace_membership(
+            workspace_id, username
+        )
         bootstrap_owner = self._bootstrap_owner_username()
         if (
             membership
@@ -132,7 +139,9 @@ class RBAC:
             and username == bootstrap_owner
             and membership.get("workspace_role") != "owner"
         ):
-            membership, _, _ = self._memberships.upsert_workspace_membership(workspace_id, username, "owner")
+            membership, _, _ = self._memberships.upsert_workspace_membership(
+                workspace_id, username, "owner"
+            )
         if membership:
             return workspace, user, membership
 
@@ -148,18 +157,24 @@ class RBAC:
         elif not self._memberships.has_workspace_role(workspace_id, "owner"):
             role = "owner"
 
-        membership, _, _ = self._memberships.upsert_workspace_membership(workspace_id, username, role)
+        membership, _, _ = self._memberships.upsert_workspace_membership(
+            workspace_id, username, role
+        )
         return workspace, self._users.get(username), membership
 
     @staticmethod
     def _project_role_max(current_role, new_role):
-        if PROJECT_ROLE_RANK.get(new_role, 0) > PROJECT_ROLE_RANK.get(current_role, 0):
+        if PROJECT_ROLE_RANK.get(new_role, 0) > PROJECT_ROLE_RANK.get(
+            current_role, 0
+        ):
             return new_role
         return current_role
 
     def _project_roles_for_user(self, workspace_id, username):
         group_ids = self._groups.list_user_group_ids(workspace_id, username)
-        docs = self._memberships.list_project_memberships_for_subjects(workspace_id, username, group_ids)
+        docs = self._memberships.list_project_memberships_for_subjects(
+            workspace_id, username, group_ids
+        )
 
         roles = defaultdict(lambda: "none")
         for doc in docs:
@@ -169,11 +184,15 @@ class RBAC:
             project_role = doc.get("project_role")
             if project_role not in PROJECT_ROLES:
                 continue
-            roles[project_id] = self._project_role_max(roles[project_id], project_role)
+            roles[project_id] = self._project_role_max(
+                roles[project_id], project_role
+            )
         return roles
 
     def resolve_personal_actor(self, username):
-        workspace, user, membership = self._ensure_user_workspace_membership(username)
+        workspace, user, membership = self._ensure_user_workspace_membership(
+            username
+        )
         if workspace is None or membership is None:
             return {
                 "workspace_id": None,
@@ -186,7 +205,9 @@ class RBAC:
             }
 
         workspace_id = workspace.get("_id")
-        workspace_role = membership.get("workspace_role") or DEFAULT_WORKSPACE_ROLE
+        workspace_role = (
+            membership.get("workspace_role") or DEFAULT_WORKSPACE_ROLE
+        )
         if workspace_role not in WORKSPACE_ROLES:
             workspace_role = DEFAULT_WORKSPACE_ROLE
 
@@ -206,7 +227,9 @@ class RBAC:
         visible_project_ids = []
         project_roles = {}
 
-        global_actions = WORKSPACE_ROLE_GLOBAL_ACTIONS.get(workspace_role) or []
+        global_actions = (
+            WORKSPACE_ROLE_GLOBAL_ACTIONS.get(workspace_role) or []
+        )
         if global_actions:
             scopes.append({"actions": list(global_actions)})
 

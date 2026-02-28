@@ -38,14 +38,18 @@ class SecretReferenceResolver:
         config_slug: str,
         get_project_by_slug: Callable[[str], dict | None],
         get_config_by_slug: Callable[[object, str], dict | None],
-        export_config: Callable[[object], tuple[dict | None, object, str, int]],
+        export_config: Callable[
+            [object], tuple[dict | None, object, str, int]
+        ],
         require_scope: Callable[[str, object, object], object] | None = None,
         max_depth: int = 8,
         root_data: dict[str, str] | None = None,
     ):
         if max_depth < 1:
             raise SecretReferenceError("placeholder_max_depth must be >= 1")
-        self._root = _Context(project_slug=project_slug, config_slug=config_slug)
+        self._root = _Context(
+            project_slug=project_slug, config_slug=config_slug
+        )
         self._get_project_by_slug = get_project_by_slug
         self._get_config_by_slug = get_config_by_slug
         self._export_config = export_config
@@ -62,10 +66,19 @@ class SecretReferenceResolver:
         resolved: dict[str, str] = {}
         for key, value in data.items():
             node = _Node(self._root.project_slug, self._root.config_slug, key)
-            resolved[key] = self._resolve_value(value, current=self._root, stack=(node,), depth=0)
+            resolved[key] = self._resolve_value(
+                value, current=self._root, stack=(node,), depth=0
+            )
         return resolved
 
-    def _resolve_value(self, value: str, *, current: _Context, stack: tuple[_Node, ...], depth: int) -> str:
+    def _resolve_value(
+        self,
+        value: str,
+        *,
+        current: _Context,
+        stack: tuple[_Node, ...],
+        depth: int,
+    ) -> str:
         if "${" not in value:
             return value
 
@@ -97,15 +110,23 @@ class SecretReferenceResolver:
                 errors.append(exc.message)
         return sorted(set(errors))
 
-    def _ensure_node_resolvable(self, node: _Node, *, stack: tuple[_Node, ...], depth: int) -> None:
+    def _ensure_node_resolvable(
+        self, node: _Node, *, stack: tuple[_Node, ...], depth: int
+    ) -> None:
         if depth >= self._max_depth:
             raise SecretReferenceError(
-                f"Secret reference max depth exceeded ({self._max_depth}) while validating "
+                f"Secret reference max depth exceeded "
+                f"({self._max_depth}) while validating "
                 f"{node.project_slug}.{node.config_slug}.{node.key}"
             )
         if node in stack:
-            path = " -> ".join(f"{item.project_slug}.{item.config_slug}.{item.key}" for item in (*stack, node))
-            raise SecretReferenceError(f"Secret reference cycle detected: {path}")
+            path = " -> ".join(
+                f"{item.project_slug}.{item.config_slug}.{item.key}"
+                for item in (*stack, node)
+            )
+            raise SecretReferenceError(
+                f"Secret reference cycle detected: {path}"
+            )
         if node in self._validated_cache:
             return
 
@@ -113,28 +134,43 @@ class SecretReferenceResolver:
         data = self._load_context_data(context)
         raw_value = data.get(node.key)
         if raw_value is None:
-            raise SecretReferenceError(f"Unresolved reference: ${{{node.project_slug}.{node.config_slug}.{node.key}}}")
+            raise SecretReferenceError(
+                "Unresolved reference: "
+                f"${{{node.project_slug}.{node.config_slug}.{node.key}}}"
+            )
 
         for match in PLACEHOLDER_PATTERN.finditer(raw_value):
             token = match.group(1).strip()
             parsed = self._parse_reference(token, context)
             if parsed is None:
                 raise SecretReferenceError(
-                    f"Invalid reference syntax in {node.project_slug}.{node.config_slug}.{node.key}: {match.group(0)}"
+                    "Invalid reference syntax in "
+                    f"{node.project_slug}.{node.config_slug}.{node.key}: "
+                    f"{match.group(0)}"
                 )
-            self._ensure_node_resolvable(parsed, stack=(*stack, node), depth=depth + 1)
+            self._ensure_node_resolvable(
+                parsed, stack=(*stack, node), depth=depth + 1
+            )
 
         self._validated_cache.add(node)
 
-    def _resolve_key(self, node: _Node, *, stack: tuple[_Node, ...], depth: int) -> str | None:
+    def _resolve_key(
+        self, node: _Node, *, stack: tuple[_Node, ...], depth: int
+    ) -> str | None:
         if depth >= self._max_depth:
             raise SecretReferenceError(
-                f"Secret reference max depth exceeded ({self._max_depth}) while resolving "
+                f"Secret reference max depth exceeded "
+                f"({self._max_depth}) while resolving "
                 f"{node.project_slug}.{node.config_slug}.{node.key}"
             )
         if node in stack:
-            path = " -> ".join(f"{item.project_slug}.{item.config_slug}.{item.key}" for item in (*stack, node))
-            raise SecretReferenceError(f"Secret reference cycle detected: {path}")
+            path = " -> ".join(
+                f"{item.project_slug}.{item.config_slug}.{item.key}"
+                for item in (*stack, node)
+            )
+            raise SecretReferenceError(
+                f"Secret reference cycle detected: {path}"
+            )
         if node in self._resolved_cache:
             return self._resolved_cache[node]
 
@@ -144,7 +180,9 @@ class SecretReferenceResolver:
         if raw_value is None:
             return None
 
-        resolved = self._resolve_value(raw_value, current=context, stack=(*stack, node), depth=depth + 1)
+        resolved = self._resolve_value(
+            raw_value, current=context, stack=(*stack, node), depth=depth + 1
+        )
         self._resolved_cache[node] = resolved
         return resolved
 
@@ -162,7 +200,11 @@ class SecretReferenceResolver:
             return _Node(current.project_slug, config_slug, key)
         if len(parts) == 3:
             project_slug, config_slug, key = parts
-            if not (is_valid_slug(project_slug) and is_valid_slug(config_slug) and is_valid_env_key(key)):
+            if not (
+                is_valid_slug(project_slug)
+                and is_valid_slug(config_slug)
+                and is_valid_env_key(key)
+            ):
                 return None
             return _Node(project_slug, config_slug, key)
         return None
@@ -188,7 +230,9 @@ class SecretReferenceResolver:
             self._context_cache[context] = {}
             return self._context_cache[context]
         if code >= 400:
-            raise SecretReferenceError(msg, status_code=code if code >= 400 else 400)
+            raise SecretReferenceError(
+                msg, status_code=code if code >= 400 else 400
+            )
 
         self._context_cache[context] = data
         return data

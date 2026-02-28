@@ -13,8 +13,12 @@ audit_parser = api.parser()
 audit_parser.add_argument("project", type=str, required=False, location="args")
 audit_parser.add_argument("config", type=str, required=False, location="args")
 audit_parser.add_argument("since", type=str, required=False, location="args")
-audit_parser.add_argument("limit", type=int, required=False, default=50, location="args")
-audit_parser.add_argument("page", type=int, required=False, default=1, location="args")
+audit_parser.add_argument(
+    "limit", type=int, required=False, default=50, location="args"
+)
+audit_parser.add_argument(
+    "page", type=int, required=False, default=1, location="args"
+)
 
 
 @audit_ns.route("/events")
@@ -33,7 +37,9 @@ class AuditEventsResource(Resource):
         project_slug = args.get("project")
         config_slug = args.get("config")
         if config_slug and not project_slug:
-            api.abort(400, "project query param is required when config is provided")
+            api.abort(
+                400, "project query param is required when config is provided"
+            )
         if project_slug:
             project, config = resolve_project_config(project_slug, config_slug)
             project_id = project["_id"]
@@ -42,7 +48,9 @@ class AuditEventsResource(Resource):
         since = None
         if args.get("since"):
             try:
-                since = datetime.fromisoformat(args["since"].replace("Z", "+00:00"))
+                since = datetime.fromisoformat(
+                    args["since"].replace("Z", "+00:00")
+                )
                 if since.tzinfo is None:
                     since = since.replace(tzinfo=timezone.utc)
             except ValueError:

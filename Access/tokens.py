@@ -104,7 +104,12 @@ class Tokens:
             "purpose": purpose,
         }
         self._tokens.insert_one(doc)
-        return {"token": plain, "status": "OK", "expires_at": to_iso(expires_at), "type": token_type}
+        return {
+            "token": plain,
+            "status": "OK",
+            "expires_at": to_iso(expires_at),
+            "type": token_type,
+        }
 
     def _resolve_token_doc(self, token=None, token_id=None):
         if token_id:
@@ -122,9 +127,16 @@ class Tokens:
         finder = self._resolve_token_doc(token=token, token_id=token_id)
         if not finder:
             return {"status": "Token not found"}, 404
-        if username and finder.get("subject_user") not in (None, username) and finder.get("created_by") != username:
+        if (
+            username
+            and finder.get("subject_user") not in (None, username)
+            and finder.get("created_by") != username
+        ):
             return {"status": "Not allowed"}, 403
-        self._tokens.update_one({"_id": finder["_id"]}, {"$set": {"revoked_at": dt.datetime.utcnow()}})
+        self._tokens.update_one(
+            {"_id": finder["_id"]},
+            {"$set": {"revoked_at": dt.datetime.utcnow()}},
+        )
         return {"status": "OK"}, 200
 
     def _serialize_token_metadata(self, doc):
@@ -165,27 +177,38 @@ class Tokens:
         expires_at = doc.get("expires_at")
         if expires_at is not None and expires_at < dt.datetime.utcnow():
             return None, "expired"
-        self._tokens.update_one({"_id": doc["_id"]}, {"$set": {"last_used_at": dt.datetime.utcnow()}})
+        self._tokens.update_one(
+            {"_id": doc["_id"]},
+            {"$set": {"last_used_at": dt.datetime.utcnow()}},
+        )
         token_scopes = doc.get("scopes", [])
         effective_scopes = token_scopes
         workspace_role = None
         workspace_id = None
         workspace_slug = None
         visible_project_ids = []
-        if doc.get("type") == "personal" and callable(self._personal_actor_resolver):
+        if doc.get("type") == "personal" and callable(
+            self._personal_actor_resolver
+        ):
             try:
-                actor_context = self._personal_actor_resolver(doc.get("subject_user"))
+                actor_context = self._personal_actor_resolver(
+                    doc.get("subject_user")
+                )
             except Exception:
                 actor_context = None
 
             if isinstance(actor_context, dict):
                 if actor_context.get("disabled"):
                     return None, "disabled"
-                effective_scopes = actor_context.get("scopes", effective_scopes)
+                effective_scopes = actor_context.get(
+                    "scopes", effective_scopes
+                )
                 workspace_role = actor_context.get("workspace_role")
                 workspace_id = actor_context.get("workspace_id")
                 workspace_slug = actor_context.get("workspace_slug")
-                visible_project_ids = list(actor_context.get("visible_project_ids") or [])
+                visible_project_ids = list(
+                    actor_context.get("visible_project_ids") or []
+                )
 
         actor = {
             "type": "token",
@@ -196,7 +219,8 @@ class Tokens:
             "scopes": effective_scopes,
             "token_scopes": (
                 token_scopes
-                if doc.get("type") == "personal" and str(doc.get("purpose") or "").lower() == "api"
+                if doc.get("type") == "personal"
+                and str(doc.get("purpose") or "").lower() == "api"
                 else None
             ),
             "workspace_role": workspace_role,

@@ -31,12 +31,16 @@ class FakeCollection:
 
     def find(self, query, projection):
         project_id = query.get("project_id")
-        docs = [doc for doc in self.docs if doc.get("project_id") == project_id]
+        docs = [
+            doc for doc in self.docs if doc.get("project_id") == project_id
+        ]
         return FakeCursor(list(docs))
 
     def find_one(self, query, projection=None):
         for doc in self.docs:
-            if query.get("_id") == doc.get("_id") and query.get("project_id") == doc.get("project_id"):
+            if query.get("_id") == doc.get("_id") and query.get(
+                "project_id"
+            ) == doc.get("project_id"):
                 return doc
         return None
 
@@ -67,8 +71,18 @@ def test_configs_list_returns_frontend_shape():
     configs = Configs(collection)
     result = configs.list("p1")
     assert result == [
-        {"slug": "base", "name": "Base", "parentSlug": None, "createdAt": "2026-01-01T00:00:00Z"},
-        {"slug": "dev", "name": "Dev", "parentSlug": "base", "createdAt": "2026-01-02T00:00:00Z"},
+        {
+            "slug": "base",
+            "name": "Base",
+            "parentSlug": None,
+            "createdAt": "2026-01-01T00:00:00Z",
+        },
+        {
+            "slug": "dev",
+            "name": "Dev",
+            "parentSlug": "base",
+            "createdAt": "2026-01-02T00:00:00Z",
+        },
     ]
 
 

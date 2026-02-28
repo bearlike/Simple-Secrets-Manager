@@ -53,19 +53,27 @@ class FakeCollection:
         return True
 
     def find(self, query, projection=None):
-        return FakeCursor([doc for doc in self.docs if self._match(doc, query)])
+        return FakeCursor(
+            [doc for doc in self.docs if self._match(doc, query)]
+        )
 
 
 def test_query_events_page_returns_ordered_slice_with_has_next():
     base = datetime(2026, 1, 1, tzinfo=timezone.utc)
-    docs = [{"ts": base + timedelta(minutes=i), "action": f"action-{i}"} for i in range(5)]
+    docs = [
+        {"ts": base + timedelta(minutes=i), "action": f"action-{i}"}
+        for i in range(5)
+    ]
     audit = AuditEvents(FakeCollection(docs))
 
     first_page = audit.query_events_page(limit=2, page=1)
     assert first_page["page"] == 1
     assert first_page["limit"] == 2
     assert first_page["has_next"] is True
-    assert [event["action"] for event in first_page["events"]] == ["action-4", "action-3"]
+    assert [event["action"] for event in first_page["events"]] == [
+        "action-4",
+        "action-3",
+    ]
 
     third_page = audit.query_events_page(limit=2, page=3)
     assert third_page["has_next"] is False
@@ -75,12 +83,26 @@ def test_query_events_page_returns_ordered_slice_with_has_next():
 def test_query_events_page_applies_filters_and_since():
     base = datetime(2026, 1, 1, tzinfo=timezone.utc)
     docs = [
-        {"ts": base + timedelta(minutes=1), "action": "a-early", "project_slug": "a"},
-        {"ts": base + timedelta(minutes=2), "action": "b-mid", "project_slug": "b"},
-        {"ts": base + timedelta(minutes=3), "action": "a-late", "project_slug": "a"},
+        {
+            "ts": base + timedelta(minutes=1),
+            "action": "a-early",
+            "project_slug": "a",
+        },
+        {
+            "ts": base + timedelta(minutes=2),
+            "action": "b-mid",
+            "project_slug": "b",
+        },
+        {
+            "ts": base + timedelta(minutes=3),
+            "action": "a-late",
+            "project_slug": "a",
+        },
     ]
     audit = AuditEvents(FakeCollection(docs))
 
-    filtered = audit.query_events_page(project_slug="a", since=base + timedelta(minutes=2), limit=10, page=1)
+    filtered = audit.query_events_page(
+        project_slug="a", since=base + timedelta(minutes=2), limit=10, page=1
+    )
     assert filtered["has_next"] is False
     assert [event["action"] for event in filtered["events"]] == ["a-late"]

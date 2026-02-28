@@ -49,7 +49,10 @@ class Projects:
     def list_docs(self, workspace_id=None):
         query = {}
         if workspace_id is not None:
-            query["$or"] = [{"workspace_id": workspace_id}, {"workspace_id": {"$exists": False}}]
+            query["$or"] = [
+                {"workspace_id": workspace_id},
+                {"workspace_id": {"$exists": False}},
+            ]
         return list(self._projects.find(query).sort("slug", 1))
 
     def list_by_ids(self, project_ids):
@@ -61,13 +64,21 @@ class Projects:
                 normalized_ids.append(ObjectId(value))
             except Exception:
                 normalized_ids.append(value)
-        return list(self._projects.find({"_id": {"$in": normalized_ids}}).sort("slug", 1))
+        return list(
+            self._projects.find({"_id": {"$in": normalized_ids}}).sort(
+                "slug", 1
+            )
+        )
 
     def list(self, workspace_id=None, project_ids=None):
         if project_ids is not None:
             docs = self.list_by_ids(project_ids)
             if workspace_id is not None:
-                docs = [doc for doc in docs if doc.get("workspace_id") in (None, workspace_id)]
+                docs = [
+                    doc
+                    for doc in docs
+                    if doc.get("workspace_id") in (None, workspace_id)
+                ]
         else:
             docs = self.list_docs(workspace_id=workspace_id)
 

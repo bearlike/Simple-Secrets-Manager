@@ -104,21 +104,33 @@ class Onboarding:
         if error:
             return {"status": error}, code
 
-        register_status, register_code = self._userpass.register(username=username, password=password)
+        register_status, register_code = self._userpass.register(
+            username=username, password=password
+        )
         if register_code != 200:
-            # Allow retry when user was created in a previous failed bootstrap attempt.
-            if register_status == "User already exist" and self._userpass.is_authorized(username, password):
+            # Allow retry when user was created in a previous failed bootstrap
+            # attempt.
+            if (
+                register_status == "User already exist"
+                and self._userpass.is_authorized(username, password)
+            ):
                 pass
             else:
                 self._mark_failed(register_status)
                 return {"status": str(register_status)}, register_code
 
-        if self._workspaces is not None and self._users is not None and self._memberships is not None:
+        if (
+            self._workspaces is not None
+            and self._users is not None
+            and self._memberships is not None
+        ):
             workspace = self._workspaces.ensure_default()
             workspace_id = workspace.get("_id") if workspace else None
             if workspace_id is not None:
                 self._users.ensure(username)
-                self._memberships.upsert_workspace_membership(workspace_id, username, "owner")
+                self._memberships.upsert_workspace_membership(
+                    workspace_id, username, "owner"
+                )
 
         token_payload = None
         if issue_token:
@@ -128,7 +140,8 @@ class Onboarding:
                     created_by=username,
                     subject_user=username,
                     scopes=global_scopes(self.BOOTSTRAP_ACTION_SCOPES),
-                    expires_at=datetime.utcnow() + timedelta(seconds=self.BOOTSTRAP_TOKEN_TTL_SECONDS),
+                    expires_at=datetime.utcnow()
+                    + timedelta(seconds=self.BOOTSTRAP_TOKEN_TTL_SECONDS),
                 )
             except Exception as exc:  # pragma: no cover - defensive path
                 self._mark_failed(exc)

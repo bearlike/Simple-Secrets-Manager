@@ -14,7 +14,9 @@ def _cache_file(base_url: str, project: str, config: str) -> Path:
     return cache_root() / "secrets" / f"{digest}.json"
 
 
-def save_secret_cache(base_url: str, project: str, config: str, data: dict[str, str]) -> None:
+def save_secret_cache(
+    base_url: str, project: str, config: str, data: dict[str, str]
+) -> None:
     path = _cache_file(base_url, project, config)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"fetched_at": int(time.time()), "data": data}

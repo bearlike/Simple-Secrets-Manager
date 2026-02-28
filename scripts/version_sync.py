@@ -35,21 +35,37 @@ def run_check(root: Path) -> int:
 
     pyproject = _read(root / "pyproject.toml")
     if 'dynamic = ["version"]' not in pyproject:
-        errors.append('pyproject.toml must declare [project].dynamic = ["version"]')
+        errors.append(
+            'pyproject.toml must declare [project].dynamic = ["version"]'
+        )
     if 'version = { attr = "ssm_cli.__version__" }' not in pyproject:
-        errors.append("pyproject.toml must declare [tool.setuptools.dynamic] version attr")
+        errors.append(
+            "pyproject.toml must declare [tool.setuptools.dynamic] "
+            "version attr"
+        )
     if re.search(r"(?m)^version\s*=\s*\"[^\"]+\"\\s*$", pyproject):
-        errors.append("pyproject.toml still contains a static version assignment")
+        errors.append(
+            "pyproject.toml still contains a static version assignment"
+        )
 
     cli_init = _read(root / "ssm_cli" / "__init__.py")
-    if "VERSION" not in cli_init or "__version__ = _resolve_version()" not in cli_init:
-        errors.append("ssm_cli/__init__.py must derive __version__ from VERSION via _resolve_version()")
+    if (
+        "VERSION" not in cli_init
+        or "__version__ = _resolve_version()" not in cli_init
+    ):
+        errors.append(
+            "ssm_cli/__init__.py must derive __version__ from VERSION "
+            "via _resolve_version()"
+        )
 
     dockerfile = _read(root / "Dockerfile")
     if "ARG APP_VERSION" not in dockerfile:
         errors.append("Dockerfile must declare ARG APP_VERSION")
     if 'org.opencontainers.image.version="${APP_VERSION}"' not in dockerfile:
-        errors.append("Dockerfile must label org.opencontainers.image.version from APP_VERSION")
+        errors.append(
+            "Dockerfile must label org.opencontainers.image.version "
+            "from APP_VERSION"
+        )
 
     if errors:
         print("version sync check failed:")
@@ -61,13 +77,24 @@ def run_check(root: Path) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Validate and export repository version from VERSION file.")
-    parser.add_argument("--check", action="store_true", help="Validate version wiring across the repository.")
-    parser.add_argument("--print", action="store_true", help="Print the VERSION value.")
+    parser = argparse.ArgumentParser(
+        description="Validate and export repository version from VERSION file."
+    )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Validate version wiring across the repository.",
+    )
+    parser.add_argument(
+        "--print", action="store_true", help="Print the VERSION value."
+    )
     parser.add_argument(
         "--github-output",
         default=None,
-        help="Path to GITHUB_OUTPUT file; writes 'version=<VERSION>' when provided.",
+        help=(
+            "Path to GITHUB_OUTPUT file; writes 'version=<VERSION>' "
+            "when provided."
+        ),
     )
     args = parser.parse_args()
 

@@ -6,8 +6,12 @@ from Api.api import api, conn
 onboarding_ns = api.namespace("onboarding", description="First-time setup")
 
 bootstrap_parser = api.parser()
-bootstrap_parser.add_argument("username", type=str, required=True, location="json")
-bootstrap_parser.add_argument("password", type=str, required=True, location="json")
+bootstrap_parser.add_argument(
+    "username", type=str, required=True, location="json"
+)
+bootstrap_parser.add_argument(
+    "password", type=str, required=True, location="json"
+)
 
 
 @onboarding_ns.route("/status")

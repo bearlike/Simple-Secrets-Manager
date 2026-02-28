@@ -32,7 +32,14 @@ def test_resolve_precedence_flags_over_env_and_files(monkeypatch, tmp_path):
             },
         },
     )
-    _write_json(local_file, {"profile": "localprof", "project": "local-project", "config": "local-config"})
+    _write_json(
+        local_file,
+        {
+            "profile": "localprof",
+            "project": "local-project",
+            "config": "local-config",
+        },
+    )
 
     monkeypatch.setenv("SSM_GLOBAL_CONFIG_FILE", str(global_file))
     monkeypatch.setenv("SSM_LOCAL_CONFIG_FILE", str(local_file))
@@ -73,7 +80,9 @@ def test_resolve_uses_env_then_local_then_global(monkeypatch, tmp_path):
             },
         },
     )
-    _write_json(local_file, {"project": "local-project", "config": "local-config"})
+    _write_json(
+        local_file, {"project": "local-project", "config": "local-config"}
+    )
 
     monkeypatch.setenv("SSM_GLOBAL_CONFIG_FILE", str(global_file))
     monkeypatch.setenv("SSM_LOCAL_CONFIG_FILE", str(local_file))
