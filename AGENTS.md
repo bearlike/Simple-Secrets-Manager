@@ -52,6 +52,7 @@ This is a monorepo with:
   - Practical workflow: temporarily stash unrelated local edits, push, then restore with `git stash pop`.
 - Keep React Query derived views under the same key prefix when possible (for example, `['secrets', projectSlug, configSlug, ...]`) so existing prefix invalidation still refreshes all related views.
 - Secret icon persistence now distinguishes `icon_source` as `auto` or `manual`; project-wide icon recompute should only rewrite `auto` entries so explicit manual overrides remain stable.
+- When preparing legacy API removal, deprecate in layers first: code-level `@warnings.deprecated`, OpenAPI `deprecated=true`, and API response deprecation headers, then remove only in a later major release.
 
 
 ## Conventional Commit Guidelines 

@@ -109,6 +109,8 @@ class SecretItemResource(Resource):
         )
         args = secret_parser.parse_args()
         value = args["value"]
+        if not isinstance(value, str):
+            api.abort(400, "value must be a string")
         raw_payload = request.get_json(silent=True)
         payload = raw_payload if isinstance(raw_payload, dict) else {}
         icon_slug_provided = "icon_slug" in payload

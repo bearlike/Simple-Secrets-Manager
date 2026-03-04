@@ -137,6 +137,20 @@ def test_put_preserves_existing_icon_without_override():
     assert docs[0]["icon_slug"] == "simple-icons:postgresql"
 
 
+def test_put_accepts_empty_string_value():
+    engine = _engine_with_docs([])
+    _, code = engine.put("cfg", "EMPTY_VALUE", "", "actor")
+    assert code == 200
+    assert engine._secrets.docs[0]["value_enc"] == ""
+
+
+def test_put_rejects_non_string_value():
+    engine = _engine_with_docs([])
+    message, code = engine.put("cfg", "EMPTY_VALUE", None, "actor")
+    assert code == 400
+    assert message == "Secret value must be a string"
+
+
 def test_put_accepts_manual_override():
     engine = _engine_with_docs([])
     _, code = engine.put(

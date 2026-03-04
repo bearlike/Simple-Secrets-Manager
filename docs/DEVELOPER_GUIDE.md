@@ -11,7 +11,7 @@ This document contains developer-facing setup and maintenance workflows.
 ## Prerequisites
 
 - Docker + Docker Compose
-- Python + `uv`
+- Python 3.13+ + `uv`
 - Node.js + npm
 
 ## Clone and bootstrap

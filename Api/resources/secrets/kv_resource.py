@@ -1,8 +1,29 @@
 #!/usr/bin/env python3
 # Key-Value (KV) Secrets Engines API Resource
+from warnings import deprecated
+
 from flask_restx import fields, Resource
 from Api.core import api, conn
 from Access.is_auth import require_token
+
+KV_DEPRECATION_MESSAGE = (
+    "The /api/secrets/kv endpoints are deprecated and will be removed in the "
+    "next major release. "
+    "Use /api/projects/{project}/configs/{config}/secrets/{key}."
+)
+KV_DEPRECATION_HEADERS = {
+    "Deprecation": "true",
+    "Warning": f'299 - "{KV_DEPRECATION_MESSAGE}"',
+    "Link": (
+        "<https://github.com/bearlike/Simple-Secrets-Manager/blob/main/"
+        'docs/DEPRECATIONS.md>; rel="deprecation"'
+    ),
+}
+
+
+def _with_deprecation_headers(payload, code=200):
+    return payload, code, KV_DEPRECATION_HEADERS
+
 
 # KV Namespace
 kv_ns = api.namespace(
@@ -47,19 +68,25 @@ kv_parser.add_argument(
 
 @kv_ns.route("/<string:path>/<string:key>")
 @api.doc(
+    deprecated=True,
     responses={401: "Unauthorized", 404: "Path or KV not found"},
     params={
         "path": "Path to a KV store",
         "key": "Key (index) in path where a secret (value) is stored",
     },
 )
+@deprecated(KV_DEPRECATION_MESSAGE)
 class Engine_KV(Resource):
     """Key-Value API operations"""
 
     @api.doc(
-        description="Update a kv in a path", security="Token", parser=kv_parser
+        description="Update a kv in a path",
+        security="Token",
+        parser=kv_parser,
+        deprecated=True,
     )
     @api.marshal_with(kv_model)
+    @deprecated(KV_DEPRECATION_MESSAGE)
     def put(self, path, key):
         """Update a given resource"""
         args = kv_parser.parse_args()
@@ -68,13 +95,15 @@ class Engine_KV(Resource):
         if code != 200:
             api.abort(code, status)
             return None
-        return status
+        return _with_deprecation_headers(status, code)
 
     @api.doc(
         description="Delete a KV from a path",
         security="Token",
         responses={200: "Secrets deleted"},
+        deprecated=True,
     )
+    @deprecated(KV_DEPRECATION_MESSAGE)
     def delete(self, path, key):
         """Delete a given kv"""
         require_token()
@@ -82,12 +111,16 @@ class Engine_KV(Resource):
         if code != 200:
             api.abort(code, status)
             return None
-        return status
+        return _with_deprecation_headers(status, code)
 
     @api.doc(
-        description="Add a KV to a path", security="Token", parser=kv_parser
+        description="Add a KV to a path",
+        security="Token",
+        parser=kv_parser,
+        deprecated=True,
     )
     @api.marshal_with(kv_model)
+    @deprecated(KV_DEPRECATION_MESSAGE)
     def post(self, path, key):
         """Add a new kv to a path"""
         args = kv_parser.parse_args()
@@ -96,14 +129,19 @@ class Engine_KV(Resource):
         if code != 200:
             api.abort(code, status)
             return None
-        return status
+        return _with_deprecation_headers(status, code)
 
-    @api.doc(description="Return a KV from a path", security="Token")
+    @api.doc(
+        description="Return a KV from a path",
+        security="Token",
+        deprecated=True,
+    )
     @api.marshal_with(kv_model)
+    @deprecated(KV_DEPRECATION_MESSAGE)
     def get(self, path, key):
         """Fetch a given KV from a path"""
         require_token()
         status, code = conn.kv.get(path, key)
         if code != 200:
             api.abort(code, str(status))
-        return status
+        return _with_deprecation_headers(status, code)

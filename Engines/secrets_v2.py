@@ -230,6 +230,8 @@ class SecretsV2:
     ):
         if not is_valid_env_key(key):
             return "Invalid secret key", 400
+        if not isinstance(value, str):
+            return "Secret value must be a string", 400
         (
             resolved_icon_slug,
             resolved_icon_source,

@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -20,9 +20,14 @@ import { queryKeys } from '../../lib/api/queryKeys';
 import type { Secret } from '../../lib/api/types';
 import { SecretValueEditor } from './SecretValueEditor';
 import { useReferenceSuggestions } from './useReferenceSuggestions';
+import { ConfirmDialog } from '../common/ConfirmDialog';
+import {
+  normalizeSecretValueForSubmit,
+  requiresEmptyValueConfirmation
+} from './secretValueSubmit';
 
 const schema = z.object({
-  value: z.string().min(1, 'Value is required'),
+  value: z.string(),
   iconSlug: z
     .string()
     .optional()
@@ -51,6 +56,7 @@ export function EditSecretDialog({
 }: EditSecretDialogProps) {
   const queryClient = useQueryClient();
   const referenceSuggestions = useReferenceSuggestions({ projectSlug, configSlug });
+  const [pendingSubmit, setPendingSubmit] = useState<FormValues | null>(null);
   const {
     control,
     register,
@@ -85,6 +91,7 @@ export function EditSecretDialog({
         queryKey: queryKeys.secrets(projectSlug, configSlug)
       });
       toast.success('Secret updated');
+      setPendingSubmit(null);
       onOpenChange(false);
     },
     onError: (error) => {
@@ -100,76 +107,112 @@ export function EditSecretDialog({
     }
   });
 
-  const onSubmit = (data: FormValues) => mutation.mutate(data);
+  const submitValue = (data: FormValues) => mutation.mutate(data);
+  const onSubmit = (data: FormValues) => {
+    const normalizedValue = normalizeSecretValueForSubmit(data.value);
+    const normalized = {
+      ...data,
+      value: normalizedValue
+    };
+    if (requiresEmptyValueConfirmation(data.value)) {
+      setPendingSubmit(normalized);
+      return;
+    }
+    submitValue(normalized);
+  };
 
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        onOpenChange(next);
-        if (!next) {
-          mutation.reset();
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(next) => {
+          onOpenChange(next);
+          if (!next) {
+            mutation.reset();
+            setPendingSubmit(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-[760px]">
+          <DialogHeader>
+            <DialogTitle>Edit Secret</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label>Key</Label>
+              <p className="font-mono text-sm font-medium">{secret?.key ?? '—'}</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="iconSlug">Icon slug</Label>
+              <Input
+                id="iconSlug"
+                {...register('iconSlug')}
+                placeholder="simple-icons:sqlalchemy"
+                className="font-mono"
+                autoComplete="off"
+              />
+              {errors.iconSlug && <p className="text-xs text-destructive">{errors.iconSlug.message}</p>}
+              <p className="text-xs text-muted-foreground">Clear this field to reset back to auto-detected icon</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="secret-edit-value">Value</Label>
+              <Controller
+                name="value"
+                control={control}
+                render={({ field }) => (
+                  <SecretValueEditor
+                    value={field.value}
+                    onChange={field.onChange}
+                    rows={12}
+                    className="min-h-[320px]"
+                    autoFocus
+                    autocompleteItems={referenceSuggestions}
+                  />
+                )}
+              />
+
+              {errors.value && <p className="text-xs text-destructive">{errors.value.message}</p>}
+              <p className="text-xs text-muted-foreground">
+                References: <code className="font-mono">${'{KEY}'}</code>,{' '}
+                <code className="font-mono">${'{config.KEY}'}</code>,{' '}
+                <code className="font-mono">${'{project.config.KEY}'}</code>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Whitespace-only input is saved as an empty string after confirmation.
+              </p>
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={mutation.isPending || !secret}>
+                {mutation.isPending ? 'Saving...' : 'Save'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={pendingSubmit !== null}
+        onOpenChange={(next) => {
+          if (!next) setPendingSubmit(null);
+        }}
+        title="Save Empty Value?"
+        description={
+          secret ?
+            `This will update "${secret.key}" to an empty string value.` :
+            'This will update the secret to an empty string value.'
         }
-      }}
-    >
-      <DialogContent className="sm:max-w-[760px]">
-        <DialogHeader>
-          <DialogTitle>Edit Secret</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
-          <div className="space-y-1.5">
-            <Label>Key</Label>
-            <p className="font-mono text-sm font-medium">{secret?.key ?? '—'}</p>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="iconSlug">Icon slug</Label>
-            <Input
-              id="iconSlug"
-              {...register('iconSlug')}
-              placeholder="simple-icons:sqlalchemy"
-              className="font-mono"
-              autoComplete="off"
-            />
-            {errors.iconSlug && <p className="text-xs text-destructive">{errors.iconSlug.message}</p>}
-            <p className="text-xs text-muted-foreground">Clear this field to reset back to auto-detected icon</p>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="secret-edit-value">Value</Label>
-            <Controller
-              name="value"
-              control={control}
-              render={({ field }) => (
-                <SecretValueEditor
-                  value={field.value}
-                  onChange={field.onChange}
-                  rows={12}
-                  className="min-h-[320px]"
-                  autoFocus
-                  autocompleteItems={referenceSuggestions}
-                />
-              )}
-            />
-
-            {errors.value && <p className="text-xs text-destructive">{errors.value.message}</p>}
-            <p className="text-xs text-muted-foreground">
-              References: <code className="font-mono">${'{KEY}'}</code>,{' '}
-              <code className="font-mono">${'{config.KEY}'}</code>,{' '}
-              <code className="font-mono">${'{project.config.KEY}'}</code>
-            </p>
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={mutation.isPending || !secret}>
-              {mutation.isPending ? 'Saving...' : 'Save'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        onConfirm={() => {
+          if (!pendingSubmit) return;
+          submitValue(pendingSubmit);
+        }}
+        loading={mutation.isPending}
+      />
+    </>
   );
 }

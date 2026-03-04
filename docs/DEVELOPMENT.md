@@ -4,6 +4,10 @@ This document is a deeper engineering reference.
 
 For day-to-day developer onboarding, use [`docs/DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) first.
 
+## Runtime baseline
+
+- Python 3.13+ is required.
+
 ## Monorepo overview
 
 - Backend API: repository root (`server.py`, `Api/`, `Engines/`, `Access/`)
