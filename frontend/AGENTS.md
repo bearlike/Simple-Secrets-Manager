@@ -48,3 +48,5 @@ This folder contains the SSM Admin Console (Vite + React).
 - If parent comparison data cannot be loaded, degrade gracefully in UI (show a small note and keep table usable) instead of blocking the entire secrets view.
 - Prefer the native shadcn `SidebarProvider` + `Sidebar` + `SidebarInset` + `SidebarTrigger` stack for app navigation; avoid custom `Dialog`-as-drawer rewiring because it tends to cause brittle styling and transparency regressions.
 - For any new component request, research should start with official shadcn registry primitives and their required companion files/dependencies before considering external UI libraries or custom implementations.
+- For responsive top bars, keep only core actions always visible on small viewports (navigation trigger, breadcrumb context, account menu) and move secondary actions (export/settings/repo links/config switching) into a native shadcn `DropdownMenu` overflow.
+- Keep theme mode controls out of crowded top bars on mobile-first layouts; place them in stable navigation surfaces (for example sidebar footer) to reduce header collisions and keep interaction targets accessible.

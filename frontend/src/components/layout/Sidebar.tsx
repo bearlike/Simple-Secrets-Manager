@@ -1,4 +1,4 @@
-import { type LucideIcon, FolderIcon, GroupIcon, KeyRoundIcon, LockIcon, LogOutIcon, ScrollTextIcon, UserIcon, UsersIcon } from 'lucide-react';
+import { type LucideIcon, FolderIcon, GroupIcon, KeyRoundIcon, LockIcon, LogOutIcon, MoonIcon, ScrollTextIcon, SunIcon, UserIcon, UsersIcon } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 
@@ -21,6 +21,7 @@ import {
 import { getProjects } from '../../lib/api/projects';
 import { queryKeys } from '../../lib/api/queryKeys';
 import { useAuth } from '../../lib/auth';
+import { useTheme } from '../../lib/theme';
 
 function isProjectRouteActive(pathname: string, slug: string): boolean {
   return pathname.startsWith(`/projects/${slug}/`);
@@ -49,6 +50,7 @@ function NavItem({ icon: Icon, isActive, label, onClick, to }: NavItemProps) {
 
 export function Sidebar() {
   const { logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -68,6 +70,11 @@ export function Sidebar() {
     closeOnMobile();
     logout();
     navigate('/login');
+  };
+
+  const handleToggleTheme = () => {
+    closeOnMobile();
+    toggleTheme();
   };
 
   return (
@@ -160,6 +167,16 @@ export function Sidebar() {
             isActive={location.pathname === '/audit'}
             onClick={closeOnMobile}
           />
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={handleToggleTheme}>
+              {theme === 'dark' ? (
+                <SunIcon className="h-3.5 w-3.5 shrink-0" />
+              ) : (
+                <MoonIcon className="h-3.5 w-3.5 shrink-0" />
+              )}
+              <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={handleLogout}>
               <LogOutIcon className="h-3.5 w-3.5 shrink-0" />
