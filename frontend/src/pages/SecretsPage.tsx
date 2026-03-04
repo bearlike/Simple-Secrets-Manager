@@ -1,9 +1,10 @@
+import { useEffect, useState } from 'react';
 import { GitBranchIcon } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { SecretsTable } from '../components/secrets/SecretsTable';
+import { SecretsTable, type ForkSecretsSummary } from '../components/secrets/SecretsTable';
 import { EmptyState } from '../components/common/EmptyState';
 import { getConfigs } from '../lib/api/configs';
 import { getProjects } from '../lib/api/projects';
@@ -15,6 +16,7 @@ export function SecretsPage() {
     projectSlug: string;
     configSlug: string;
   }>();
+  const [forkSummary, setForkSummary] = useState<ForkSecretsSummary | null>(null);
   const { data: projects = [] } = useQuery({
     queryKey: queryKeys.projects(),
     queryFn: getProjects
@@ -26,8 +28,14 @@ export function SecretsPage() {
   });
   const currentProject = projects.find((p) => p.slug === projectSlug);
   const configs = configsQuery.data ?? [];
+  const currentConfig = configs.find((config) => config.slug === configSlug);
   const hasConfig = configs.some((config) => config.slug === configSlug);
   const missingConfig = configsQuery.isSuccess && !hasConfig;
+  const isForkConfig = Boolean(currentConfig?.parentSlug);
+
+  useEffect(() => {
+    setForkSummary(null);
+  }, [projectSlug, configSlug, currentConfig?.parentSlug]);
 
   if (configsQuery.isLoading) {
     return (
@@ -73,6 +81,11 @@ export function SecretsPage() {
 
               {configSlug}
             </Badge>
+            {isForkConfig && (
+              <Badge variant="secondary" className="text-xs">
+                {forkSummary ? `${forkSummary.overrides} overrides / ${forkSummary.inherited} inherited` : '...'}
+              </Badge>
+            )}
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
             Manage secrets for this environment
@@ -80,7 +93,12 @@ export function SecretsPage() {
         </div>
       </div>
 
-      <SecretsTable projectSlug={projectSlug} configSlug={configSlug} />
+      <SecretsTable
+        projectSlug={projectSlug}
+        configSlug={configSlug}
+        parentSlug={currentConfig?.parentSlug}
+        onForkSummaryChange={setForkSummary}
+      />
     </div>);
 
 }

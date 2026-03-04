@@ -1,15 +1,18 @@
-import { useMemo, useRef, useState, type ChangeEventHandler } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEventHandler } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
   getFilteredRowModel,
   flexRender,
-  type ColumnDef
+  type ColumnDef,
+  type Row
 } from '@tanstack/react-table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import {
+  ChevronDownIcon,
+  ChevronRightIcon,
   EyeIcon,
   EyeOffIcon,
   GitCompareArrowsIcon,
@@ -66,9 +69,30 @@ function hasOwnKey(record: Record<string, string>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
 }
 
+type ForkBucket = 'override' | 'inherited';
+
+interface SecretRow extends Secret {
+  forkBucket: ForkBucket;
+  isDirectInConfig: boolean;
+}
+
+export interface ForkSecretsSummary {
+  isFork: boolean;
+  overrides: number;
+  inherited: number;
+  parentComparisonDegraded: boolean;
+}
+
+interface SecretsQueryData {
+  rows: SecretRow[];
+  summary: ForkSecretsSummary;
+}
+
 interface SecretsTableProps {
   projectSlug: string;
   configSlug: string;
+  parentSlug?: string;
+  onForkSummaryChange?: (summary: ForkSecretsSummary) => void;
 }
 
 function columnClass(columnId: string, header = false): string {
@@ -90,7 +114,35 @@ function columnClass(columnId: string, header = false): string {
   return header ? '' : 'align-top';
 }
 
-export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
+function summarizeForkRows(
+  rows: SecretRow[],
+  isFork: boolean,
+  parentComparisonDegraded = false
+): ForkSecretsSummary {
+  if (!isFork) {
+    return {
+      isFork: false,
+      overrides: rows.length,
+      inherited: 0,
+      parentComparisonDegraded: false
+    };
+  }
+
+  const overrides = rows.filter((row) => row.forkBucket === 'override').length;
+  return {
+    isFork: true,
+    overrides,
+    inherited: rows.length - overrides,
+    parentComparisonDegraded
+  };
+}
+
+export function SecretsTable({
+  projectSlug,
+  configSlug,
+  parentSlug,
+  onForkSummaryChange
+}: SecretsTableProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -102,12 +154,94 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
   const [globalFilter, setGlobalFilter] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<EnvImportPreview | null>(null);
+  const [overridesOpen, setOverridesOpen] = useState(true);
+  const [inheritedOpen, setInheritedOpen] = useState(false);
 
-  const { data: secrets = [], isLoading } = useQuery({
-    queryKey: queryKeys.secrets(projectSlug, configSlug),
-    queryFn: () => getSecrets(projectSlug, configSlug),
+  const isFork = Boolean(parentSlug);
+
+  useEffect(() => {
+    setOverridesOpen(true);
+    setInheritedOpen(false);
+  }, [projectSlug, configSlug, parentSlug]);
+
+  const { data: secretsData, isLoading } = useQuery<SecretsQueryData>({
+    queryKey: queryKeys.secretsView(projectSlug, configSlug, parentSlug),
+    queryFn: async () => {
+      const effectiveSecrets = await getSecrets(projectSlug, configSlug, {
+        includeParent: true,
+        includeMeta: true,
+        resolveReferences: false,
+        raw: false
+      });
+
+      if (!parentSlug) {
+        const rows: SecretRow[] = effectiveSecrets.map((secret) => ({
+          ...secret,
+          forkBucket: 'override',
+          isDirectInConfig: true
+        }));
+        return {
+          rows,
+          summary: summarizeForkRows(rows, false)
+        };
+      }
+
+      const [directSecrets, parentSecretsResult] = await Promise.all([
+        getSecretsKeyMap(projectSlug, configSlug, false, {
+          includeParent: false,
+          includeMeta: false,
+          resolveReferences: false,
+          raw: false
+        }),
+        getSecretsKeyMap(projectSlug, parentSlug, true, {
+          includeParent: true,
+          includeMeta: false,
+          resolveReferences: false,
+          raw: false
+        })
+          .then((data) => ({ data, failed: false }))
+          .catch(() => ({ data: {} as Record<string, string>, failed: true }))
+      ]);
+
+      const parentSecrets = parentSecretsResult.data;
+      const parentComparisonDegraded = parentSecretsResult.failed;
+
+      const rows: SecretRow[] = effectiveSecrets.map((secret) => {
+        const isDirectInConfig = hasOwnKey(directSecrets, secret.key);
+
+        let forkBucket: ForkBucket = 'inherited';
+        if (isDirectInConfig) {
+          if (parentComparisonDegraded) {
+            forkBucket = 'override';
+          } else if (!hasOwnKey(parentSecrets, secret.key)) {
+            forkBucket = 'override';
+          } else {
+            forkBucket = directSecrets[secret.key] === parentSecrets[secret.key] ? 'inherited' : 'override';
+          }
+        }
+
+        return {
+          ...secret,
+          forkBucket,
+          isDirectInConfig
+        };
+      });
+
+      return {
+        rows,
+        summary: summarizeForkRows(rows, true, parentComparisonDegraded)
+      };
+    },
     enabled: !!projectSlug && !!configSlug
   });
+
+  useEffect(() => {
+    if (!onForkSummaryChange || !secretsData) return;
+    onForkSummaryChange(secretsData.summary);
+  }, [onForkSummaryChange, secretsData]);
+
+  const secrets = useMemo(() => secretsData?.rows ?? [], [secretsData?.rows]);
+  const summary = secretsData?.summary;
 
   const deleteMutation = useMutation({
     mutationFn: (key: string) => deleteSecret(projectSlug, configSlug, key),
@@ -248,7 +382,7 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
     }
   };
 
-  const columns = useMemo<ColumnDef<Secret>[]>(
+  const columns = useMemo<ColumnDef<SecretRow>[]>(
     () => [
       {
         id: 'icon',
@@ -262,22 +396,34 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
       {
         accessorKey: 'key',
         header: 'KEY',
-        cell: ({ row }) => (
-          <span className="block max-w-full break-all font-mono text-sm font-medium leading-5">
-            {row.original.key}
-          </span>
-        )
+        cell: ({ row }) => {
+          const inherited = row.original.forkBucket === 'inherited';
+          return (
+            <span
+              className={`block max-w-full break-all font-mono text-sm font-medium leading-5 ${
+                inherited ? 'text-muted-foreground' : ''
+              }`}
+            >
+              {row.original.key}
+            </span>
+          );
+        }
       },
       {
         accessorKey: 'value',
         header: 'VALUE',
         cell: ({ row }) => {
           const revealed = revealedKeys.has(row.original.key);
-          return (
-            revealed ?
-            <div className="max-w-full rounded-md border border-border bg-muted/20 px-2 py-1">
-                <SecretValueText value={row.original.value} className="max-h-40 overflow-y-auto" />
-              </div> :
+          const inherited = row.original.forkBucket === 'inherited';
+          return revealed ? (
+            <div
+              className={`max-w-full rounded-md border border-border px-2 py-1 ${
+                inherited ? 'bg-muted/10' : 'bg-muted/20'
+              }`}
+            >
+              <SecretValueText value={row.original.value} className="max-h-40 overflow-y-auto" />
+            </div>
+          ) : (
             <span className="font-mono text-sm text-muted-foreground">••••••••••••</span>
           );
         }
@@ -292,53 +438,55 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
       {
         id: 'actions',
         header: '',
-        cell: ({ row }) => (
-          <div className="flex items-center justify-end gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => toggleReveal(row.original.key)}
-              aria-label={revealedKeys.has(row.original.key) ? 'Hide value' : 'Reveal value'}
-            >
-              {revealedKeys.has(row.original.key) ?
-              <EyeOffIcon className="h-3.5 w-3.5" /> :
-              <EyeIcon className="h-3.5 w-3.5" />
-              }
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() =>
-                navigate(
-                  `/projects/${projectSlug}/compare/secret?key=${encodeURIComponent(row.original.key)}`
-                )
-              }
-              aria-label="Compare secret"
-            >
-              <GitCompareArrowsIcon className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => setEditingSecret(row.original)}
-              aria-label="Edit secret"
-            >
-              <PencilIcon className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-              onClick={() => setDeletingKey(row.original.key)}
-              aria-label="Delete secret"
-            >
-              <Trash2Icon className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        )
+        cell: ({ row }) => {
+          const isInherited = row.original.forkBucket === 'inherited';
+          const editLabel = isInherited ? 'Override inherited secret' : 'Edit secret';
+          return (
+            <div className="flex items-center justify-end gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => toggleReveal(row.original.key)}
+                aria-label={revealedKeys.has(row.original.key) ? 'Hide value' : 'Reveal value'}
+              >
+                {revealedKeys.has(row.original.key) ? (
+                  <EyeOffIcon className="h-3.5 w-3.5" />
+                ) : (
+                  <EyeIcon className="h-3.5 w-3.5" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => navigate(`/projects/${projectSlug}/compare/secret?key=${encodeURIComponent(row.original.key)}`)}
+                aria-label="Compare secret"
+              >
+                <GitCompareArrowsIcon className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setEditingSecret(row.original)}
+                aria-label={editLabel}
+                title={editLabel}
+              >
+                <PencilIcon className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                onClick={() => setDeletingKey(row.original.key)}
+                aria-label="Delete secret"
+              >
+                <Trash2Icon className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          );
+        }
       }
     ],
     [navigate, projectSlug, revealedKeys]
@@ -356,6 +504,31 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
     globalFilterFn: (row, _columnId, filterValue: string) =>
       row.original.key.toLowerCase().includes(filterValue.toLowerCase())
   });
+
+  const filteredRows = table.getRowModel().rows;
+  const overrideRows = isFork ? filteredRows.filter((row) => row.original.forkBucket === 'override') : filteredRows;
+  const inheritedRows = isFork ? filteredRows.filter((row) => row.original.forkBucket === 'inherited') : [];
+
+  const renderDataRow = (row: Row<SecretRow>) => {
+    const inherited = row.original.forkBucket === 'inherited';
+    return (
+      <tr
+        key={row.id}
+        className={`border-b border-border last:border-0 transition-colors ${
+          inherited ? 'bg-muted/10 hover:bg-muted/20' : 'hover:bg-muted/20'
+        }`}
+      >
+        {row.getVisibleCells().map((cell) => (
+          <td
+            key={cell.id}
+            className={`py-2.5 ${cell.column.id === 'icon' ? 'px-2' : 'px-4'} ${columnClass(cell.column.id)}`}
+          >
+            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          </td>
+        ))}
+      </tr>
+    );
+  };
 
   return (
     <div className="space-y-3">
@@ -389,6 +562,12 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
         </div>
       </div>
 
+      {isFork && summary?.parentComparisonDegraded && (
+        <p className="text-xs text-muted-foreground">
+          Parent diff comparison is partially unavailable; direct keys are treated as overrides.
+        </p>
+      )}
+
       <input
         ref={fileInputRef}
         type="file"
@@ -416,64 +595,104 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
             </tr>
           </thead>
           <tbody>
-            {isLoading
-                ? Array.from({ length: 5 }).map((_, index) => (
-                  <tr key={index} className="border-b border-border last:border-0">
-                    <td className="px-2 py-2.5">
-                      <Skeleton className="h-8 w-8 rounded-md" />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Skeleton className="h-4 w-40" />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Skeleton className="h-4 w-32" />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Skeleton className="h-4 w-16" />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Skeleton className="h-4 w-16 ml-auto" />
-                    </td>
-                  </tr>
-                ))
-              : table.getRowModel().rows.length === 0
-                ? (
-                    <tr>
-                      <td colSpan={5}>
-                        <EmptyState
-                          title={globalFilter ? 'No secrets match your filter' : 'No secrets yet'}
-                          description={
-                            globalFilter ? 'Try a different search term' : 'Add your first secret to get started'
-                          }
-                          action={
-                            !globalFilter ? (
-                              <Button size="sm" onClick={() => setAddOpen(true)}>
-                                <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
-                                Add Secret
-                              </Button>
-                            ) : undefined
-                          }
-                        />
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, index) => (
+                <tr key={index} className="border-b border-border last:border-0">
+                  <td className="px-2 py-2.5">
+                    <Skeleton className="h-8 w-8 rounded-md" />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <Skeleton className="h-4 w-40" />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <Skeleton className="h-4 w-32" />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <Skeleton className="h-4 w-16" />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <Skeleton className="h-4 w-16 ml-auto" />
+                  </td>
+                </tr>
+              ))
+            ) : filteredRows.length === 0 ? (
+              <tr>
+                <td colSpan={5}>
+                  <EmptyState
+                    title={globalFilter ? 'No secrets match your filter' : 'No secrets yet'}
+                    description={globalFilter ? 'Try a different search term' : 'Add your first secret to get started'}
+                    action={
+                      !globalFilter ? (
+                        <Button size="sm" onClick={() => setAddOpen(true)}>
+                          <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
+                          Add Secret
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                </td>
+              </tr>
+            ) : isFork ? (
+              <>
+                <tr className="border-b border-border bg-muted/20">
+                  <td colSpan={5} className="px-2 py-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2 text-xs"
+                      onClick={() => setOverridesOpen((open) => !open)}
+                      aria-expanded={overridesOpen}
+                    >
+                      {overridesOpen ? <ChevronDownIcon className="h-3.5 w-3.5" /> : <ChevronRightIcon className="h-3.5 w-3.5" />}
+                      Overrides
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        {overrideRows.length}
+                      </Badge>
+                    </Button>
+                  </td>
+                </tr>
+                {overridesOpen &&
+                  (overrideRows.length > 0 ? (
+                    overrideRows.map((row) => renderDataRow(row))
+                  ) : (
+                    <tr className="border-b border-border last:border-0">
+                      <td colSpan={5} className="px-4 py-3 text-xs text-muted-foreground">
+                        No overrides in this view.
                       </td>
                     </tr>
-                  )
-                : table.getRowModel().rows.map((row) => (
-                    <tr
-                      key={row.id}
-                      className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+                  ))}
+
+                <tr className="border-b border-border bg-muted/30">
+                  <td colSpan={5} className="px-2 py-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+                      onClick={() => setInheritedOpen((open) => !open)}
+                      aria-expanded={inheritedOpen}
                     >
-                      {row.getVisibleCells().map((cell) => (
-                        <td
-                          key={cell.id}
-                          className={`py-2.5 ${cell.column.id === 'icon' ? 'px-2' : 'px-4'} ${columnClass(
-                            cell.column.id
-                          )}`}
-                        >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </td>
-                      ))}
+                      {inheritedOpen ? <ChevronDownIcon className="h-3.5 w-3.5" /> : <ChevronRightIcon className="h-3.5 w-3.5" />}
+                      Inherited
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        {inheritedRows.length}
+                      </Badge>
+                    </Button>
+                  </td>
+                </tr>
+                {inheritedOpen &&
+                  (inheritedRows.length > 0 ? (
+                    inheritedRows.map((row) => renderDataRow(row))
+                  ) : (
+                    <tr className="border-b border-border last:border-0">
+                      <td colSpan={5} className="px-4 py-3 text-xs text-muted-foreground">
+                        No inherited secrets in this view.
+                      </td>
                     </tr>
                   ))}
+              </>
+            ) : (
+              filteredRows.map((row) => renderDataRow(row))
+            )}
           </tbody>
         </table>
       </div>
