@@ -21,8 +21,8 @@ class AuditEvents:
         }
         self._events.insert_one(payload)
 
+    @staticmethod
     def _build_query(
-        self,
         project_slug=None,
         config_slug=None,
         since=None,

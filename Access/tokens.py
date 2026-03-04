@@ -139,7 +139,8 @@ class Tokens:
         )
         return {"status": "OK"}, 200
 
-    def _serialize_token_metadata(self, doc):
+    @staticmethod
+    def _serialize_token_metadata(doc):
         return {
             "token_id": oid_to_str(doc.get("_id")),
             "type": doc.get("type"),

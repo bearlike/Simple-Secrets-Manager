@@ -54,6 +54,7 @@ This is a monorepo with:
 - Secret icon persistence now distinguishes `icon_source` as `auto` or `manual`; project-wide icon recompute should only rewrite `auto` entries so explicit manual overrides remain stable.
 - When preparing legacy API removal, deprecate in layers first: code-level `@warnings.deprecated`, OpenAPI `deprecated=true`, and API response deprecation headers, then remove only in a later major release.
 - For complexity-heavy logic in engines, prefer a module-private per-use-case service class (for example, comparison or icon resolution) with small single-purpose methods, while keeping the public engine/API method signature and response shape unchanged.
+- DeepSource `PYL-R0201` maps to pylint's optional extension check `R6301/no-self-use`; local verification requires `--load-plugins=pylint.extensions.no_self_use`.
 
 
 ## Conventional Commit Guidelines 
