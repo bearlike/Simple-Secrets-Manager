@@ -22,6 +22,9 @@ from Api.resources.secrets.secrets_resource import (  # noqa: F401
     SecretExportResource,
     SecretItemResource,
 )
+from Api.resources.secrets.project_icons_resource import (  # noqa: F401
+    ProjectSecretIconsRecomputeResource,
+)
 from Api.resources.compare.compare_secret_resource import (  # noqa: F401
     CompareSecretResource,
 )

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -18,6 +19,11 @@ import { createSecret } from '../../lib/api/secrets';
 import { queryKeys } from '../../lib/api/queryKeys';
 import { SecretValueEditor } from './SecretValueEditor';
 import { useReferenceSuggestions } from './useReferenceSuggestions';
+import { ConfirmDialog } from '../common/ConfirmDialog';
+import {
+  normalizeSecretValueForSubmit,
+  requiresEmptyValueConfirmation
+} from './secretValueSubmit';
 
 const ICON_SLUG_PATTERN = /^[a-z0-9-]+:[a-z0-9][a-z0-9-]*$/;
 
@@ -29,7 +35,7 @@ const schema = z.object({
     /^[A-Z0-9_]+$/,
     'Key must be uppercase letters, numbers, and underscores only'
   ),
-  value: z.string().min(1, 'Value is required'),
+  value: z.string(),
   iconSlug: z
     .string()
     .optional()
@@ -53,6 +59,7 @@ export function AddSecretDialog({
 }: AddSecretDialogProps) {
   const queryClient = useQueryClient();
   const referenceSuggestions = useReferenceSuggestions({ projectSlug, configSlug });
+  const [pendingSubmit, setPendingSubmit] = useState<FormValues | null>(null);
   const {
     control,
     register,
@@ -60,7 +67,12 @@ export function AddSecretDialog({
     reset,
     formState: { errors }
   } = useForm<FormValues>({
-    resolver: zodResolver(schema)
+    resolver: zodResolver(schema),
+    defaultValues: {
+      key: '',
+      value: '',
+      iconSlug: ''
+    }
   });
   const mutation = useMutation({
     mutationFn: (data: FormValues) =>
@@ -75,6 +87,7 @@ export function AddSecretDialog({
       });
       toast.success('Secret created');
       reset();
+      setPendingSubmit(null);
       onOpenChange(false);
     },
     onError: (error) => {
@@ -89,87 +102,125 @@ export function AddSecretDialog({
       toast.error('Failed to create secret');
     }
   });
-  const onSubmit = (data: FormValues) => mutation.mutate(data);
+  const submitValue = (data: FormValues) => mutation.mutate(data);
+  const onSubmit = (data: FormValues) => {
+    const normalizedValue = normalizeSecretValueForSubmit(data.value);
+    const normalized = {
+      ...data,
+      value: normalizedValue
+    };
+    if (requiresEmptyValueConfirmation(data.value)) {
+      setPendingSubmit(normalized);
+      return;
+    }
+    submitValue(normalized);
+  };
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(v) => {
-        onOpenChange(v);
-        if (!v) reset();
-      }}>
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(v) => {
+          onOpenChange(v);
+          if (!v) {
+            reset();
+            setPendingSubmit(null);
+          }
+        }}>
 
-      <DialogContent className="sm:max-w-[720px]">
-        <DialogHeader>
-          <DialogTitle>Add Secret</DialogTitle>
-        </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="key">Key</Label>
-            <Input
-              id="key"
-              {...register('key')}
-              placeholder="DATABASE_URL"
-              className="font-mono"
-              autoComplete="off" />
+        <DialogContent className="sm:max-w-[720px]">
+          <DialogHeader>
+            <DialogTitle>Add Secret</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="key">Key</Label>
+              <Input
+                id="key"
+                {...register('key')}
+                placeholder="DATABASE_URL"
+                className="font-mono"
+                autoComplete="off" />
 
-            {errors.key &&
-            <p className="text-xs text-destructive">{errors.key.message}</p>
-            }
-            <p className="text-xs text-muted-foreground">
-              Uppercase letters, numbers, and underscores only
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="iconSlug">Icon slug (optional)</Label>
-            <Input
-              id="iconSlug"
-              {...register('iconSlug')}
-              placeholder="simple-icons:sqlalchemy"
-              className="font-mono"
-              autoComplete="off"
-            />
-            {errors.iconSlug && <p className="text-xs text-destructive">{errors.iconSlug.message}</p>}
-            <p className="text-xs text-muted-foreground">Leave blank to auto-detect icon</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="value">Value</Label>
-            <Controller
-              name="value"
-              control={control}
-              render={({ field }) =>
-              <SecretValueEditor
-                value={field.value}
-                onChange={field.onChange}
-                placeholder="Enter secret value..."
-                rows={6}
-                className="min-h-[160px]"
-                autocompleteItems={referenceSuggestions}
-              />
+              {errors.key &&
+              <p className="text-xs text-destructive">{errors.key.message}</p>
               }
-            />
+              <p className="text-xs text-muted-foreground">
+                Uppercase letters, numbers, and underscores only
+              </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="iconSlug">Icon slug (optional)</Label>
+              <Input
+                id="iconSlug"
+                {...register('iconSlug')}
+                placeholder="simple-icons:sqlalchemy"
+                className="font-mono"
+                autoComplete="off"
+              />
+              {errors.iconSlug && <p className="text-xs text-destructive">{errors.iconSlug.message}</p>}
+              <p className="text-xs text-muted-foreground">Leave blank to auto-detect icon</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="value">Value</Label>
+              <Controller
+                name="value"
+                control={control}
+                render={({ field }) =>
+                <SecretValueEditor
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder="Enter secret value..."
+                  rows={6}
+                  className="min-h-[160px]"
+                  autocompleteItems={referenceSuggestions}
+                />
+                }
+              />
 
-            {errors.value &&
-            <p className="text-xs text-destructive">{errors.value.message}</p>
-            }
-            <p className="text-xs text-muted-foreground">
-              References: <code className="font-mono">${'{KEY}'}</code>, <code className="font-mono">${'{config.KEY}'}</code>,{' '}
-              <code className="font-mono">${'{project.config.KEY}'}</code>
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}>
+              {errors.value &&
+              <p className="text-xs text-destructive">{errors.value.message}</p>
+              }
+              <p className="text-xs text-muted-foreground">
+                References: <code className="font-mono">${'{KEY}'}</code>, <code className="font-mono">${'{config.KEY}'}</code>,{' '}
+                <code className="font-mono">${'{project.config.KEY}'}</code>
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Whitespace-only input is saved as an empty string after confirmation.
+              </p>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}>
 
-              Cancel
-            </Button>
-            <Button type="submit" disabled={mutation.isPending}>
-              {mutation.isPending ? 'Saving...' : 'Add Secret'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>);
+                Cancel
+              </Button>
+              <Button type="submit" disabled={mutation.isPending}>
+                {mutation.isPending ? 'Saving...' : 'Add Secret'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={pendingSubmit !== null}
+        onOpenChange={(next) => {
+          if (!next) setPendingSubmit(null);
+        }}
+        title="Create Empty Value?"
+        description={
+          pendingSubmit ?
+            `This will create "${pendingSubmit.key}" with an empty string value.` :
+            'This will create the secret with an empty string value.'
+        }
+        onConfirm={() => {
+          if (!pendingSubmit) return;
+          submitValue(pendingSubmit);
+        }}
+        loading={mutation.isPending}
+      />
+    </>);
 
 }

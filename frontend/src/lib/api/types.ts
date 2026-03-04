@@ -177,6 +177,19 @@ export interface BulkExportEnvResult {
 
 export type BulkExportResult = BulkExportJsonResult | BulkExportEnvResult;
 
+export interface RecomputeProjectIconsSummary {
+  configsScanned: number;
+  keysScanned: number;
+  keysUpdated: number;
+  secretsUpdated: number;
+  keysSkippedManual: number;
+}
+
+export interface RecomputeProjectIconsResponseDto {
+  status?: string;
+  summary?: RecomputeProjectIconsSummary;
+}
+
 export interface ProjectDto {
   slug?: string;
   project_slug?: string;

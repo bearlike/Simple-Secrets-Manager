@@ -7,6 +7,16 @@ This is a monorepo with:
 - Backend API at repository root.
 - Frontend Admin Console at `frontend/`.
 
+## Instruction hierarchy (authoritative)
+
+- This root `AGENTS.md` is mandatory baseline guidance for the entire monorepo.
+- Subproject `AGENTS.md` files are also mandatory when working inside their directory tree.
+- Always load and follow the nearest `AGENTS.md` for every file you touch, in addition to this root file.
+- If guidance conflicts, the nearest (most specific) `AGENTS.md` for the changed file wins, and root rules still apply where they do not conflict.
+- Continuously capture non-trivial lessons from implementation work and document the most important ones in the appropriate `AGENTS.md` (root and/or subproject) so future sessions accelerate delivery and workflow quality.
+- Known subproject instruction files in this repo:
+  - `frontend/AGENTS.md` for all work under `frontend/`.
+
 ## Backend working rules
 
 - Run backend quality checks with `./scripts/quality.sh check`.
@@ -35,6 +45,16 @@ This is a monorepo with:
 - Always test and lint the codebase after changes.
 - Playwright MCP tool, when accessible, can be used for testing front-end components and changes. 
 - Always scan related components to ensure consistency. Keep things stupid simple (KISS) and don't repeat yourself (DRY). This prevents code bloat. We need to avoid overengineering.
+
+## Session lessons (non-trivial)
+
+- `git push` can be blocked by a pre-push hook when the working tree is dirty, even if the dirty files are unrelated to the commit being pushed.
+  - Practical workflow: temporarily stash unrelated local edits, push, then restore with `git stash pop`.
+- Keep React Query derived views under the same key prefix when possible (for example, `['secrets', projectSlug, configSlug, ...]`) so existing prefix invalidation still refreshes all related views.
+- Secret icon persistence now distinguishes `icon_source` as `auto` or `manual`; project-wide icon recompute should only rewrite `auto` entries so explicit manual overrides remain stable.
+- When preparing legacy API removal, deprecate in layers first: code-level `@warnings.deprecated`, OpenAPI `deprecated=true`, and API response deprecation headers, then remove only in a later major release.
+- For complexity-heavy logic in engines, prefer a module-private per-use-case service class (for example, comparison or icon resolution) with small single-purpose methods, while keeping the public engine/API method signature and response shape unchanged.
+- DeepSource `PYL-R0201` maps to pylint's optional extension check `R6301/no-self-use`; local verification requires `--load-plugins=pylint.extensions.no_self_use`.
 
 
 ## Conventional Commit Guidelines 
@@ -128,4 +148,3 @@ git commit -m "type(scope): description"
 	<note>Replace with your constructed message. Include body and footer if needed.</note>
 </final-step>
 ```
-

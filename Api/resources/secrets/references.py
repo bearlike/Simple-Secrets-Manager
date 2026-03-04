@@ -186,7 +186,8 @@ class SecretReferenceResolver:
         self._resolved_cache[node] = resolved
         return resolved
 
-    def _parse_reference(self, token: str, current: _Context) -> _Node | None:
+    @staticmethod
+    def _parse_reference(token: str, current: _Context) -> _Node | None:
         parts = token.split(".")
         if len(parts) == 1:
             key = parts[0]

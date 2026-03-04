@@ -47,7 +47,7 @@ uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git ssm-cli --
 Pin to tag:
 
 ```bash
-uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git@v1.4.0 ssm-cli --help
+uvx --from git+https://github.com/bearlike/Simple-Secrets-Manager.git@v1.4.1 ssm-cli --help
 ```
 
 ## 3) Quick Start
@@ -180,7 +180,7 @@ Test overrides via env vars:
 - `SSM_CREDENTIALS_FILE`
 - `SSM_CACHE_DIR`
 
-## Workspace Commands (v1.4.0)
+## Workspace Commands (v1.4.1)
 
 `ssm-cli workspace ...` covers user/group/RBAC management:
 

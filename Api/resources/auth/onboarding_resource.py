@@ -16,14 +16,16 @@ bootstrap_parser.add_argument(
 
 @onboarding_ns.route("/status")
 class OnboardingStatusResource(Resource):
-    def get(self):
+    @staticmethod
+    def get():
         return {"status": "OK", "onboarding": conn.onboarding.get_state()}, 200
 
 
 @onboarding_ns.route("/bootstrap")
 class OnboardingBootstrapResource(Resource):
+    @staticmethod
     @api.doc(parser=bootstrap_parser)
-    def post(self):
+    def post():
         args = bootstrap_parser.parse_args()
         result, code = conn.onboarding.bootstrap(
             username=args["username"],

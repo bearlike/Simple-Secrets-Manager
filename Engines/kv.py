@@ -2,8 +2,15 @@
 """KV (Key-Value) Secret Engine for Secrets Manager"""
 
 import re
+from warnings import deprecated
 
 
+@deprecated(
+    "Key_Value_Secrets is deprecated and will be removed in the next major "
+    "release. "
+    "Use config-scoped secrets via "
+    "/api/projects/{project}/configs/{config}/secrets/{key}."
+)
 class Key_Value_Secrets:
     def __init__(self, kv_col):
         """KV stands for Key-Value collection
@@ -14,6 +21,12 @@ class Key_Value_Secrets:
         # * db.kv.createIndex( { "path": 1 }, { unique: true } )
         self._kv = kv_col
 
+    @deprecated(
+        "Key_Value_Secrets.get is deprecated and will be removed in the next "
+        "major release. "
+        "Use config-scoped secrets via "
+        "/api/projects/{project}/configs/{config}/secrets/{key}."
+    )
     def get(self, path, key):
         finder = self._kv.find_one({"path": path})
         if not finder:
@@ -28,6 +41,12 @@ class Key_Value_Secrets:
         }
         return result, 200
 
+    @deprecated(
+        "Key_Value_Secrets.add is deprecated and will be removed in the next "
+        "major release. "
+        "Use config-scoped secrets via "
+        "/api/projects/{project}/configs/{config}/secrets/{key}."
+    )
     def add(self, path, key, value):
         pattern = "[a-zA-Z0-9_]+"
         if not (re.fullmatch(pattern, key) and re.fullmatch(pattern, path)):
@@ -54,6 +73,12 @@ class Key_Value_Secrets:
             return {"status": f"Key already exist in '{path}'"}, 400
         return result, 200
 
+    @deprecated(
+        "Key_Value_Secrets.delete is deprecated and will be removed in the "
+        "next major release. "
+        "Use config-scoped secrets via "
+        "/api/projects/{project}/configs/{config}/secrets/{key}."
+    )
     def delete(self, path, key):
         finder = self._kv.find_one({"path": path})
         if not finder:
@@ -65,6 +90,12 @@ class Key_Value_Secrets:
         result = {"status": "OK", "path": path, "key": key}
         return result, 200
 
+    @deprecated(
+        "Key_Value_Secrets.update is deprecated and will be removed in the "
+        "next major release. "
+        "Use config-scoped secrets via "
+        "/api/projects/{project}/configs/{config}/secrets/{key}."
+    )
     def update(self, path, key, value):
         finder = self._kv.find_one({"path": path})
         if not finder:

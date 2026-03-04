@@ -9,5 +9,6 @@ meta_ns = api.namespace("version", description="Application version")
 
 @meta_ns.route("")
 class VersionResource(Resource):
-    def get(self):
+    @staticmethod
+    def get():
         return {"status": "OK", "version": get_application_version()}, 200

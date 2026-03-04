@@ -1,19 +1,23 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { PlusIcon, GitBranchIcon, ArrowRightIcon } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { PlusIcon, GitBranchIcon, ArrowRightIcon, RefreshCwIcon } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getProjects } from '../lib/api/projects';
 import { getConfigs } from '../lib/api/configs';
+import { recomputeProjectSecretIcons } from '../lib/api/secrets';
 import { queryKeys } from '../lib/api/queryKeys';
 import { CreateConfigDialog } from '../components/configs/CreateConfigDialog';
 import { EmptyState } from '../components/common/EmptyState';
+import { notifyApiError } from '../lib/api/errorToast';
 
 export function ConfigSettingsPage() {
   const { projectSlug = '' } = useParams<{ projectSlug: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
 
   const { data: projects = [] } = useQuery({
@@ -28,6 +32,19 @@ export function ConfigSettingsPage() {
   });
 
   const currentProject = projects.find((project) => project.slug === projectSlug);
+  const recomputeIconsMutation = useMutation({
+    mutationFn: () => recomputeProjectSecretIcons(projectSlug),
+    onSuccess: (summary) => {
+      queryClient.invalidateQueries({ queryKey: ['secrets', projectSlug] });
+      queryClient.invalidateQueries({ queryKey: ['compare-secret', projectSlug] });
+      toast.success(
+        `Auto icons refreshed: ${summary.keysUpdated}/${summary.keysScanned} keys updated (${summary.secretsUpdated} secrets)`
+      );
+    },
+    onError: (error) => {
+      notifyApiError(error, 'Failed to refresh auto icons');
+    }
+  });
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -36,10 +53,22 @@ export function ConfigSettingsPage() {
           <h1 className="text-lg font-semibold">{currentProject?.name ?? projectSlug} - Settings</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Manage environments and configurations</p>
         </div>
-        <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-          <PlusIcon className="h-3.5 w-3.5" />
-          New Config
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => recomputeIconsMutation.mutate()}
+            disabled={!projectSlug || recomputeIconsMutation.isPending}
+          >
+            <RefreshCwIcon className={`h-3.5 w-3.5 ${recomputeIconsMutation.isPending ? 'animate-spin' : ''}`} />
+            Refresh Auto Icons
+          </Button>
+          <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
+            <PlusIcon className="h-3.5 w-3.5" />
+            New Config
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-md border border-border overflow-hidden">

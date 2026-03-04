@@ -1,15 +1,19 @@
-import { useMemo, useRef, useState, type ChangeEventHandler } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEventHandler } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
   getFilteredRowModel,
   flexRender,
-  type ColumnDef
+  type ColumnDef,
+  type Row
 } from '@tanstack/react-table';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  EllipsisIcon,
   EyeIcon,
   EyeOffIcon,
   GitCompareArrowsIcon,
@@ -23,6 +27,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
+import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   deleteSecret,
   getSecrets,
@@ -66,31 +78,95 @@ function hasOwnKey(record: Record<string, string>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
 }
 
+type ForkBucket = 'override' | 'inherited';
+
+interface SecretRow extends Secret {
+  forkBucket: ForkBucket;
+  isDirectInConfig: boolean;
+}
+
+export interface ForkSecretsSummary {
+  isFork: boolean;
+  overrides: number;
+  inherited: number;
+  parentComparisonDegraded: boolean;
+}
+
+interface SecretsQueryData {
+  rows: SecretRow[];
+  summary: ForkSecretsSummary;
+}
+
 interface SecretsTableProps {
   projectSlug: string;
   configSlug: string;
+  parentSlug?: string;
+  onForkSummaryChange?: (summary: ForkSecretsSummary) => void;
 }
+
+interface RowAction {
+  key: string;
+  label: string;
+  onSelect: () => void;
+  icon: typeof EyeIcon;
+  destructive?: boolean;
+}
+
+const COLUMN_CLASS: Record<string, { header: string; cell: string }> = {
+  icon: { header: 'w-10 sm:w-12', cell: 'w-10 sm:w-12 align-top' },
+  key: {
+    header: 'min-w-[10rem] sm:min-w-[12rem]',
+    cell: 'min-w-[10rem] sm:min-w-[12rem] align-top'
+  },
+  value: {
+    header: 'min-w-[14rem] sm:min-w-[18rem]',
+    cell: 'min-w-[14rem] sm:min-w-[18rem] align-top'
+  },
+  updatedAt: {
+    header: 'w-[6.5rem] whitespace-nowrap',
+    cell: 'w-[6.5rem] whitespace-nowrap align-top'
+  },
+  actions: {
+    header: 'w-10 sm:w-12 lg:w-40 text-right',
+    cell: 'w-10 sm:w-12 lg:w-40 align-top'
+  }
+};
 
 function columnClass(columnId: string, header = false): string {
-  if (columnId === 'icon') {
-    return header ? 'w-14' : 'w-14 align-top';
-  }
-  if (columnId === 'key') {
-    return header ? 'w-56 max-w-[14rem]' : 'w-56 max-w-[14rem] align-top';
-  }
-  if (columnId === 'value') {
-    return header ? '' : 'min-w-0 align-top';
-  }
-  if (columnId === 'updatedAt') {
-    return header ? 'w-28' : 'w-28 align-top';
-  }
-  if (columnId === 'actions') {
-    return header ? 'w-44 text-right' : 'w-44 align-top';
-  }
-  return header ? '' : 'align-top';
+  const classes = COLUMN_CLASS[columnId];
+  if (!classes) return header ? '' : 'align-top';
+  return header ? classes.header : classes.cell;
 }
 
-export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
+function summarizeForkRows(
+  rows: SecretRow[],
+  isFork: boolean,
+  parentComparisonDegraded = false
+): ForkSecretsSummary {
+  if (!isFork) {
+    return {
+      isFork: false,
+      overrides: rows.length,
+      inherited: 0,
+      parentComparisonDegraded: false
+    };
+  }
+
+  const overrides = rows.filter((row) => row.forkBucket === 'override').length;
+  return {
+    isFork: true,
+    overrides,
+    inherited: rows.length - overrides,
+    parentComparisonDegraded
+  };
+}
+
+export function SecretsTable({
+  projectSlug,
+  configSlug,
+  parentSlug,
+  onForkSummaryChange
+}: SecretsTableProps) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -102,12 +178,94 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
   const [globalFilter, setGlobalFilter] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [importPreview, setImportPreview] = useState<EnvImportPreview | null>(null);
+  const [overridesOpen, setOverridesOpen] = useState(true);
+  const [inheritedOpen, setInheritedOpen] = useState(false);
 
-  const { data: secrets = [], isLoading } = useQuery({
-    queryKey: queryKeys.secrets(projectSlug, configSlug),
-    queryFn: () => getSecrets(projectSlug, configSlug),
+  const isFork = Boolean(parentSlug);
+
+  useEffect(() => {
+    setOverridesOpen(true);
+    setInheritedOpen(false);
+  }, [projectSlug, configSlug, parentSlug]);
+
+  const { data: secretsData, isLoading } = useQuery<SecretsQueryData>({
+    queryKey: queryKeys.secretsView(projectSlug, configSlug, parentSlug),
+    queryFn: async () => {
+      const effectiveSecrets = await getSecrets(projectSlug, configSlug, {
+        includeParent: true,
+        includeMeta: true,
+        resolveReferences: false,
+        raw: false
+      });
+
+      if (!parentSlug) {
+        const rows: SecretRow[] = effectiveSecrets.map((secret) => ({
+          ...secret,
+          forkBucket: 'override',
+          isDirectInConfig: true
+        }));
+        return {
+          rows,
+          summary: summarizeForkRows(rows, false)
+        };
+      }
+
+      const [directSecrets, parentSecretsResult] = await Promise.all([
+        getSecretsKeyMap(projectSlug, configSlug, false, {
+          includeParent: false,
+          includeMeta: false,
+          resolveReferences: false,
+          raw: false
+        }),
+        getSecretsKeyMap(projectSlug, parentSlug, true, {
+          includeParent: true,
+          includeMeta: false,
+          resolveReferences: false,
+          raw: false
+        })
+          .then((data) => ({ data, failed: false }))
+          .catch(() => ({ data: {} as Record<string, string>, failed: true }))
+      ]);
+
+      const parentSecrets = parentSecretsResult.data;
+      const parentComparisonDegraded = parentSecretsResult.failed;
+
+      const rows: SecretRow[] = effectiveSecrets.map((secret) => {
+        const isDirectInConfig = hasOwnKey(directSecrets, secret.key);
+
+        let forkBucket: ForkBucket = 'inherited';
+        if (isDirectInConfig) {
+          if (parentComparisonDegraded) {
+            forkBucket = 'override';
+          } else if (!hasOwnKey(parentSecrets, secret.key)) {
+            forkBucket = 'override';
+          } else {
+            forkBucket = directSecrets[secret.key] === parentSecrets[secret.key] ? 'inherited' : 'override';
+          }
+        }
+
+        return {
+          ...secret,
+          forkBucket,
+          isDirectInConfig
+        };
+      });
+
+      return {
+        rows,
+        summary: summarizeForkRows(rows, true, parentComparisonDegraded)
+      };
+    },
     enabled: !!projectSlug && !!configSlug
   });
+
+  useEffect(() => {
+    if (!onForkSummaryChange || !secretsData) return;
+    onForkSummaryChange(secretsData.summary);
+  }, [onForkSummaryChange, secretsData]);
+
+  const secrets = useMemo(() => secretsData?.rows ?? [], [secretsData?.rows]);
+  const summary = secretsData?.summary;
 
   const deleteMutation = useMutation({
     mutationFn: (key: string) => deleteSecret(projectSlug, configSlug, key),
@@ -248,7 +406,7 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
     }
   };
 
-  const columns = useMemo<ColumnDef<Secret>[]>(
+  const columns = useMemo<ColumnDef<SecretRow>[]>(
     () => [
       {
         id: 'icon',
@@ -262,22 +420,34 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
       {
         accessorKey: 'key',
         header: 'KEY',
-        cell: ({ row }) => (
-          <span className="block max-w-full break-all font-mono text-sm font-medium leading-5">
-            {row.original.key}
-          </span>
-        )
+        cell: ({ row }) => {
+          const inherited = row.original.forkBucket === 'inherited';
+          return (
+            <span
+              className={`block max-w-full break-all font-mono text-sm font-medium leading-5 ${
+                inherited ? 'text-muted-foreground' : ''
+              }`}
+            >
+              {row.original.key}
+            </span>
+          );
+        }
       },
       {
         accessorKey: 'value',
         header: 'VALUE',
         cell: ({ row }) => {
           const revealed = revealedKeys.has(row.original.key);
-          return (
-            revealed ?
-            <div className="max-w-full rounded-md border border-border bg-muted/20 px-2 py-1">
-                <SecretValueText value={row.original.value} className="max-h-40 overflow-y-auto" />
-              </div> :
+          const inherited = row.original.forkBucket === 'inherited';
+          return revealed ? (
+            <div
+              className={`max-w-full rounded-md border border-border px-2 py-1 ${
+                inherited ? 'bg-muted/10' : 'bg-muted/20'
+              }`}
+            >
+              <SecretValueText value={row.original.value} className="max-h-40 overflow-y-auto" />
+            </div>
+          ) : (
             <span className="font-mono text-sm text-muted-foreground">••••••••••••</span>
           );
         }
@@ -292,53 +462,84 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
       {
         id: 'actions',
         header: '',
-        cell: ({ row }) => (
-          <div className="flex items-center justify-end gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => toggleReveal(row.original.key)}
-              aria-label={revealedKeys.has(row.original.key) ? 'Hide value' : 'Reveal value'}
-            >
-              {revealedKeys.has(row.original.key) ?
-              <EyeOffIcon className="h-3.5 w-3.5" /> :
-              <EyeIcon className="h-3.5 w-3.5" />
-              }
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() =>
-                navigate(
-                  `/projects/${projectSlug}/compare/secret?key=${encodeURIComponent(row.original.key)}`
-                )
-              }
-              aria-label="Compare secret"
-            >
-              <GitCompareArrowsIcon className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => setEditingSecret(row.original)}
-              aria-label="Edit secret"
-            >
-              <PencilIcon className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-              onClick={() => setDeletingKey(row.original.key)}
-              aria-label="Delete secret"
-            >
-              <Trash2Icon className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        )
+        cell: ({ row }) => {
+          const isInherited = row.original.forkBucket === 'inherited';
+          const editLabel = isInherited ? 'Override inherited secret' : 'Edit secret';
+          const isRevealed = revealedKeys.has(row.original.key);
+          const rowActions: RowAction[] = [
+            {
+              key: 'toggle-visibility',
+              label: isRevealed ? 'Hide value' : 'Reveal value',
+              onSelect: () => toggleReveal(row.original.key),
+              icon: isRevealed ? EyeOffIcon : EyeIcon
+            },
+            {
+              key: 'compare',
+              label: 'Compare secret',
+              onSelect: () =>
+                navigate(`/projects/${projectSlug}/compare/secret?key=${encodeURIComponent(row.original.key)}`),
+              icon: GitCompareArrowsIcon
+            },
+            {
+              key: 'edit',
+              label: editLabel,
+              onSelect: () => setEditingSecret(row.original),
+              icon: PencilIcon
+            },
+            {
+              key: 'delete',
+              label: 'Delete secret',
+              onSelect: () => setDeletingKey(row.original.key),
+              icon: Trash2Icon,
+              destructive: true
+            }
+          ];
+
+          return (
+            <>
+              <div className="hidden items-center justify-end gap-1 lg:flex">
+                {rowActions.map((action) => (
+                  <Button
+                    key={action.key}
+                    variant="ghost"
+                    size="sm"
+                    className={`h-7 w-7 p-0 ${action.destructive ? 'text-muted-foreground hover:text-destructive' : ''}`}
+                    onClick={action.onSelect}
+                    aria-label={action.label}
+                  >
+                    <action.icon className="h-3.5 w-3.5" />
+                  </Button>
+                ))}
+              </div>
+              <div className="flex justify-end lg:hidden">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      aria-label={`Open actions for ${row.original.key}`}
+                    >
+                      <EllipsisIcon className="h-3.5 w-3.5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    {rowActions.map((action) => (
+                      <DropdownMenuItem
+                        key={action.key}
+                        onClick={action.onSelect}
+                        className={action.destructive ? 'text-destructive focus:text-destructive' : ''}
+                      >
+                        <action.icon className="mr-2 h-3.5 w-3.5" />
+                        {action.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            </>
+          );
+        }
       }
     ],
     [navigate, projectSlug, revealedKeys]
@@ -357,37 +558,89 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
       row.original.key.toLowerCase().includes(filterValue.toLowerCase())
   });
 
+  const filteredRows = table.getRowModel().rows;
+  const overrideRows = isFork ? filteredRows.filter((row) => row.original.forkBucket === 'override') : filteredRows;
+  const inheritedRows = isFork ? filteredRows.filter((row) => row.original.forkBucket === 'inherited') : [];
+
+  const renderDataRow = (row: Row<SecretRow>) => {
+    const inherited = row.original.forkBucket === 'inherited';
+    return (
+      <TableRow
+        key={row.id}
+        className={`border-b border-border last:border-0 transition-colors ${
+          inherited ? 'bg-muted/10 hover:bg-muted/20' : 'hover:bg-muted/20'
+        }`}
+      >
+        {row.getVisibleCells().map((cell) => (
+          <TableCell
+            key={cell.id}
+            className={`py-2 ${cell.column.id === 'icon' ? 'px-2' : 'px-2.5 sm:px-3 lg:px-4'} ${columnClass(
+              cell.column.id
+            )}`}
+          >
+            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+          </TableCell>
+        ))}
+      </TableRow>
+    );
+  };
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-xs">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="relative order-2 min-w-0 flex-1 basis-full sm:order-1 sm:basis-auto">
           <SearchIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
             placeholder="Filter secrets..."
             value={globalFilter}
             onChange={(event) => setGlobalFilter(event.target.value)}
-            className="pl-8 h-8 text-sm"
+            className="h-8 pl-8 text-sm"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="outline" className={`text-xs font-mono ${getConfigBadgeClass(configSlug)}`}>
+        <div className="order-1 ml-auto flex shrink-0 items-center gap-1 sm:order-2 sm:gap-2">
+          <Badge
+            variant="outline"
+            className={`hidden text-xs font-mono md:inline-flex ${getConfigBadgeClass(configSlug)}`}
+          >
             {configSlug}
           </Badge>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-8 gap-1.5"
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <UploadIcon className="h-3.5 w-3.5" />
-            Import .env
-          </Button>
-          <Button size="sm" className="h-8 gap-1.5" onClick={() => setAddOpen(true)}>
-            <PlusIcon className="h-3.5 w-3.5" />
-            Add Secret
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0 lg:h-8 lg:w-auto lg:gap-1.5 lg:px-3"
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Import .env"
+              >
+                <UploadIcon className="h-3.5 w-3.5" />
+                <span className="hidden lg:inline">Import .env</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="lg:hidden">Import .env</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="sm"
+                className="h-8 w-8 p-0 lg:h-8 lg:w-auto lg:gap-1.5 lg:px-3"
+                onClick={() => setAddOpen(true)}
+                aria-label="Add Secret"
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                <span className="hidden lg:inline">Add Secret</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent className="lg:hidden">Add Secret</TooltipContent>
+          </Tooltip>
         </div>
       </div>
+
+      {isFork && summary?.parentComparisonDegraded && (
+        <p className="text-xs text-muted-foreground">
+          Parent diff comparison is partially unavailable; direct keys are treated as overrides.
+        </p>
+      )}
 
       <input
         ref={fileInputRef}
@@ -397,85 +650,132 @@ export function SecretsTable({ projectSlug, configSlug }: SecretsTableProps) {
         onChange={onFileChange}
       />
 
-      <div className="overflow-x-auto rounded-md border border-border">
-        <table className="min-w-[800px] w-full table-fixed text-sm">
-          <thead>
-            <tr className="bg-muted/40 border-b border-border">
+      <p className="px-0.5 text-[11px] text-muted-foreground xl:hidden">
+        Swipe or scroll horizontally to view all columns.
+      </p>
+      <div className="rounded-md border border-border ssm-table-scroll">
+        <Table className="min-w-[760px] w-full table-auto text-sm">
+          <TableCaption className="sr-only">
+            Environment secrets table with columns key, value, updated time, and actions.
+          </TableCaption>
+          <TableHeader>
+            <TableRow className="bg-muted/40 border-b border-border hover:bg-muted/40">
               {table.getHeaderGroups().map((headerGroup) =>
                 headerGroup.headers.map((header) => (
-                  <th
+                  <TableHead
                     key={header.id}
-                    className={`py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground ${
-                      header.column.id === 'icon' ? 'px-2' : 'px-4'
+                    scope="col"
+                    className={`h-auto py-2 text-left text-xs font-medium tracking-wider text-muted-foreground ${
+                      header.column.id === 'icon' ? 'px-2' : 'px-2.5 sm:px-3 lg:px-4'
                     } ${columnClass(header.column.id, true)}`}
                   >
                     {flexRender(header.column.columnDef.header, header.getContext())}
-                  </th>
+                  </TableHead>
                 ))
               )}
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading
-                ? Array.from({ length: 5 }).map((_, index) => (
-                  <tr key={index} className="border-b border-border last:border-0">
-                    <td className="px-2 py-2.5">
-                      <Skeleton className="h-8 w-8 rounded-md" />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Skeleton className="h-4 w-40" />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Skeleton className="h-4 w-32" />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Skeleton className="h-4 w-16" />
-                    </td>
-                    <td className="px-4 py-2.5">
-                      <Skeleton className="h-4 w-16 ml-auto" />
-                    </td>
-                  </tr>
-                ))
-              : table.getRowModel().rows.length === 0
-                ? (
-                    <tr>
-                      <td colSpan={5}>
-                        <EmptyState
-                          title={globalFilter ? 'No secrets match your filter' : 'No secrets yet'}
-                          description={
-                            globalFilter ? 'Try a different search term' : 'Add your first secret to get started'
-                          }
-                          action={
-                            !globalFilter ? (
-                              <Button size="sm" onClick={() => setAddOpen(true)}>
-                                <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
-                                Add Secret
-                              </Button>
-                            ) : undefined
-                          }
-                        />
-                      </td>
-                    </tr>
-                  )
-                : table.getRowModel().rows.map((row) => (
-                    <tr
-                      key={row.id}
-                      className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, index) => (
+                <TableRow key={index} className="border-b border-border last:border-0">
+                  <TableCell className="px-2 py-2">
+                    <Skeleton className="h-8 w-8 rounded-md" />
+                  </TableCell>
+                  <TableCell className="px-2.5 py-2 sm:px-3 lg:px-4">
+                    <Skeleton className="h-4 w-40" />
+                  </TableCell>
+                  <TableCell className="px-2.5 py-2 sm:px-3 lg:px-4">
+                    <Skeleton className="h-4 w-32" />
+                  </TableCell>
+                  <TableCell className="px-2.5 py-2 sm:px-3 lg:px-4">
+                    <Skeleton className="h-4 w-16" />
+                  </TableCell>
+                  <TableCell className="px-2.5 py-2 sm:px-3 lg:px-4">
+                    <Skeleton className="h-4 w-16 ml-auto" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : filteredRows.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5}>
+                  <EmptyState
+                    title={globalFilter ? 'No secrets match your filter' : 'No secrets yet'}
+                    description={globalFilter ? 'Try a different search term' : 'Add your first secret to get started'}
+                    action={
+                      !globalFilter ? (
+                        <Button size="sm" onClick={() => setAddOpen(true)}>
+                          <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
+                          Add Secret
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                </TableCell>
+              </TableRow>
+            ) : isFork ? (
+              <>
+                <TableRow className="border-b border-border bg-muted/20 hover:bg-muted/20">
+                  <TableCell colSpan={5} className="px-2 py-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2 text-xs"
+                      onClick={() => setOverridesOpen((open) => !open)}
+                      aria-expanded={overridesOpen}
                     >
-                      {row.getVisibleCells().map((cell) => (
-                        <td
-                          key={cell.id}
-                          className={`py-2.5 ${cell.column.id === 'icon' ? 'px-2' : 'px-4'} ${columnClass(
-                            cell.column.id
-                          )}`}
-                        >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </td>
-                      ))}
-                    </tr>
+                      {overridesOpen ? <ChevronDownIcon className="h-3.5 w-3.5" /> : <ChevronRightIcon className="h-3.5 w-3.5" />}
+                      Overrides
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        {overrideRows.length}
+                      </Badge>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+                {overridesOpen &&
+                  (overrideRows.length > 0 ? (
+                    overrideRows.map((row) => renderDataRow(row))
+                  ) : (
+                    <TableRow className="border-b border-border last:border-0 hover:bg-transparent">
+                      <TableCell colSpan={5} className="px-2.5 py-3 text-xs text-muted-foreground sm:px-3 lg:px-4">
+                        No overrides in this view.
+                      </TableCell>
+                    </TableRow>
                   ))}
-          </tbody>
-        </table>
+
+                <TableRow className="border-b border-border bg-muted/30 hover:bg-muted/30">
+                  <TableCell colSpan={5} className="px-2 py-1.5">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+                      onClick={() => setInheritedOpen((open) => !open)}
+                      aria-expanded={inheritedOpen}
+                    >
+                      {inheritedOpen ? <ChevronDownIcon className="h-3.5 w-3.5" /> : <ChevronRightIcon className="h-3.5 w-3.5" />}
+                      Inherited
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        {inheritedRows.length}
+                      </Badge>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+                {inheritedOpen &&
+                  (inheritedRows.length > 0 ? (
+                    inheritedRows.map((row) => renderDataRow(row))
+                  ) : (
+                    <TableRow className="border-b border-border last:border-0 hover:bg-transparent">
+                      <TableCell colSpan={5} className="px-2.5 py-3 text-xs text-muted-foreground sm:px-3 lg:px-4">
+                        No inherited secrets in this view.
+                      </TableCell>
+                    </TableRow>
+                  ))}
+              </>
+            ) : (
+              filteredRows.map((row) => renderDataRow(row))
+            )}
+          </TableBody>
+        </Table>
       </div>
 
       <AddSecretDialog

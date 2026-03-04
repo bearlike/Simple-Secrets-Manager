@@ -26,6 +26,14 @@
     --destructive: hsl(0 100% 50%);
     --destructive-foreground: hsl(210 40% 98%);
     --ring: hsl(215 20.2% 65.1%);
+    --sidebar-background: hsl(0 0% 98%);
+    --sidebar-foreground: hsl(240 5.3% 26.1%);
+    --sidebar-primary: hsl(240 5.9% 10%);
+    --sidebar-primary-foreground: hsl(0 0% 98%);
+    --sidebar-accent: hsl(240 4.8% 95.9%);
+    --sidebar-accent-foreground: hsl(240 5.9% 10%);
+    --sidebar-border: hsl(220 13% 91%);
+    --sidebar-ring: hsl(217.2 91.2% 59.8%);
     --radius: 0.5rem;
   }
   :root[class~="dark"] {
@@ -48,6 +56,14 @@
     --destructive: hsl(0 63% 31%);
     --destructive-foreground: hsl(210 40% 98%);
     --ring: hsl(216 34% 17%);
+    --sidebar-background: hsl(240 5.9% 10%);
+    --sidebar-foreground: hsl(240 4.8% 95.9%);
+    --sidebar-primary: hsl(224.3 76.3% 48%);
+    --sidebar-primary-foreground: hsl(0 0% 100%);
+    --sidebar-accent: hsl(240 3.7% 15.9%);
+    --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
+    --sidebar-border: hsl(240 3.7% 15.9%);
+    --sidebar-ring: hsl(217.2 91.2% 59.8%);
     --radius: 0.5rem;
   }
 }
@@ -83,5 +99,23 @@
 
   .ssm-secret-value {
     overflow-wrap: anywhere;
+  }
+
+  .ssm-table-scroll > div {
+    scrollbar-gutter: stable both-edges;
+    scrollbar-width: thin;
+  }
+
+  .ssm-table-scroll > div::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .ssm-table-scroll > div::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .ssm-table-scroll > div::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
   }
 }
