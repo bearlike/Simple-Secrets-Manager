@@ -23,18 +23,33 @@ class SecretCodec:
 
 
 class SecretsV2:
+    ICON_SOURCE_AUTO = "auto"
+    ICON_SOURCE_MANUAL = "manual"
+
     def __init__(self, secrets_col, configs_engine):
         self._secrets = secrets_col
         self._configs = configs_engine
         self._secrets.create_index([("config_id", 1), ("key", 1)], unique=True)
 
-    def _existing_icon_slug(self, config_id, key):
+    @classmethod
+    def _normalize_icon_source(cls, value):
+        return (
+            cls.ICON_SOURCE_MANUAL
+            if value == cls.ICON_SOURCE_MANUAL
+            else cls.ICON_SOURCE_AUTO
+        )
+
+    def _existing_icon_entry(self, config_id, key):
         existing = self._secrets.find_one(
-            {"config_id": config_id, "key": key}, {"icon_slug": 1}
+            {"config_id": config_id, "key": key},
+            {"icon_slug": 1, "icon_source": 1},
         )
         if not existing:
-            return ""
-        return normalize_icon_slug(existing.get("icon_slug"))
+            return "", self.ICON_SOURCE_AUTO
+        return (
+            normalize_icon_slug(existing.get("icon_slug")),
+            self._normalize_icon_source(existing.get("icon_source")),
+        )
 
     def _project_config_ids_for_config(self, config_id):
         config = self._configs.get_by_id(config_id)
@@ -54,32 +69,38 @@ class SecretsV2:
 
         return [config_id_value]
 
-    def _existing_project_icon_slug(self, config_id, key):
+    def _existing_project_icon_entry(self, config_id, key):
         for current_config_id in self._project_config_ids_for_config(
             config_id
         ):
-            icon_slug = self._existing_icon_slug(current_config_id, key)
+            icon_slug, icon_source = self._existing_icon_entry(
+                current_config_id, key
+            )
             if is_valid_icon_slug(icon_slug):
-                return icon_slug
-        return ""
+                return icon_slug, icon_source
+        return "", self.ICON_SOURCE_AUTO
 
-    def _sync_project_icon_slug(self, config_id, key, icon_slug):
+    def _sync_project_icon_slug(self, config_id, key, icon_slug, icon_source):
         config_ids = self._project_config_ids_for_config(config_id)
         if not config_ids:
             return
 
+        set_doc = {
+            "icon_slug": icon_slug,
+            "icon_source": self._normalize_icon_source(icon_source),
+        }
         update_many = getattr(self._secrets, "update_many", None)
         if callable(update_many):
             update_many(
                 {"config_id": {"$in": config_ids}, "key": key},
-                {"$set": {"icon_slug": icon_slug}},
+                {"$set": set_doc},
             )
             return
 
         for current_config_id in config_ids:
             self._secrets.update_one(
                 {"config_id": current_config_id, "key": key},
-                {"$set": {"icon_slug": icon_slug}},
+                {"$set": set_doc},
             )
 
     def _resolve_icon_slug_for_put(
@@ -87,22 +108,116 @@ class SecretsV2:
     ):
         if icon_slug_provided:
             if icon_slug is not None and not isinstance(icon_slug, str):
-                return None, "Invalid icon slug", 400
+                return None, None, "Invalid icon slug", 400
             normalized_icon_slug = normalize_icon_slug(icon_slug)
             if normalized_icon_slug and not is_valid_icon_slug(
                 normalized_icon_slug
             ):
-                return None, "Invalid icon slug", 400
+                return None, None, "Invalid icon slug", 400
             if normalized_icon_slug:
-                return normalized_icon_slug, None, None
-            return resolve_icon_slug(key, None), None, None
+                return (
+                    normalized_icon_slug,
+                    self.ICON_SOURCE_MANUAL,
+                    None,
+                    None,
+                )
+            return (
+                resolve_icon_slug(key, None),
+                self.ICON_SOURCE_AUTO,
+                None,
+                None,
+            )
 
-        existing_project_icon_slug = self._existing_project_icon_slug(
-            config_id, key
+        existing_project_icon_slug, existing_icon_source = (
+            self._existing_project_icon_entry(config_id, key)
         )
         if is_valid_icon_slug(existing_project_icon_slug):
-            return existing_project_icon_slug, None, None
-        return resolve_icon_slug(key, None), None, None
+            return existing_project_icon_slug, existing_icon_source, None, None
+        return (
+            resolve_icon_slug(key, None),
+            self.ICON_SOURCE_AUTO,
+            None,
+            None,
+        )
+
+    def recompute_project_icon_slugs(self, project_id):
+        list_ids = getattr(self._configs, "list_ids", None)
+        if not callable(list_ids):
+            return None, "Config list lookup is unavailable", 500
+
+        config_ids = list_ids(project_id) or []
+        summary = {
+            "configsScanned": len(config_ids),
+            "keysScanned": 0,
+            "keysUpdated": 0,
+            "secretsUpdated": 0,
+            "keysSkippedManual": 0,
+        }
+        if not config_ids:
+            return summary, "OK", 200
+
+        docs = list(
+            self._secrets.find(
+                {"config_id": {"$in": config_ids}},
+                {"config_id": 1, "key": 1, "icon_slug": 1, "icon_source": 1},
+            )
+        )
+        docs_by_key = {}
+        for doc in docs:
+            key = doc.get("key")
+            if not isinstance(key, str):
+                continue
+            docs_by_key.setdefault(key, []).append(doc)
+
+        for key, key_docs in docs_by_key.items():
+            summary["keysScanned"] += 1
+            has_manual = any(
+                self._normalize_icon_source(doc.get("icon_source"))
+                == self.ICON_SOURCE_MANUAL
+                for doc in key_docs
+            )
+            if has_manual:
+                summary["keysSkippedManual"] += 1
+                continue
+
+            desired_slug = resolve_icon_slug(key, None)
+            needs_update = any(
+                normalize_icon_slug(doc.get("icon_slug")) != desired_slug
+                or self._normalize_icon_source(doc.get("icon_source"))
+                != self.ICON_SOURCE_AUTO
+                for doc in key_docs
+            )
+            if not needs_update:
+                continue
+
+            summary["keysUpdated"] += 1
+            summary["secretsUpdated"] += len(key_docs)
+
+            update_many = getattr(self._secrets, "update_many", None)
+            if callable(update_many):
+                update_many(
+                    {"config_id": {"$in": config_ids}, "key": key},
+                    {
+                        "$set": {
+                            "icon_slug": desired_slug,
+                            "icon_source": self.ICON_SOURCE_AUTO,
+                        }
+                    },
+                )
+                continue
+
+            for config_id in config_ids:
+                self._secrets.update_one(
+                    {"config_id": config_id, "key": key},
+                    {
+                        "$set": {
+                            "icon_slug": desired_slug,
+                            "icon_source": self.ICON_SOURCE_AUTO,
+                        }
+                    },
+                )
+
+        return summary, "OK", 200
 
     def put(
         self,
@@ -115,7 +230,12 @@ class SecretsV2:
     ):
         if not is_valid_env_key(key):
             return "Invalid secret key", 400
-        resolved_icon_slug, err, code = self._resolve_icon_slug_for_put(
+        (
+            resolved_icon_slug,
+            resolved_icon_source,
+            err,
+            code,
+        ) = self._resolve_icon_slug_for_put(
             config_id, key, icon_slug, icon_slug_provided
         )
         if err:
@@ -127,13 +247,16 @@ class SecretsV2:
                 "updated_at": datetime.now(timezone.utc),
                 "updated_by": actor,
                 "icon_slug": resolved_icon_slug,
+                "icon_source": resolved_icon_source,
             }
         }
 
         self._secrets.update_one(
             {"config_id": config_id, "key": key}, update_doc, upsert=True
         )
-        self._sync_project_icon_slug(config_id, key, resolved_icon_slug)
+        self._sync_project_icon_slug(
+            config_id, key, resolved_icon_slug, resolved_icon_source
+        )
         return {"status": "OK", "key": key}, 200
 
     def get(self, config_id, key):
@@ -330,7 +453,10 @@ class SecretsV2:
 
         for key in keys_needing_sync:
             self._sync_project_icon_slug(
-                config_id, key, project_icon_by_key[key]
+                config_id,
+                key,
+                project_icon_by_key[key],
+                self.ICON_SOURCE_AUTO,
             )
         return merged, meta if include_metadata else None, "OK", 200
 

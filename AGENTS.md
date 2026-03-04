@@ -51,6 +51,7 @@ This is a monorepo with:
 - `git push` can be blocked by a pre-push hook when the working tree is dirty, even if the dirty files are unrelated to the commit being pushed.
   - Practical workflow: temporarily stash unrelated local edits, push, then restore with `git stash pop`.
 - Keep React Query derived views under the same key prefix when possible (for example, `['secrets', projectSlug, configSlug, ...]`) so existing prefix invalidation still refreshes all related views.
+- Secret icon persistence now distinguishes `icon_source` as `auto` or `manual`; project-wide icon recompute should only rewrite `auto` entries so explicit manual overrides remain stable.
 
 
 ## Conventional Commit Guidelines 

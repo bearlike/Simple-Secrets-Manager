@@ -2,6 +2,8 @@ import { ApiClientError, apiClient, apiClientText } from './client';
 import { mapSecretsData } from './mappers';
 import type {
   BulkExportResult,
+  RecomputeProjectIconsResponseDto,
+  RecomputeProjectIconsSummary,
   Secret,
   SecretsJsonResponseDto
 } from './types';
@@ -201,4 +203,19 @@ export async function bulkExport(
     format: 'json',
     data: response.data ?? {}
   };
+}
+
+export async function recomputeProjectSecretIcons(projectSlug: string): Promise<RecomputeProjectIconsSummary> {
+  const response = await apiClient<RecomputeProjectIconsResponseDto>(`/projects/${projectSlug}/secrets/icons/recompute`, {
+    method: 'POST'
+  });
+  return (
+    response.summary ?? {
+      configsScanned: 0,
+      keysScanned: 0,
+      keysUpdated: 0,
+      secretsUpdated: 0,
+      keysSkippedManual: 0
+    }
+  );
 }
