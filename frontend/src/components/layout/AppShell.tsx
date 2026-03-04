@@ -1,21 +1,21 @@
 import { Outlet } from 'react-router-dom';
-import { SidebarDrawer } from './SidebarDrawer';
+import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
+
+import { Sidebar } from './Sidebar';
 import { TopBar } from './TopBar';
 
-import { useSidebarDrawer } from './useSidebarDrawer';
-
 export function AppShell() {
-  const { isOpen, setIsOpen, toggle } = useSidebarDrawer();
-
   return (
     <div className="h-screen overflow-hidden bg-background">
-      <SidebarDrawer open={isOpen} onOpenChange={setIsOpen} />
-      <div className="flex h-full flex-col overflow-hidden">
-        <TopBar isSidebarOpen={isOpen} onMenuToggle={toggle} />
-        <main className="flex-1 overflow-y-auto">
-          <Outlet />
-        </main>
-      </div>
+      <SidebarProvider className="h-full">
+        <Sidebar />
+        <SidebarInset className="h-full overflow-hidden">
+          <TopBar />
+          <main className="flex-1 overflow-y-auto">
+            <Outlet />
+          </main>
+        </SidebarInset>
+      </SidebarProvider>
     </div>
   );
 }
