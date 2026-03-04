@@ -100,4 +100,22 @@
   .ssm-secret-value {
     overflow-wrap: anywhere;
   }
+
+  .ssm-table-scroll > div {
+    scrollbar-gutter: stable both-edges;
+    scrollbar-width: thin;
+  }
+
+  .ssm-table-scroll > div::-webkit-scrollbar {
+    height: 8px;
+  }
+
+  .ssm-table-scroll > div::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .ssm-table-scroll > div::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
+  }
 }

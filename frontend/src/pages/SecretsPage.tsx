@@ -68,8 +68,8 @@ export function SecretsPage() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
+    <div className="mx-auto w-full max-w-[1400px] px-3 py-6 sm:px-6">
+      <div className="mb-6 flex flex-wrap items-center gap-2 sm:gap-3">
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <h1 className="text-lg font-semibold">
