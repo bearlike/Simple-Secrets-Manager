@@ -8,30 +8,54 @@ import {
   UsersIcon,
   GroupIcon,
   LogOutIcon,
-  FolderIcon } from
-'lucide-react';
+  FolderIcon
+} from 'lucide-react';
+
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+
 import { getProjects } from '../../lib/api/projects';
 import { queryKeys } from '../../lib/api/queryKeys';
 import { useAuth } from '../../lib/auth';
-function ProjectNavItem({ slug, name }: {slug: string;name: string;}) {
+
+interface SidebarProps {
+  ariaHidden?: boolean;
+  className?: string;
+  onNavigate?: () => void;
+}
+
+function navItemClassName(isActive: boolean) {
+  return `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors ${isActive ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`;
+}
+
+function ProjectNavItem({
+  slug,
+  name,
+  onNavigate
+}: {
+  slug: string;
+  name: string;
+  onNavigate?: () => void;
+}) {
   const to = `/projects/${slug}/settings`;
+
   return (
     <NavLink
       to={to}
-      className={({ isActive }) =>
-      `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors truncate ${isActive ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`
-      }>
-
+      className={({ isActive }) => `${navItemClassName(isActive)} truncate`}
+      onClick={onNavigate}
+    >
       <FolderIcon className="h-3.5 w-3.5 shrink-0" />
       <span className="truncate">{name}</span>
-    </NavLink>);
-
+    </NavLink>
+  );
 }
-export function Sidebar() {
+
+export function Sidebar({ ariaHidden, className, onNavigate }: SidebarProps) {
   const { logout } = useAuth();
   const navigate = useNavigate();
+
   const { data: projects = [], isLoading } = useQuery({
     queryKey: queryKeys.projects(),
     queryFn: getProjects
@@ -40,8 +64,15 @@ export function Sidebar() {
     logout();
     navigate('/login');
   };
+
   return (
-    <aside className="w-60 shrink-0 h-screen flex flex-col border-r border-border bg-muted/30">
+    <aside
+      aria-hidden={ariaHidden}
+      className={cn(
+        'w-60 shrink-0 h-screen flex flex-col border-r border-border bg-muted/30',
+        className
+      )}
+    >
       {/* Logo */}
       <div className="flex items-center gap-2 px-4 py-4 border-b border-border">
         <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary">
@@ -63,9 +94,9 @@ export function Sidebar() {
         Array.from({
           length: 3
         }).map((_, i) =>
-        <div key={i} className="px-2.5 py-1.5">
-              <Skeleton className="h-4 w-32" />
-            </div>
+          <div key={i} className="px-2.5 py-1.5">
+            <Skeleton className="h-4 w-32" />
+          </div>
         ) :
         projects.length === 0 ?
         <p className="px-2.5 py-1.5 text-xs text-muted-foreground">
@@ -73,11 +104,12 @@ export function Sidebar() {
           </p> :
 
         projects.map((project) =>
-        <ProjectNavItem
-          key={project.slug}
-          slug={project.slug}
-          name={project.name} />
-
+          <ProjectNavItem
+            key={project.slug}
+            slug={project.slug}
+            name={project.name}
+            onNavigate={onNavigate}
+          />
         )
         }
       </div>
@@ -86,46 +118,41 @@ export function Sidebar() {
       <div className="border-t border-border py-2 px-2 space-y-0.5">
         <NavLink
           to="/account"
-          className={({ isActive }) =>
-          `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors ${isActive ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`
-          }>
-
+          className={({ isActive }) => navItemClassName(isActive)}
+          onClick={onNavigate}
+        >
           <UserIcon className="h-3.5 w-3.5" />
           Account
         </NavLink>
         <NavLink
           to="/team"
-          className={({ isActive }) =>
-          `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors ${isActive ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`
-          }>
-
+          className={({ isActive }) => navItemClassName(isActive)}
+          onClick={onNavigate}
+        >
           <UsersIcon className="h-3.5 w-3.5" />
           Team
         </NavLink>
         <NavLink
           to="/groups"
-          className={({ isActive }) =>
-          `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors ${isActive ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`
-          }>
-
+          className={({ isActive }) => navItemClassName(isActive)}
+          onClick={onNavigate}
+        >
           <GroupIcon className="h-3.5 w-3.5" />
           Groups
         </NavLink>
         <NavLink
           to="/tokens"
-          className={({ isActive }) =>
-          `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors ${isActive ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`
-          }>
-
+          className={({ isActive }) => navItemClassName(isActive)}
+          onClick={onNavigate}
+        >
           <KeyRoundIcon className="h-3.5 w-3.5" />
           Tokens
         </NavLink>
         <NavLink
           to="/audit"
-          className={({ isActive }) =>
-          `flex items-center gap-2 px-2.5 py-1.5 rounded-md text-sm transition-colors ${isActive ? 'bg-accent text-accent-foreground font-medium' : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'}`
-          }>
-
+          className={({ isActive }) => navItemClassName(isActive)}
+          onClick={onNavigate}
+        >
           <ScrollTextIcon className="h-3.5 w-3.5" />
           Audit Log
         </NavLink>
@@ -134,13 +161,13 @@ export function Sidebar() {
             variant="ghost"
             size="sm"
             className="w-full justify-start gap-2 text-muted-foreground hover:text-foreground h-8 px-2.5"
-            onClick={handleLogout}>
-
+            onClick={handleLogout}
+          >
             <LogOutIcon className="h-3.5 w-3.5" />
             Sign Out
           </Button>
         </div>
       </div>
-    </aside>);
-
+    </aside>
+  );
 }

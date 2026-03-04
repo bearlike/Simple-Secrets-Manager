@@ -5,6 +5,7 @@ import {
   DownloadIcon,
   GithubIcon,
   LogOutIcon,
+  PanelLeftIcon,
   MoonIcon,
   SettingsIcon,
   SunIcon,
@@ -39,6 +40,11 @@ import { notifyApiError } from '../../lib/api/errorToast';
 
 const REPOSITORY_URL = 'https://github.com/bearlike/Simple-Secrets-Manager';
 
+interface TopBarProps {
+  isSidebarOpen: boolean;
+  onMenuToggle: () => void;
+}
+
 function downloadFile(content: string, filename: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -49,7 +55,7 @@ function downloadFile(content: string, filename: string, mimeType: string) {
   URL.revokeObjectURL(url);
 }
 
-export function TopBar() {
+export function TopBar({ isSidebarOpen, onMenuToggle }: TopBarProps) {
   const { projectSlug, configSlug } = useParams<{
     projectSlug?: string;
     configSlug?: string;
@@ -114,6 +120,19 @@ export function TopBar() {
 
   return (
     <header className="h-12 border-b border-border bg-background flex items-center px-4 gap-3 shrink-0">
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-7 w-7 p-0 text-muted-foreground"
+        aria-label={isSidebarOpen ? 'Close navigation' : 'Open navigation'}
+        aria-expanded={isSidebarOpen}
+        aria-controls="app-sidebar-drawer"
+        onClick={onMenuToggle}
+      >
+        <PanelLeftIcon className="h-3.5 w-3.5" />
+      </Button>
+
       <nav className="flex items-center gap-1.5 text-sm flex-1 min-w-0">
         <Link
           to="/projects"
