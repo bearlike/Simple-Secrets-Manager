@@ -10,7 +10,16 @@ Simple Secrets Manager is a lightweight, self-hosted secret manager for teams th
 
 <img height="720" alt="image" src="https://github.com/user-attachments/assets/539016cb-9428-4b3d-8704-31dc474caf65" />
 
-## Getting Started
+## 🧭 Table of Contents
+
+- [Getting Started](#-getting-started)
+- [Features](#-features)
+- [Documentation](#-documentation)
+- [Update Existing Deployment](#-update-existing-deployment)
+- [Contributing](#-contributing-)
+- [Bug Reports and Feature Requests](#-bug-reports-and-feature-requests)
+
+## 🚀 Getting Started
 
 ### 1️⃣ Deploying the SSM Server
 
@@ -37,35 +46,6 @@ On a fresh install:
 3. Sign in and create projects/configs/secrets
 
 API-only bootstrap steps are in [`docs/FIRST_TIME_SETUP.md`](docs/FIRST_TIME_SETUP.md).
-
----
-
-### Workspace RBAC and Groups (v1.4.1)
-
-Simple Secrets Manager now uses token-scoped RBAC for app APIs.
-
-- Username/password is only used for login/token exchange.
-- All other API access uses bearer tokens and scope checks.
-- Workspace roles: `owner`, `admin`, `collaborator`, `viewer`.
-- Project roles: `admin`, `collaborator`, `viewer`, `none`.
-- Group-based project access is supported via workspace groups.
-- Group mappings (`provider + externalGroupKey -> groupSlug`) are available for manual mapping now and SSO/SCIM-style integrations later.
-
-Core workspace endpoints:
-
-- `GET/PATCH /api/workspace/settings`
-- `GET/POST /api/workspace/members`
-- `PATCH/DELETE /api/workspace/members/<username>`
-- `GET/POST/PATCH/DELETE /api/workspace/groups...`
-- `GET/POST/DELETE /api/workspace/group-mappings...`
-- `GET/PUT/DELETE /api/workspace/projects/<project>/members...`
-- `GET/PATCH /api/me`
-
-UI pages:
-
-- `Account` (`/account`)
-- `Team` (`/team`)
-- `Groups` (`/groups`)
 
 ---
 
@@ -154,16 +134,83 @@ Check active CLI session:
 ssm-cli whoami --profile dev
 ```
 
+### 3️⃣ Authenticate and bootstrap an existing project/config
+
+If you already have a project and config with secrets (for example `my-project` + `dev`), you can authenticate once and immediately verify secret injection.
+
+Configure the backend and save a token:
+
+```bash
+ssm-cli configure --base-url http://localhost:8080/api --profile dev
+ssm-cli auth set-token --token "<service-or-personal-token>" --profile dev
+```
+
+Set default project/config context for your current directory:
+
+```bash
+ssm-cli setup --project my-project --config dev --profile dev
+```
+
+Run a command with injected secrets and inspect a specific environment value:
+
+```bash
+ssm-cli run --profile dev -- printenv EXAMPLE_API_KEY
+```
+
+If `EXAMPLE_API_KEY` exists in your selected config, you should see its value printed from the child process environment.
+
 ---
 
-## Documentation
+## ✨ Features
+
+Prioritized by customer value and typical adoption flow:
+
+1. **Self-hosted deployment with guided bootstrap**  
+   Deploy the full stack with Docker Compose and initialize the first admin account through the built-in onboarding flow.
+
+2. **Project + environment-based secret organization**  
+   Organize secrets by project and config (for example `dev`, `staging`, `prod`) with optional parent-child inheritance to reduce duplication.
+
+3. **Secure secret lifecycle management in the Admin Console**  
+   Create, edit, delete, search, and reveal secrets with a streamlined UI built for day-to-day environment management.
+
+4. **Bulk import/export for real workflows**  
+   Import `.env` files with preview and conflict awareness, and export secrets as JSON or `.env` for runtime consumption.
+
+5. **Reference-aware secret composition**  
+   Compose values with placeholders (same config, cross-config, or cross-project) and choose resolved or raw output modes when reading/exporting.
+
+6. **Validation that prevents broken secret references**  
+   Catch invalid reference syntax, unresolved links, and recursion issues during save and compare workflows before they become runtime incidents.
+
+7. **Scoped token-based access for users and services**  
+   Issue personal and service tokens with TTL and project/config scoping, then revoke tokens when access is no longer needed.
+
+8. **Workspace RBAC with group-based project access**  
+   Manage workspace roles, project roles, groups, and group mappings to enforce least-privilege access at team scale.
+
+9. **Audit visibility for operational accountability**  
+   Track API activity with filterable audit events (project/config/time) to support incident review and compliance needs.
+
+10. **Cross-environment drift and issue detection**  
+    Compare a single secret key across configs to quickly identify mismatches, missing values, and broken references.
+
+11. **CLI-first runtime delivery and automation**  
+    Inject secrets directly into processes (`ssm-cli run`), download or mount payloads, and automate secret updates in local and CI/CD workflows.
+
+12. **Operational quality-of-life features for large secret sets**  
+    Use automatic/manual secret icons and project-wide icon recompute to keep large secret catalogs easier to scan and maintain.
+
+---
+
+## 📚 Documentation
 
 - CLI reference: [`docs/CLI.md`](docs/CLI.md)
 - First-time setup: [`docs/FIRST_TIME_SETUP.md`](docs/FIRST_TIME_SETUP.md)
 - Container runtime reference: [`docs/README_dockerhub.md`](docs/README_dockerhub.md)
 - Developer docs: [`docs/DEVELOPER_GUIDE.md`](docs/DEVELOPER_GUIDE.md)
 
-## Update Existing Deployment
+## 🔄 Update Existing Deployment
 
 If you run from this repository source:
 
@@ -181,7 +228,7 @@ docker compose up -d
 
 ---
 
-## Contributing 👏
+## 🤝 Contributing 👏
 
 We welcome contributions from the community to improve this project. Use the steps below.
 
@@ -191,7 +238,7 @@ We welcome contributions from the community to improve this project. Use the ste
 4. Make your changes, commit them, and push to your fork.
 5. Open a pull request describing the change and the problem it solves.
 
-## Bug Reports and Feature Requests 🐞
+## 🐞 Bug Reports and Feature Requests
 
 If you encounter bugs or have ideas for features, open an issue on the [issue tracker](https://github.com/bearlike/Simple-Secrets-Manager/issues). Include reproduction steps and error messages when possible.
 
