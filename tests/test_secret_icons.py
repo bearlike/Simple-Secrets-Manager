@@ -1,3 +1,4 @@
+import Engines.secret_icons as secret_icons_module
 from Engines.secret_icons import (
     DEFAULT_ICON_SLUG,
     guess_icon_slug,
@@ -38,3 +39,8 @@ def test_is_valid_icon_slug_rejects_invalid_values():
     assert is_valid_icon_slug("simple-icons:sqlalchemy")
     assert not is_valid_icon_slug("simple-icons/sqlalchemy")
     assert not is_valid_icon_slug("SQLALCHEMY")
+
+
+def test_guess_icon_slug_returns_default_when_index_missing(monkeypatch):
+    monkeypatch.setattr(secret_icons_module, "_load_index", lambda: {})
+    assert guess_icon_slug("DATABASE_URL") == DEFAULT_ICON_SLUG

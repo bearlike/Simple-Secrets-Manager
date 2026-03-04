@@ -198,3 +198,69 @@ def test_compare_key_across_configs_rejects_invalid_key():
     assert rows is None
     assert code == 400
     assert msg == "Invalid secret key"
+
+
+def test_compare_key_across_configs_respects_include_parent_false():
+    docs = [
+        {
+            "config_id": "base",
+            "key": "API_HOST",
+            "value_enc": "base.example.com",
+        },
+    ]
+    configs = [
+        {"_id": "base", "slug": "base", "parent_config_id": None},
+        {"_id": "dev", "slug": "dev", "parent_config_id": "base"},
+    ]
+    engine = SecretsV2(FakeSecrets(docs), FakeConfigs())
+
+    rows, msg, code = engine.compare_key_across_configs(
+        configs,
+        "API_HOST",
+        include_parent=False,
+        include_metadata=False,
+        include_empty=False,
+    )
+
+    assert code == 200
+    assert msg == "OK"
+    assert rows == [
+        {
+            "configId": "base",
+            "configSlug": "base",
+            "effective": {
+                "value": "base.example.com",
+                "source": "base",
+                "isInherited": False,
+            },
+            "direct": {"exists": True, "value": "base.example.com"},
+        },
+    ]
+
+
+def test_compare_key_across_configs_ignores_malformed_config_entries():
+    configs = [
+        {"_id": "valid", "slug": "valid", "parent_config_id": "missing"},
+        {"_id": None, "slug": "bad"},
+        {"_id": "bad-slug", "slug": 123},
+    ]
+    engine = SecretsV2(FakeSecrets([]), FakeConfigs())
+
+    rows, msg, code = engine.compare_key_across_configs(
+        configs,
+        "API_HOST",
+        include_parent=True,
+        include_metadata=False,
+        include_empty=True,
+    )
+
+    assert code == 200
+    assert msg == "OK"
+    assert rows == [
+        {
+            "configId": "valid",
+            "configSlug": "valid",
+            "effective": {"value": None, "source": None, "isInherited": False},
+            "direct": {"exists": False, "value": None},
+        }
+    ]

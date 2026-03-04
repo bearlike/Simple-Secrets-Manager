@@ -22,6 +22,157 @@ class SecretCodec:
         return value_enc
 
 
+class _ConfigKeyComparisonService:
+    def __init__(
+        self,
+        secrets_col,
+        *,
+        include_parent,
+        include_metadata,
+        include_empty,
+    ):
+        self._secrets = secrets_col
+        self._include_parent = include_parent
+        self._include_metadata = include_metadata
+        self._include_empty = include_empty
+
+    def compare(self, configs, key):
+        normalized_configs = self._normalize_configs(configs)
+        if not normalized_configs:
+            return [], "OK", 200
+
+        config_by_id = {cfg["_id"]: cfg for cfg in normalized_configs}
+        direct_by_config_id = self._direct_by_config_id(config_by_id, key)
+
+        rows = []
+        for config in normalized_configs:
+            row, err, code = self._build_row(
+                config, config_by_id, direct_by_config_id
+            )
+            if err:
+                return None, err, code
+            if row is not None:
+                rows.append(row)
+        return rows, "OK", 200
+
+    @staticmethod
+    def _normalize_configs(configs):
+        normalized = []
+        for cfg in configs:
+            config_id = cfg.get("_id")
+            slug = cfg.get("slug")
+            if config_id is None or not isinstance(slug, str):
+                continue
+            normalized.append(
+                {
+                    "_id": config_id,
+                    "slug": slug,
+                    "parent_config_id": cfg.get("parent_config_id"),
+                }
+            )
+        return normalized
+
+    def _direct_by_config_id(self, config_by_id, key):
+        config_ids = list(config_by_id.keys())
+        direct_docs = list(
+            self._secrets.find({"config_id": {"$in": config_ids}, "key": key})
+        )
+        return {doc["config_id"]: doc for doc in direct_docs}
+
+    def _build_row(self, config, config_by_id, direct_by_config_id):
+        direct_doc = direct_by_config_id.get(config["_id"])
+        (
+            source_config,
+            effective_doc,
+            is_inherited,
+            err,
+            code,
+        ) = self._resolve_effective_doc(
+            config, config_by_id, direct_by_config_id
+        )
+        if err:
+            return None, err, code
+
+        if effective_doc is None and not self._include_empty:
+            return None, None, None
+
+        row = {
+            "configId": str(config["_id"]),
+            "configSlug": config["slug"],
+            "effective": self._effective_payload(
+                effective_doc, source_config, is_inherited
+            ),
+            "direct": self._direct_payload(direct_doc),
+        }
+        if self._include_metadata:
+            row["meta"] = self._meta_payload(effective_doc)
+        return row, None, None
+
+    def _resolve_effective_doc(
+        self, config, config_by_id, direct_by_config_id
+    ):
+        direct_doc = direct_by_config_id.get(config["_id"])
+        if direct_doc is not None or not self._include_parent:
+            return config, direct_doc, False, None, None
+
+        source_config, inherited_doc, err, code = (
+            self._find_effective_for_config(
+                config, config_by_id, direct_by_config_id
+            )
+        )
+        if err or inherited_doc is None:
+            return config, None, False, err, code
+        return source_config, inherited_doc, True, None, None
+
+    @staticmethod
+    def _find_effective_for_config(config, config_by_id, direct_by_config_id):
+        visited = {str(config["_id"])}
+        current = config.get("parent_config_id")
+        while current is not None:
+            current_key = str(current)
+            if current_key in visited:
+                return None, None, "Config inheritance cycle detected", 400
+            visited.add(current_key)
+
+            parent = config_by_id.get(current)
+            if parent is None:
+                return None, None, None, None
+            direct_doc = direct_by_config_id.get(parent["_id"])
+            if direct_doc is not None:
+                return parent, direct_doc, None, None
+            current = parent.get("parent_config_id")
+        return None, None, None, None
+
+    @staticmethod
+    def _effective_payload(effective_doc, source_config, is_inherited):
+        if effective_doc is None:
+            return {"value": None, "source": None, "isInherited": False}
+        return {
+            "value": SecretCodec.decrypt(effective_doc["value_enc"]),
+            "source": source_config["slug"],
+            "isInherited": is_inherited,
+        }
+
+    @staticmethod
+    def _direct_payload(direct_doc):
+        if direct_doc is None:
+            return {"exists": False, "value": None}
+        return {
+            "exists": True,
+            "value": SecretCodec.decrypt(direct_doc["value_enc"]),
+        }
+
+    @staticmethod
+    def _meta_payload(effective_doc):
+        if effective_doc is None:
+            return {"updatedAt": None, "updatedBy": None, "iconSlug": ""}
+        return {
+            "updatedAt": to_iso(effective_doc.get("updated_at")),
+            "updatedBy": effective_doc.get("updated_by"),
+            "iconSlug": normalize_icon_slug(effective_doc.get("icon_slug")),
+        }
+
+
 class SecretsV2:
     ICON_SOURCE_AUTO = "auto"
     ICON_SOURCE_MANUAL = "manual"
@@ -281,42 +432,6 @@ class SecretsV2:
             return "Secret not found", 404
         return {"status": "OK", "key": key}, 200
 
-    @staticmethod
-    def _normalize_compare_configs(configs):
-        normalized = []
-        for cfg in configs:
-            config_id = cfg.get("_id")
-            slug = cfg.get("slug")
-            if config_id is None or not isinstance(slug, str):
-                continue
-            normalized.append(
-                {
-                    "_id": config_id,
-                    "slug": slug,
-                    "parent_config_id": cfg.get("parent_config_id"),
-                }
-            )
-        return normalized
-
-    @staticmethod
-    def _find_effective_for_config(config, config_by_id, direct_by_config_id):
-        visited = {str(config["_id"])}
-        current = config.get("parent_config_id")
-        while current is not None:
-            current_key = str(current)
-            if current_key in visited:
-                return None, None, "Config inheritance cycle detected", 400
-            visited.add(current_key)
-
-            parent = config_by_id.get(current)
-            if parent is None:
-                return None, None, None, None
-            direct_doc = direct_by_config_id.get(parent["_id"])
-            if direct_doc is not None:
-                return parent, direct_doc, None, None
-            current = parent.get("parent_config_id")
-        return None, None, None, None
-
     def compare_key_across_configs(
         self,
         configs,
@@ -327,79 +442,13 @@ class SecretsV2:
     ):
         if not is_valid_env_key(key):
             return None, "Invalid secret key", 400
-
-        normalized_configs = self._normalize_compare_configs(configs)
-        if not normalized_configs:
-            return [], "OK", 200
-
-        config_by_id = {cfg["_id"]: cfg for cfg in normalized_configs}
-        config_ids = list(config_by_id.keys())
-        direct_docs = list(
-            self._secrets.find({"config_id": {"$in": config_ids}, "key": key})
+        comparator = _ConfigKeyComparisonService(
+            self._secrets,
+            include_parent=include_parent,
+            include_metadata=include_metadata,
+            include_empty=include_empty,
         )
-        direct_by_config_id = {doc["config_id"]: doc for doc in direct_docs}
-
-        rows = []
-        for config in normalized_configs:
-            config_id = config["_id"]
-            direct_doc = direct_by_config_id.get(config_id)
-            effective_doc = direct_doc
-            source_config = config
-            is_inherited = False
-
-            if effective_doc is None and include_parent:
-                inherited_source, inherited_doc, err, code = (
-                    self._find_effective_for_config(
-                        config, config_by_id, direct_by_config_id
-                    )
-                )
-                if err:
-                    return None, err, code
-                if inherited_doc is not None:
-                    source_config = inherited_source
-                    effective_doc = inherited_doc
-                    is_inherited = True
-
-            if effective_doc is None and not include_empty:
-                continue
-
-            row = {
-                "configId": str(config_id),
-                "configSlug": config["slug"],
-                "effective": {
-                    "value": SecretCodec.decrypt(effective_doc["value_enc"])
-                    if effective_doc is not None
-                    else None,
-                    "source": source_config["slug"]
-                    if effective_doc is not None
-                    else None,
-                    "isInherited": is_inherited
-                    if effective_doc is not None
-                    else False,
-                },
-                "direct": {
-                    "exists": direct_doc is not None,
-                    "value": SecretCodec.decrypt(direct_doc["value_enc"])
-                    if direct_doc is not None
-                    else None,
-                },
-            }
-            if include_metadata:
-                row["meta"] = {
-                    "updatedAt": to_iso(effective_doc.get("updated_at"))
-                    if effective_doc is not None
-                    else None,
-                    "updatedBy": effective_doc.get("updated_by")
-                    if effective_doc is not None
-                    else None,
-                    "iconSlug": (
-                        normalize_icon_slug(effective_doc.get("icon_slug"))
-                        if effective_doc is not None
-                        else ""
-                    ),
-                }
-            rows.append(row)
-        return rows, "OK", 200
+        return comparator.compare(configs, key)
 
     def _resolve_chain(self, config_id):
         chain = []

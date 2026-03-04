@@ -57,129 +57,158 @@ def _load_index() -> Dict[str, Dict[str, object]]:
     return {}
 
 
-def _normalize_tokens(tokens: Iterable[str]) -> list[str]:
-    return [token for token in tokens if token and token not in STOP_TOKENS]
+class _IconSlugResolutionService:
+    def __init__(self, index: Dict[str, Dict[str, object]]):
+        self._index = index
 
+    def guess(self, key: str) -> str:
+        if not self._index:
+            return DEFAULT_ICON_SLUG
 
-def _first_token_terms(tokens: list[str]) -> Iterable[Tuple[str, int]]:
-    if not tokens:
-        return
+        tokens = self._tokens_for_key(key)
+        if not tokens:
+            return DEFAULT_ICON_SLUG
 
-    first = tokens[0]
-    if len(first) < 3:
-        return
+        best_slug = self._best_slug_for_terms(self._first_pass_terms(tokens))
+        if best_slug:
+            return best_slug
 
-    yielded = set()
+        best_slug = self._best_slug_for_terms(self._fallback_terms(tokens))
+        return best_slug or DEFAULT_ICON_SLUG
 
-    def emit(term: str, size: int) -> Iterable[Tuple[str, int]]:
+    @staticmethod
+    def _tokens_for_key(key: str) -> list[str]:
+        raw_tokens = TOKEN_SPLIT_PATTERN.split(key.lower())
+        return [
+            token for token in raw_tokens if token and token not in STOP_TOKENS
+        ]
+
+    @staticmethod
+    def _push_term(
+        yielded: set[str], term: str, size: int
+    ) -> Iterable[Tuple[str, int]]:
         if term in yielded:
             return
         yielded.add(term)
         yield term, size
 
-    yield from emit(first, 1)
+    def _first_pass_terms(
+        self, tokens: list[str]
+    ) -> Iterable[Tuple[str, int]]:
+        if not tokens:
+            return
+        if len(tokens[0]) < 3:
+            return
 
-    if len(tokens) >= 2 and len(tokens[1]) >= 3:
-        first_two = tokens[0:2]
-        yield from emit("-".join(first_two), 2)
-        yield from emit("".join(first_two), 2)
+        yielded: set[str] = set()
+        yield from self._push_term(yielded, tokens[0], 1)
+        if self._has_min_length(tokens, 2):
+            yield from self._joined_terms(yielded, tokens[0:2], 2)
+        if self._has_min_length(tokens, 3):
+            yield from self._joined_terms(yielded, tokens[0:3], 3)
 
-    if len(tokens) >= 3 and all(len(token) >= 3 for token in tokens[0:3]):
-        first_three = tokens[0:3]
-        yield from emit("-".join(first_three), 3)
-        yield from emit("".join(first_three), 3)
-
-
-def _fallback_single_terms(tokens: list[str]) -> Iterable[Tuple[str, int]]:
-    yielded = set()
-    for token in tokens[1:]:
-        if len(token) < 3 or token in yielded:
-            continue
-        yielded.add(token)
-        yield token, 1
-
-
-def _fallback_window_terms(tokens: list[str]) -> Iterable[Tuple[str, int]]:
-    yielded = set()
-
-    for size in (3, 2):
+    @staticmethod
+    def _has_min_length(tokens: list[str], size: int) -> bool:
         if len(tokens) < size:
-            continue
-        for index in range(0, len(tokens) - size + 1):
-            window = tokens[index : index + size]
-            if index == 0:
+            return False
+        return all(len(token) >= 3 for token in tokens[0:size])
+
+    def _joined_terms(
+        self, yielded: set[str], window: list[str], size: int
+    ) -> Iterable[Tuple[str, int]]:
+        yield from self._push_term(yielded, "-".join(window), size)
+        yield from self._push_term(yielded, "".join(window), size)
+
+    def _fallback_terms(self, tokens: list[str]) -> Iterable[Tuple[str, int]]:
+        yield from self._fallback_single_terms(tokens)
+        yield from self._fallback_window_terms(tokens)
+
+    @staticmethod
+    def _fallback_single_terms(
+        tokens: list[str],
+    ) -> Iterable[Tuple[str, int]]:
+        yielded: set[str] = set()
+        for token in tokens[1:]:
+            if len(token) < 3:
                 continue
+            if token in yielded:
+                continue
+            yielded.add(token)
+            yield token, 1
+
+    def _fallback_window_terms(
+        self, tokens: list[str]
+    ) -> Iterable[Tuple[str, int]]:
+        yielded: set[str] = set()
+        for size in (3, 2):
+            yield from self._window_terms(tokens, size, yielded)
+
+    def _window_terms(
+        self, tokens: list[str], size: int, yielded: set[str]
+    ) -> Iterable[Tuple[str, int]]:
+        if len(tokens) < size:
+            return
+        for index in range(1, len(tokens) - size + 1):
+            window = tokens[index : index + size]
             if any(len(token) < 3 for token in window):
                 continue
-            hyphen_term = "-".join(window)
-            compact_term = "".join(window)
-            if hyphen_term not in yielded:
-                yielded.add(hyphen_term)
-                yield hyphen_term, size
-            if compact_term not in yielded:
-                yielded.add(compact_term)
-                yield compact_term, size
+            yield from self._joined_terms(yielded, window, size)
 
+    def _best_slug_for_terms(self, terms: Iterable[Tuple[str, int]]) -> str:
+        best_score: Optional[Tuple[float, int, str]] = None
+        for term, term_size in terms:
+            candidate = self._candidate_for_term(term, term_size)
+            if candidate is None:
+                continue
+            if best_score is None or candidate > best_score:
+                best_score = candidate
+        return best_score[2] if best_score else ""
 
-def _fallback_terms(tokens: list[str]) -> Iterable[Tuple[str, int]]:
-    for term, size in _fallback_single_terms(tokens):
-        yield term, size
-    for term, size in _fallback_window_terms(tokens):
-        yield term, size
-
-
-def _best_slug_for_terms(
-    index: Dict[str, Dict[str, object]], terms: Iterable[Tuple[str, int]]
-) -> str:
-    best_score: Optional[Tuple[float, int, str]] = None
-    best_slug = ""
-    for term, term_size in terms:
-        entry = index.get(term)
+    def _candidate_for_term(
+        self, term: str, term_size: int
+    ) -> Optional[Tuple[float, int, str]]:
+        entry = self._index.get(term)
         if not isinstance(entry, dict):
-            continue
+            return None
 
         slug = entry.get("slug")
         if not isinstance(slug, str):
-            continue
+            return None
 
-        count_value = entry.get("count")
-        count = count_value if isinstance(count_value, int) else 0
+        count = self._count(entry.get("count"))
+        if self._is_filtered_short_term(term, count):
+            return None
+
+        score = self._score(term, term_size, count)
+        return (score, self._simple_icons_bonus(slug), slug)
+
+    @staticmethod
+    def _count(raw_count: object) -> int:
+        return raw_count if isinstance(raw_count, int) else 0
+
+    @staticmethod
+    def _is_filtered_short_term(term: str, count: int) -> bool:
         if len(term) <= 4 and count > 250:
-            continue
+            return True
         if len(term) <= 3 and count > 40:
-            continue
+            return True
+        return False
 
+    @staticmethod
+    def _score(term: str, term_size: int, count: int) -> float:
         score = float(term_size * 10 + min(len(term), 30))
         if count > 1:
             score -= min(count / 50.0, 6.0)
-        simple_icons_bonus = 1 if slug.startswith("simple-icons:") else 0
-        candidate = (score, simple_icons_bonus, slug)
-        if best_score is None or candidate > best_score:
-            best_score = candidate
-            best_slug = slug
-    return best_slug
+        return score
+
+    @staticmethod
+    def _simple_icons_bonus(slug: str) -> int:
+        return 1 if slug.startswith("simple-icons:") else 0
 
 
 def guess_icon_slug(key: str) -> str:
-    index = _load_index()
-    if not index:
-        return DEFAULT_ICON_SLUG
-
-    tokens = _normalize_tokens(
-        token for token in TOKEN_SPLIT_PATTERN.split(key.lower()) if token
-    )
-    if not tokens:
-        return DEFAULT_ICON_SLUG
-
-    first_slug = _best_slug_for_terms(index, _first_token_terms(tokens))
-    if first_slug:
-        return first_slug
-
-    fallback_slug = _best_slug_for_terms(index, _fallback_terms(tokens))
-    if fallback_slug:
-        return fallback_slug
-
-    return DEFAULT_ICON_SLUG
+    resolver = _IconSlugResolutionService(_load_index())
+    return resolver.guess(key)
 
 
 def resolve_icon_slug(key: str, icon_slug_override: Optional[str]) -> str:
