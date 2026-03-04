@@ -84,7 +84,7 @@ curl -sS http://localhost:5000/api/workspace/members \
   -H "Authorization: Bearer <token>"
 ```
 
-## Workspace RBAC quick notes (v1.4.0)
+## Workspace RBAC quick notes (v1.4.1)
 
 - Default bootstrap user is created as workspace `owner`.
 - Workspace roles: `owner`, `admin`, `collaborator`, `viewer`.

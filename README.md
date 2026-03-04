@@ -40,7 +40,7 @@ API-only bootstrap steps are in [`docs/FIRST_TIME_SETUP.md`](docs/FIRST_TIME_SET
 
 ---
 
-### Workspace RBAC and Groups (v1.4.0)
+### Workspace RBAC and Groups (v1.4.1)
 
 Simple Secrets Manager now uses token-scoped RBAC for app APIs.
 

@@ -107,9 +107,9 @@ Detailed CLI usage is documented in [`docs/CLI.md`](CLI.md).
 - `scripts/version_sync.py --check` validates wiring and is used in CI before Docker builds/publish.
 - `scripts/deploy_stack.sh` is the local source-build deploy path and exports `APP_VERSION` from `VERSION` before running compose.
 - Docker images receive `APP_VERSION` build arg from CI, and `org.opencontainers.image.version` is labeled from that arg.
-- Release tags must match `VERSION` (for example `v1.4.0` for `VERSION=1.4.0`).
+- Release tags must match `VERSION` (for example `v1.4.1` for `VERSION=1.4.1`).
 
-## Workspace RBAC model (v1.4.0)
+## Workspace RBAC model (v1.4.1)
 
 Authorization model:
 
