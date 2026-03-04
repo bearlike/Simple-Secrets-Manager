@@ -133,6 +133,21 @@ ssm-cli secrets download --profile dev --format json
 ssm-cli secrets download --profile dev --format json --raw
 ```
 
+Write a single secret:
+
+```bash
+ssm-cli secrets set --profile dev --key API_KEY --value "super-secret"
+printf '%s' "$TOKEN_VALUE" | ssm-cli secrets set --profile dev --key TOKEN --value-stdin
+```
+
+Bulk upload secrets:
+
+```bash
+ssm-cli secrets upload --profile dev --env-file .env.production
+ssm-cli secrets upload --profile dev --json-file secrets.json
+cat secrets.json | ssm-cli secrets upload --profile dev --stdin --format json
+```
+
 Check active CLI session:
 
 ```bash

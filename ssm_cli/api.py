@@ -171,6 +171,16 @@ class ApiClient:
             if isinstance(key, str) and isinstance(value, str)
         }
 
+    def upsert_secret(
+        self, project: str, config: str, key: str, value: str
+    ) -> None:
+        self.request(
+            "PUT",
+            f"/projects/{project}/configs/{config}/secrets/{key}",
+            json_body={"value": value},
+            accept="application/json",
+        )
+
     def list_projects(self) -> list[dict[str, Any]]:
         payload = self.request("GET", "/projects", accept="application/json")
         projects = (

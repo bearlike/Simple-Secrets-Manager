@@ -132,6 +132,128 @@ def _print_env_table(secrets: dict[str, str], show_values: bool) -> None:
     console.print(table)
 
 
+def _resolve_secret_context(
+    *,
+    base_url: str | None,
+    project: str | None,
+    config_name: str | None,
+    profile: str | None,
+) -> Resolution:
+    return resolve_context(
+        base_url=base_url,
+        project=project,
+        config=config_name,
+        profile=profile,
+        require_base_url=True,
+        require_project_config=True,
+        require_token=True,
+    )
+
+
+def _upsert_secret(resolution: Resolution, *, key: str, value: str) -> None:
+    if (
+        not resolution.base_url
+        or not resolution.project
+        or not resolution.config
+    ):
+        raise CliError("Missing base_url/project/config for secret update")
+    client = ApiClient(resolution.base_url, token=resolution.token)
+    client.upsert_secret(resolution.project, resolution.config, key, value)
+
+
+def _read_text(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise CliError(f"Unable to read file: {path} ({exc})", exit_code=2)
+
+
+def _parse_env_blob(payload: str) -> dict[str, str]:
+    entries: dict[str, str] = {}
+    for index, raw_line in enumerate(payload.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].lstrip()
+        if "=" not in line:
+            raise CliError(
+                f"Invalid .env line {index}: expected KEY=VALUE",
+                exit_code=2,
+            )
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise CliError(
+                f"Invalid .env line {index}: key is empty", exit_code=2
+            )
+        entries[key] = value
+    return entries
+
+
+def _parse_json_blob(payload: str) -> dict[str, str]:
+    try:
+        raw = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise CliError(f"Invalid JSON payload: {exc}", exit_code=2)
+
+    if not isinstance(raw, dict):
+        raise CliError("JSON payload must be an object", exit_code=2)
+
+    entries: dict[str, str] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str):
+            raise CliError("JSON payload keys must be strings", exit_code=2)
+        if not isinstance(value, str):
+            raise CliError(
+                f"JSON value for key '{key}' must be a string", exit_code=2
+            )
+        entries[key] = value
+    return entries
+
+
+def _parse_upload_payload(payload: str, input_format: str) -> dict[str, str]:
+    if input_format == "env":
+        return _parse_env_blob(payload)
+    if input_format == "json":
+        return _parse_json_blob(payload)
+    raise CliError(f"Unsupported input format: {input_format}", exit_code=2)
+
+
+def _read_upload_payload(
+    *,
+    env_file: Path | None,
+    json_file: Path | None,
+    stdin_mode: bool,
+    stdin_format: str,
+) -> dict[str, str]:
+    source_count = sum(
+        bool(item) for item in (env_file, json_file, stdin_mode)
+    )
+    if source_count != 1:
+        raise CliError(
+            "Choose exactly one input source: --env-file, --json-file, or "
+            "--stdin.",
+            exit_code=2,
+        )
+
+    if env_file is not None:
+        return _parse_env_blob(_read_text(env_file))
+    if json_file is not None:
+        return _parse_json_blob(_read_text(json_file))
+    return _parse_upload_payload(
+        click.get_text_stream("stdin").read(), stdin_format
+    )
+
+
+def _strip_single_trailing_newline(value: str) -> str:
+    if value.endswith("\r\n"):
+        return value[:-2]
+    if value.endswith("\n"):
+        return value[:-1]
+    return value
+
+
 @click.group(help="Simple Secrets Manager CLI")
 def cli() -> None:
     pass
@@ -365,7 +487,7 @@ def run(
     raise click.exceptions.Exit(code)
 
 
-@cli.group(help="Secret export and mount commands")
+@cli.group(help="Secret read and write commands")
 def secrets_cmd() -> None:
     pass
 
@@ -411,14 +533,11 @@ def secrets_download(
     cache_ttl: int,
     raw: bool,
 ) -> None:
-    resolution = resolve_context(
+    resolution = _resolve_secret_context(
         base_url=base_url,
         project=project,
-        config=config_name,
+        config_name=config_name,
         profile=profile,
-        require_base_url=True,
-        require_project_config=True,
-        require_token=True,
     )
     secrets_data, source = _fetch_secrets(
         resolution,
@@ -437,6 +556,149 @@ def secrets_download(
         return
 
     console.print(render_env_lines(secrets_data), soft_wrap=True)
+
+
+@secrets_cmd.command("set", help="Set or update a single secret key")
+@click.option("--key", required=True, help="Secret key")
+@click.option("--value", default=None, help="Secret value")
+@click.option(
+    "--value-stdin",
+    is_flag=True,
+    default=False,
+    help="Read secret value from stdin",
+)
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--project", default=None, help="Project slug override")
+@click.option(
+    "--config", "config_name", default=None, help="Config slug override"
+)
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def secrets_set(
+    key: str,
+    value: str | None,
+    value_stdin: bool,
+    base_url: str | None,
+    project: str | None,
+    config_name: str | None,
+    profile: str | None,
+) -> None:
+    if (value is None and not value_stdin) or (
+        value is not None and value_stdin
+    ):
+        raise CliError(
+            "Provide exactly one value source: --value or --value-stdin.",
+            exit_code=2,
+        )
+
+    resolved_value = (
+        _strip_single_trailing_newline(click.get_text_stream("stdin").read())
+        if value_stdin
+        else value
+    )
+    if resolved_value is None:
+        raise CliError("Secret value is required", exit_code=2)
+
+    resolution = _resolve_secret_context(
+        base_url=base_url,
+        project=project,
+        config_name=config_name,
+        profile=profile,
+    )
+    _upsert_secret(resolution, key=key.strip(), value=resolved_value)
+    console.print(
+        "Updated secret "
+        f"[bold]{key.strip()}[/bold] in "
+        f"[bold]{resolution.project}/{resolution.config}[/bold]."
+    )
+
+
+@secrets_cmd.command("upload", help="Upload secrets from file or stdin")
+@click.option(
+    "--env-file",
+    default=None,
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    help="Path to .env payload",
+)
+@click.option(
+    "--json-file",
+    default=None,
+    type=click.Path(path_type=Path, exists=True, dir_okay=False),
+    help="Path to JSON payload",
+)
+@click.option(
+    "--stdin",
+    "stdin_mode",
+    is_flag=True,
+    default=False,
+    help="Read payload from stdin",
+)
+@click.option(
+    "--format",
+    "stdin_format",
+    type=click.Choice(["env", "json"]),
+    default="env",
+    show_default=True,
+    help="Input format when using --stdin",
+)
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--project", default=None, help="Project slug override")
+@click.option(
+    "--config", "config_name", default=None, help="Config slug override"
+)
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def secrets_upload(
+    env_file: Path | None,
+    json_file: Path | None,
+    stdin_mode: bool,
+    stdin_format: str,
+    base_url: str | None,
+    project: str | None,
+    config_name: str | None,
+    profile: str | None,
+) -> None:
+    payload = _read_upload_payload(
+        env_file=env_file,
+        json_file=json_file,
+        stdin_mode=stdin_mode,
+        stdin_format=stdin_format,
+    )
+    if not payload:
+        console.print("No secrets found in input payload. Nothing to upload.")
+        return
+
+    resolution = _resolve_secret_context(
+        base_url=base_url,
+        project=project,
+        config_name=config_name,
+        profile=profile,
+    )
+
+    failures: list[tuple[str, str]] = []
+    succeeded = 0
+    total = len(payload)
+    for key in sorted(payload.keys()):
+        try:
+            _upsert_secret(resolution, key=key, value=payload[key])
+            succeeded += 1
+        except ApiError as exc:
+            failures.append((key, f"{exc.message} (status={exc.status_code})"))
+
+    console.print(
+        f"Upload complete: total={total}, succeeded={succeeded}, "
+        f"failed={len(failures)}"
+    )
+    if not failures:
+        return
+
+    table = Table(title="Upload failures")
+    table.add_column("Key", style="cyan")
+    table.add_column("Error", style="red")
+    for key, message in failures:
+        table.add_row(key, message)
+    console.print(table)
+    raise click.exceptions.Exit(1)
 
 
 @secrets_cmd.command("mount", help="Write secrets to a named pipe (FIFO)")
@@ -492,14 +754,11 @@ def secrets_mount(
     raw: bool,
     keep: bool,
 ) -> None:
-    resolution = resolve_context(
+    resolution = _resolve_secret_context(
         base_url=base_url,
         project=project,
-        config=config_name,
+        config_name=config_name,
         profile=profile,
-        require_base_url=True,
-        require_project_config=True,
-        require_token=True,
     )
     secrets_data, source = _fetch_secrets(
         resolution,

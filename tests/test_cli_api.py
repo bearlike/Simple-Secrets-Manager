@@ -109,3 +109,19 @@ def test_get_me_returns_profile_payload(monkeypatch):
     payload = client.get_me()
     assert payload["username"] == "alice"
     assert payload["workspaceRole"] == "owner"
+
+
+def test_upsert_secret_uses_put_with_expected_payload(monkeypatch):
+    client = ApiClient("http://localhost:8080", token="t")
+
+    def fake_request(**kwargs):
+        assert kwargs["method"] == "PUT"
+        assert kwargs["headers"]["Authorization"] == "Bearer t"
+        assert kwargs["json"] == {"value": "super-secret"}
+        assert kwargs["url"].endswith(
+            "/api/projects/proj/configs/dev/secrets/API_KEY"
+        )
+        return _response(200, {"status": "OK"})
+
+    monkeypatch.setattr(client.session, "request", fake_request)
+    client.upsert_secret("proj", "dev", "API_KEY", "super-secret")

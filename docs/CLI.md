@@ -90,6 +90,21 @@ ssm-cli secrets download --profile dev --format env
 ssm-cli secrets download --profile dev --format json --raw
 ```
 
+Set one secret:
+
+```bash
+ssm-cli secrets set --profile dev --key API_KEY --value "super-secret"
+printf '%s' "$TOKEN_VALUE" | ssm-cli secrets set --profile dev --key TOKEN --value-stdin
+```
+
+Upload many secrets:
+
+```bash
+ssm-cli secrets upload --profile dev --env-file .env.production
+ssm-cli secrets upload --profile dev --json-file ./secrets.json
+cat ./secrets.json | ssm-cli secrets upload --profile dev --stdin --format json
+```
+
 Mount secrets to FIFO:
 
 ```bash
@@ -201,6 +216,7 @@ Role behavior:
 - `run` exits with child process exit code.
 - Configuration/auth errors typically exit `2`.
 - Offline cache miss exits `4`.
+- `secrets upload` exits `1` when any key fails to write.
 
 ## Maintainer Checks
 
