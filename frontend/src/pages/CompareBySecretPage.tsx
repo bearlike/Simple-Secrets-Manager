@@ -6,7 +6,12 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { EmptyState } from '@/components/common/EmptyState';
+import { SecretRowActions } from '@/components/secrets/table/SecretRowActions';
+import { SecretTableShell } from '@/components/secrets/table/SecretTableShell';
+import { SecretValueRevealCell } from '@/components/secrets/table/SecretValueRevealCell';
+import type { SecretRowAction } from '@/components/secrets/table/types';
 import { getSecretComparison } from '../lib/api/compare';
 import { getProjects } from '../lib/api/projects';
 import { queryKeys } from '../lib/api/queryKeys';
@@ -29,6 +34,39 @@ function issueBadgeLabel(code: string): string {
   if (code === 'broken_reference_syntax') return 'Invalid reference syntax';
   if (code === 'broken_reference_cycle_or_depth') return 'Reference cycle/depth';
   return code.replace(/_/g, ' ');
+}
+
+const COMPARE_COLUMN_CLASS: Record<string, { header: string; cell: string }> = {
+  config: {
+    header: 'w-[10rem]',
+    cell: 'w-[10rem] align-top'
+  },
+  value: {
+    header: 'w-[18rem] sm:w-[22rem] xl:w-[26rem]',
+    cell: 'w-[18rem] sm:w-[22rem] xl:w-[26rem] align-top'
+  },
+  source: {
+    header: 'w-[12rem]',
+    cell: 'w-[12rem] align-top'
+  },
+  updated: {
+    header: 'w-[10rem] whitespace-nowrap',
+    cell: 'w-[10rem] whitespace-nowrap align-top'
+  },
+  issues: {
+    header: 'min-w-[12rem]',
+    cell: 'min-w-[12rem] align-top'
+  },
+  action: {
+    header: 'w-10 sm:w-12 text-right',
+    cell: 'w-10 sm:w-12 align-top'
+  }
+};
+
+function compareColumnClass(columnId: string, header = false): string {
+  const classes = COMPARE_COLUMN_CLASS[columnId];
+  if (!classes) return header ? '' : 'align-top';
+  return header ? classes.header : classes.cell;
 }
 
 export function CompareBySecretPage() {
@@ -259,136 +297,154 @@ export function CompareBySecretPage() {
       )}
 
       {targetKey && (
-        <div className="rounded-md border border-border">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
-              <thead>
-                <tr className="bg-muted/40 border-b border-border">
-                  <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
-                    CONFIG
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
-                    VALUE
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
-                    SOURCE
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
-                    UPDATED
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground">
-                    ISSUES
-                  </th>
-                  <th className="px-4 py-2.5 text-right text-xs font-medium tracking-wider text-muted-foreground">
-                    ACTION
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparisonQuery.isLoading &&
-                  Array.from({ length: 6 }).map((_, rowIndex) => (
-                    <tr key={rowIndex} className="border-b border-border last:border-0">
-                      {Array.from({ length: 6 }).map((__, colIndex) => (
-                        <td key={colIndex} className="px-4 py-2">
-                          <Skeleton className="h-3.5 w-24" />
-                        </td>
-                      ))}
-                    </tr>
+        <SecretTableShell
+          caption="Comparison table for one secret key across configs, including value, source, updated time, issues, and actions."
+          minWidthClassName="min-w-[900px]"
+        >
+          <TableHeader>
+            <TableRow className="bg-muted/40 border-b border-border hover:bg-muted/40">
+              <TableHead
+                scope="col"
+                className={`h-auto px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground ${compareColumnClass('config', true)}`}
+              >
+                CONFIG
+              </TableHead>
+              <TableHead
+                scope="col"
+                className={`h-auto px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground ${compareColumnClass('value', true)}`}
+              >
+                VALUE
+              </TableHead>
+              <TableHead
+                scope="col"
+                className={`h-auto px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground ${compareColumnClass('source', true)}`}
+              >
+                SOURCE
+              </TableHead>
+              <TableHead
+                scope="col"
+                className={`h-auto px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground ${compareColumnClass('updated', true)}`}
+              >
+                UPDATED
+              </TableHead>
+              <TableHead
+                scope="col"
+                className={`h-auto px-4 py-2.5 text-left text-xs font-medium tracking-wider text-muted-foreground ${compareColumnClass('issues', true)}`}
+              >
+                ISSUES
+              </TableHead>
+              <TableHead
+                scope="col"
+                className={`h-auto px-4 py-2.5 text-right text-xs font-medium tracking-wider text-muted-foreground ${compareColumnClass('action', true)}`}
+              >
+                ACTION
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {comparisonQuery.isLoading &&
+              Array.from({ length: 6 }).map((_, rowIndex) => (
+                <TableRow key={rowIndex} className="border-b border-border last:border-0">
+                  {Array.from({ length: 6 }).map((__, colIndex) => (
+                    <TableCell key={colIndex} className="px-4 py-2 align-top">
+                      <Skeleton className="h-3.5 w-24" />
+                    </TableCell>
                   ))}
+                </TableRow>
+              ))}
 
-                {noResults && (
-                  <tr>
-                    <td colSpan={6}>
-                      <EmptyState
-                        icon={GitCompareArrowsIcon}
-                        title="No matching rows"
-                        description={
-                          rows.length === 0
-                            ? 'This key has no visible values in this project.'
-                            : 'No rows match the current issue filter.'
-                        }
+            {noResults && (
+              <TableRow>
+                <TableCell colSpan={6}>
+                  <EmptyState
+                    icon={GitCompareArrowsIcon}
+                    title="No matching rows"
+                    description={
+                      rows.length === 0
+                        ? 'This key has no visible values in this project.'
+                        : 'No rows match the current issue filter.'
+                    }
+                  />
+                </TableCell>
+              </TableRow>
+            )}
+
+            {!comparisonQuery.isLoading &&
+              filteredRows.map((row) => {
+                const visible = revealAll || revealedConfigSlugs.has(row.configSlug);
+                const value = row.effective.value;
+                const hasValue = value !== null;
+                const issues = row.issues ?? [];
+                const hasIssues = issues.length > 0;
+                const source = row.effective.isInherited ? `inherited from ${row.effective.source}` : 'direct';
+                const rowActions: SecretRowAction[] = [
+                  {
+                    key: 'toggle-visibility',
+                    label: visible ? 'Hide value' : hasValue ? 'Reveal value' : 'No value to reveal',
+                    onSelect: () => toggleRevealRow(row.configSlug),
+                    icon: visible ? EyeOffIcon : EyeIcon,
+                    disabled: !hasValue
+                  }
+                ];
+
+                return (
+                  <TableRow
+                    key={row.configSlug}
+                    className={`border-b border-border last:border-0 ${
+                      hasIssues ? 'bg-amber-50/30 dark:bg-amber-950/20' : 'hover:bg-muted/20'
+                    }`}
+                  >
+                    <TableCell className={`px-4 py-2 ${compareColumnClass('config')}`}>
+                      <div className="flex items-center gap-2">
+                        <code className="font-mono text-xs">{row.configSlug}</code>
+                        {hasIssues && <AlertTriangleIcon className="h-3.5 w-3.5 text-amber-600" />}
+                      </div>
+                    </TableCell>
+                    <TableCell className={`px-4 py-2 ${compareColumnClass('value')}`}>
+                      <SecretValueRevealCell
+                        value={value}
+                        revealed={visible}
+                        valueClassName="text-xs"
+                        maskedClassName="text-xs"
+                        missingContent={<span className="text-xs text-muted-foreground">Missing</span>}
                       />
-                    </td>
-                  </tr>
-                )}
-
-                {!comparisonQuery.isLoading &&
-                  filteredRows.map((row) => {
-                    const visible = revealAll || revealedConfigSlugs.has(row.configSlug);
-                    const value = row.effective.value;
-                    const hasValue = value !== null;
-                    const issues = row.issues ?? [];
-                    const hasIssues = issues.length > 0;
-                    const source = row.effective.isInherited ? `inherited from ${row.effective.source}` : 'direct';
-                    return (
-                      <tr
-                        key={row.configSlug}
-                        className={`border-b border-border last:border-0 ${
-                          hasIssues ? 'bg-amber-50/30 dark:bg-amber-950/20' : 'hover:bg-muted/20'
-                        }`}
-                      >
-                        <td className="px-4 py-2">
-                          <div className="flex items-center gap-2">
-                            <code className="font-mono text-xs">{row.configSlug}</code>
-                            {hasIssues && <AlertTriangleIcon className="h-3.5 w-3.5 text-amber-600" />}
-                          </div>
-                        </td>
-                        <td className="px-4 py-2">
-                          {hasValue ?
-                          visible ?
-                          <code className="font-mono text-xs break-all">{value}</code> :
-                          <span className="font-mono text-xs text-muted-foreground">••••••••••••</span> :
-                          <span className="text-xs text-muted-foreground">Missing</span>}
-                        </td>
-                        <td className="px-4 py-2">
-                          <span className="text-xs text-muted-foreground">{hasValue ? source : '—'}</span>
-                        </td>
-                        <td className="px-4 py-2">
-                          <span className="font-mono text-xs text-muted-foreground">
-                            {formatUpdatedAt(row.meta?.updatedAt)}
-                          </span>
-                        </td>
-                        <td className="px-4 py-2">
-                          {hasIssues ?
-                          <div className="flex flex-wrap items-center gap-1">
-                              {issues.map((issue) => (
-                                <Badge
-                                  key={`${row.configSlug}-${issue.code}`}
-                                  variant="outline"
-                                  className={`text-[10px] ${
-                                    issue.code === ISSUE_MISSING_EFFECTIVE_VALUE ?
-                                      'border-amber-500 text-amber-700' :
-                                      'border-red-500 text-red-700'
-                                  }`}
-                                  title={issue.message}
-                                >
-                                  {issueBadgeLabel(issue.code)}
-                                </Badge>
-                              ))}
-                            </div> :
-                          <span className="text-xs text-muted-foreground">—</span>}
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              onClick={() => toggleRevealRow(row.configSlug)}
-                              disabled={!hasValue}
-                              aria-label={visible ? 'Hide value' : 'Reveal value'}
+                    </TableCell>
+                    <TableCell className={`px-4 py-2 ${compareColumnClass('source')}`}>
+                      <span className="text-xs text-muted-foreground">{hasValue ? source : '—'}</span>
+                    </TableCell>
+                    <TableCell className={`px-4 py-2 ${compareColumnClass('updated')}`}>
+                      <span className="font-mono text-xs text-muted-foreground">{formatUpdatedAt(row.meta?.updatedAt)}</span>
+                    </TableCell>
+                    <TableCell className={`px-4 py-2 ${compareColumnClass('issues')}`}>
+                      {hasIssues ? (
+                        <div className="flex flex-wrap items-center gap-1">
+                          {issues.map((issue) => (
+                            <Badge
+                              key={`${row.configSlug}-${issue.code}`}
+                              variant="outline"
+                              className={`text-[10px] ${
+                                issue.code === ISSUE_MISSING_EFFECTIVE_VALUE
+                                  ? 'border-amber-500 text-amber-700'
+                                  : 'border-red-500 text-red-700'
+                              }`}
+                              title={issue.message}
                             >
-                              {visible ? <EyeOffIcon className="h-3.5 w-3.5" /> : <EyeIcon className="h-3.5 w-3.5" />}
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                              {issueBadgeLabel(issue.code)}
+                            </Badge>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className={`px-4 py-2 ${compareColumnClass('action')}`}>
+                      <SecretRowActions actions={rowActions} rowLabel={row.configSlug} />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+          </TableBody>
+        </SecretTableShell>
       )}
     </div>
   );

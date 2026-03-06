@@ -64,6 +64,39 @@ def _ensure_profile(cfg: GlobalConfig, profile_name: str) -> ProfileConfig:
     return profile
 
 
+def _is_missing_project_config_error(exc: ApiError) -> bool:
+    if exc.status_code != 404:
+        return False
+    lowered = (exc.message or "").strip().lower()
+    return "project not found" in lowered or "config not found" in lowered
+
+
+def _is_transient_api_error(exc: ApiError) -> bool:
+    return exc.status_code == 1 or exc.status_code >= 500
+
+
+def _project_config_target(resolution: Resolution) -> str:
+    project = resolution.project or "<project>"
+    config = resolution.config or "<config>"
+    return f"{project}/{config}"
+
+
+def _raise_missing_project_config_error(
+    exc: ApiError,
+    *,
+    resolution: Resolution,
+    action: str,
+) -> None:
+    if not _is_missing_project_config_error(exc):
+        return
+    raise CliError(
+        f"{action} failed: project/config not found "
+        f"({_project_config_target(resolution)}). Verify --project/--config "
+        "or run `ssm setup`.",
+        exit_code=2,
+    ) from exc
+
+
 def _fetch_secrets(
     resolution: Resolution,
     *,
@@ -106,7 +139,12 @@ def _fetch_secrets(
             resolution.base_url, resolution.project, resolution.config, data
         )
         return data, "remote"
-    except ApiError:
+    except ApiError as exc:
+        _raise_missing_project_config_error(
+            exc, resolution=resolution, action="Secret fetch"
+        )
+        if not _is_transient_api_error(exc):
+            raise
         cached = load_secret_cache(
             resolution.base_url,
             resolution.project,
@@ -158,7 +196,13 @@ def _upsert_secret(resolution: Resolution, *, key: str, value: str) -> None:
     ):
         raise CliError("Missing base_url/project/config for secret update")
     client = ApiClient(resolution.base_url, token=resolution.token)
-    client.upsert_secret(resolution.project, resolution.config, key, value)
+    try:
+        client.upsert_secret(resolution.project, resolution.config, key, value)
+    except ApiError as exc:
+        _raise_missing_project_config_error(
+            exc, resolution=resolution, action="Secret update"
+        )
+        raise
 
 
 def _read_text(path: Path) -> str:

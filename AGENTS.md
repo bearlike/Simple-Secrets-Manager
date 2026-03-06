@@ -57,6 +57,7 @@ This is a monorepo with:
 - DeepSource `PYL-R0201` maps to pylint's optional extension check `R6301/no-self-use`; local verification requires `--load-plugins=pylint.extensions.no_self_use`.
 - When users request project-local agent skills, place them under `.agents/skills/<skill-name>/` and include at minimum `SKILL.md` plus a small `metadata.json` for discoverability.
 - Keep `.agents/` as a container only for `.agents/skills/`; do not place skills directly under `.agents/` and do not use `.agent/skills/`.
+- CLI secret cache fallback should be limited to transient failures (`status=1` network or `5xx`); do not serve cached values for `404`/`4xx` project/config errors because that can mask missing-target mistakes with stale data.
 
 
 ## Conventional Commit Guidelines 

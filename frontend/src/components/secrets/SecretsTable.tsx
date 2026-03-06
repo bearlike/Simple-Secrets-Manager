@@ -13,7 +13,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   ChevronDownIcon,
   ChevronRightIcon,
-  EllipsisIcon,
   EyeIcon,
   EyeOffIcon,
   GitCompareArrowsIcon,
@@ -27,14 +26,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
-import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import {
   deleteSecret,
   getSecrets,
@@ -53,7 +46,10 @@ import {
   ImportEnvDialog
 } from './ImportEnvDialog';
 import { EditSecretDialog } from './EditSecretDialog';
-import { SecretValueText } from './SecretValueEditor';
+import { SecretRowActions } from './table/SecretRowActions';
+import { SecretTableShell } from './table/SecretTableShell';
+import { SecretValueRevealCell } from './table/SecretValueRevealCell';
+import type { SecretRowAction } from './table/types';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { EmptyState } from '../common/EmptyState';
 import { getConfigBadgeClass } from '../../lib/badgeStyles';
@@ -104,23 +100,15 @@ interface SecretsTableProps {
   onForkSummaryChange?: (summary: ForkSecretsSummary) => void;
 }
 
-interface RowAction {
-  key: string;
-  label: string;
-  onSelect: () => void;
-  icon: typeof EyeIcon;
-  destructive?: boolean;
-}
-
 const COLUMN_CLASS: Record<string, { header: string; cell: string }> = {
   icon: { header: 'w-10 sm:w-12', cell: 'w-10 sm:w-12 align-top' },
   key: {
-    header: 'min-w-[10rem] sm:min-w-[12rem]',
-    cell: 'min-w-[10rem] sm:min-w-[12rem] align-top'
+    header: 'w-[10rem] sm:w-[12rem]',
+    cell: 'w-[10rem] sm:w-[12rem] align-top'
   },
   value: {
-    header: 'min-w-[14rem] sm:min-w-[18rem]',
-    cell: 'min-w-[14rem] sm:min-w-[18rem] align-top'
+    header: 'w-[18rem] sm:w-[22rem] xl:w-[26rem]',
+    cell: 'w-[18rem] sm:w-[22rem] xl:w-[26rem] align-top'
   },
   updatedAt: {
     header: 'w-[6.5rem] whitespace-nowrap',
@@ -439,16 +427,12 @@ export function SecretsTable({
         cell: ({ row }) => {
           const revealed = revealedKeys.has(row.original.key);
           const inherited = row.original.forkBucket === 'inherited';
-          return revealed ? (
-            <div
-              className={`max-w-full rounded-md border border-border px-2 py-1 ${
-                inherited ? 'bg-muted/10' : 'bg-muted/20'
-              }`}
-            >
-              <SecretValueText value={row.original.value} className="max-h-40 overflow-y-auto" />
-            </div>
-          ) : (
-            <span className="font-mono text-sm text-muted-foreground">••••••••••••</span>
+          return (
+            <SecretValueRevealCell
+              value={row.original.value}
+              revealed={revealed}
+              tone={inherited ? 'inherited' : 'default'}
+            />
           );
         }
       },
@@ -466,7 +450,7 @@ export function SecretsTable({
           const isInherited = row.original.forkBucket === 'inherited';
           const editLabel = isInherited ? 'Override inherited secret' : 'Edit secret';
           const isRevealed = revealedKeys.has(row.original.key);
-          const rowActions: RowAction[] = [
+          const rowActions: SecretRowAction[] = [
             {
               key: 'toggle-visibility',
               label: isRevealed ? 'Hide value' : 'Reveal value',
@@ -494,51 +478,7 @@ export function SecretsTable({
               destructive: true
             }
           ];
-
-          return (
-            <>
-              <div className="hidden items-center justify-end gap-1 lg:flex">
-                {rowActions.map((action) => (
-                  <Button
-                    key={action.key}
-                    variant="ghost"
-                    size="sm"
-                    className={`h-7 w-7 p-0 ${action.destructive ? 'text-muted-foreground hover:text-destructive' : ''}`}
-                    onClick={action.onSelect}
-                    aria-label={action.label}
-                  >
-                    <action.icon className="h-3.5 w-3.5" />
-                  </Button>
-                ))}
-              </div>
-              <div className="flex justify-end lg:hidden">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      aria-label={`Open actions for ${row.original.key}`}
-                    >
-                      <EllipsisIcon className="h-3.5 w-3.5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    {rowActions.map((action) => (
-                      <DropdownMenuItem
-                        key={action.key}
-                        onClick={action.onSelect}
-                        className={action.destructive ? 'text-destructive focus:text-destructive' : ''}
-                      >
-                        <action.icon className="mr-2 h-3.5 w-3.5" />
-                        {action.label}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            </>
-          );
+          return <SecretRowActions actions={rowActions} rowLabel={row.original.key} />;
         }
       }
     ],
@@ -653,130 +593,125 @@ export function SecretsTable({
       <p className="px-0.5 text-[11px] text-muted-foreground xl:hidden">
         Swipe or scroll horizontally to view all columns.
       </p>
-      <div className="rounded-md border border-border ssm-table-scroll">
-        <Table className="min-w-[760px] w-full table-auto text-sm">
-          <TableCaption className="sr-only">
-            Environment secrets table with columns key, value, updated time, and actions.
-          </TableCaption>
-          <TableHeader>
-            <TableRow className="bg-muted/40 border-b border-border hover:bg-muted/40">
-              {table.getHeaderGroups().map((headerGroup) =>
-                headerGroup.headers.map((header) => (
-                  <TableHead
-                    key={header.id}
-                    scope="col"
-                    className={`h-auto py-2 text-left text-xs font-medium tracking-wider text-muted-foreground ${
-                      header.column.id === 'icon' ? 'px-2' : 'px-2.5 sm:px-3 lg:px-4'
-                    } ${columnClass(header.column.id, true)}`}
-                  >
-                    {flexRender(header.column.columnDef.header, header.getContext())}
-                  </TableHead>
-                ))
-              )}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              Array.from({ length: 5 }).map((_, index) => (
-                <TableRow key={index} className="border-b border-border last:border-0">
-                  <TableCell className="px-2 py-2">
-                    <Skeleton className="h-8 w-8 rounded-md" />
-                  </TableCell>
-                  <TableCell className="px-2.5 py-2 sm:px-3 lg:px-4">
-                    <Skeleton className="h-4 w-40" />
-                  </TableCell>
-                  <TableCell className="px-2.5 py-2 sm:px-3 lg:px-4">
-                    <Skeleton className="h-4 w-32" />
-                  </TableCell>
-                  <TableCell className="px-2.5 py-2 sm:px-3 lg:px-4">
-                    <Skeleton className="h-4 w-16" />
-                  </TableCell>
-                  <TableCell className="px-2.5 py-2 sm:px-3 lg:px-4">
-                    <Skeleton className="h-4 w-16 ml-auto" />
-                  </TableCell>
-                </TableRow>
+      <SecretTableShell caption="Environment secrets table with columns key, value, updated time, and actions.">
+        <TableHeader>
+          <TableRow className="bg-muted/40 border-b border-border hover:bg-muted/40">
+            {table.getHeaderGroups().map((headerGroup) =>
+              headerGroup.headers.map((header) => (
+                <TableHead
+                  key={header.id}
+                  scope="col"
+                  className={`h-auto py-2 text-left text-xs font-medium tracking-wider text-muted-foreground ${
+                    header.column.id === 'icon' ? 'px-2' : 'px-2.5 sm:px-3 lg:px-4'
+                  } ${columnClass(header.column.id, true)}`}
+                >
+                  {flexRender(header.column.columnDef.header, header.getContext())}
+                </TableHead>
               ))
-            ) : filteredRows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5}>
-                  <EmptyState
-                    title={globalFilter ? 'No secrets match your filter' : 'No secrets yet'}
-                    description={globalFilter ? 'Try a different search term' : 'Add your first secret to get started'}
-                    action={
-                      !globalFilter ? (
-                        <Button size="sm" onClick={() => setAddOpen(true)}>
-                          <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
-                          Add Secret
-                        </Button>
-                      ) : undefined
-                    }
-                  />
+            )}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {isLoading ? (
+            Array.from({ length: 5 }).map((_, index) => (
+              <TableRow key={index} className="border-b border-border last:border-0">
+                <TableCell className="px-2 py-2">
+                  <Skeleton className="h-8 w-8 rounded-md" />
+                </TableCell>
+                <TableCell className="px-2.5 py-2 sm:px-3 lg:px-4">
+                  <Skeleton className="h-4 w-40" />
+                </TableCell>
+                <TableCell className="px-2.5 py-2 sm:px-3 lg:px-4">
+                  <Skeleton className="h-4 w-32" />
+                </TableCell>
+                <TableCell className="px-2.5 py-2 sm:px-3 lg:px-4">
+                  <Skeleton className="h-4 w-16" />
+                </TableCell>
+                <TableCell className="px-2.5 py-2 sm:px-3 lg:px-4">
+                  <Skeleton className="h-4 w-16 ml-auto" />
                 </TableCell>
               </TableRow>
-            ) : isFork ? (
-              <>
-                <TableRow className="border-b border-border bg-muted/20 hover:bg-muted/20">
-                  <TableCell colSpan={5} className="px-2 py-1.5">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1.5 px-2 text-xs"
-                      onClick={() => setOverridesOpen((open) => !open)}
-                      aria-expanded={overridesOpen}
-                    >
-                      {overridesOpen ? <ChevronDownIcon className="h-3.5 w-3.5" /> : <ChevronRightIcon className="h-3.5 w-3.5" />}
-                      Overrides
-                      <Badge variant="outline" className="text-[10px] font-mono">
-                        {overrideRows.length}
-                      </Badge>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-                {overridesOpen &&
-                  (overrideRows.length > 0 ? (
-                    overrideRows.map((row) => renderDataRow(row))
-                  ) : (
-                    <TableRow className="border-b border-border last:border-0 hover:bg-transparent">
-                      <TableCell colSpan={5} className="px-2.5 py-3 text-xs text-muted-foreground sm:px-3 lg:px-4">
-                        No overrides in this view.
-                      </TableCell>
-                    </TableRow>
-                  ))}
+            ))
+          ) : filteredRows.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={5}>
+                <EmptyState
+                  title={globalFilter ? 'No secrets match your filter' : 'No secrets yet'}
+                  description={globalFilter ? 'Try a different search term' : 'Add your first secret to get started'}
+                  action={
+                    !globalFilter ? (
+                      <Button size="sm" onClick={() => setAddOpen(true)}>
+                        <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
+                        Add Secret
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              </TableCell>
+            </TableRow>
+          ) : isFork ? (
+            <>
+              <TableRow className="border-b border-border bg-muted/20 hover:bg-muted/20">
+                <TableCell colSpan={5} className="px-2 py-1.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1.5 px-2 text-xs"
+                    onClick={() => setOverridesOpen((open) => !open)}
+                    aria-expanded={overridesOpen}
+                  >
+                    {overridesOpen ? <ChevronDownIcon className="h-3.5 w-3.5" /> : <ChevronRightIcon className="h-3.5 w-3.5" />}
+                    Overrides
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      {overrideRows.length}
+                    </Badge>
+                  </Button>
+                </TableCell>
+              </TableRow>
+              {overridesOpen &&
+                (overrideRows.length > 0 ? (
+                  overrideRows.map((row) => renderDataRow(row))
+                ) : (
+                  <TableRow className="border-b border-border last:border-0 hover:bg-transparent">
+                    <TableCell colSpan={5} className="px-2.5 py-3 text-xs text-muted-foreground sm:px-3 lg:px-4">
+                      No overrides in this view.
+                    </TableCell>
+                  </TableRow>
+                ))}
 
-                <TableRow className="border-b border-border bg-muted/30 hover:bg-muted/30">
-                  <TableCell colSpan={5} className="px-2 py-1.5">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
-                      onClick={() => setInheritedOpen((open) => !open)}
-                      aria-expanded={inheritedOpen}
-                    >
-                      {inheritedOpen ? <ChevronDownIcon className="h-3.5 w-3.5" /> : <ChevronRightIcon className="h-3.5 w-3.5" />}
-                      Inherited
-                      <Badge variant="outline" className="text-[10px] font-mono">
-                        {inheritedRows.length}
-                      </Badge>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-                {inheritedOpen &&
-                  (inheritedRows.length > 0 ? (
-                    inheritedRows.map((row) => renderDataRow(row))
-                  ) : (
-                    <TableRow className="border-b border-border last:border-0 hover:bg-transparent">
-                      <TableCell colSpan={5} className="px-2.5 py-3 text-xs text-muted-foreground sm:px-3 lg:px-4">
-                        No inherited secrets in this view.
-                      </TableCell>
-                    </TableRow>
-                  ))}
-              </>
-            ) : (
-              filteredRows.map((row) => renderDataRow(row))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              <TableRow className="border-b border-border bg-muted/30 hover:bg-muted/30">
+                <TableCell colSpan={5} className="px-2 py-1.5">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+                    onClick={() => setInheritedOpen((open) => !open)}
+                    aria-expanded={inheritedOpen}
+                  >
+                    {inheritedOpen ? <ChevronDownIcon className="h-3.5 w-3.5" /> : <ChevronRightIcon className="h-3.5 w-3.5" />}
+                    Inherited
+                    <Badge variant="outline" className="text-[10px] font-mono">
+                      {inheritedRows.length}
+                    </Badge>
+                  </Button>
+                </TableCell>
+              </TableRow>
+              {inheritedOpen &&
+                (inheritedRows.length > 0 ? (
+                  inheritedRows.map((row) => renderDataRow(row))
+                ) : (
+                  <TableRow className="border-b border-border last:border-0 hover:bg-transparent">
+                    <TableCell colSpan={5} className="px-2.5 py-3 text-xs text-muted-foreground sm:px-3 lg:px-4">
+                      No inherited secrets in this view.
+                    </TableCell>
+                  </TableRow>
+                ))}
+            </>
+          ) : (
+            filteredRows.map((row) => renderDataRow(row))
+          )}
+        </TableBody>
+      </SecretTableShell>
 
       <AddSecretDialog
         projectSlug={projectSlug}

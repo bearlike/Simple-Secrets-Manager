@@ -1,4 +1,5 @@
 from ssm_cli.api import ApiError
+from ssm_cli.exceptions import CliError
 from ssm_cli.main import _fetch_secrets
 from ssm_cli.resolve import Resolution
 
@@ -28,7 +29,9 @@ def test_fetch_secrets_uses_cache_when_offline(monkeypatch, tmp_path):
     assert source == "cache"
 
 
-def test_fetch_secrets_falls_back_to_cache_on_api_error(monkeypatch, tmp_path):
+def test_fetch_secrets_falls_back_to_cache_on_transient_api_error(
+    monkeypatch, tmp_path
+):
     monkeypatch.setenv("SSM_CACHE_DIR", str(tmp_path))
 
     from ssm_cli.cache import save_secret_cache
@@ -47,6 +50,57 @@ def test_fetch_secrets_falls_back_to_cache_on_api_error(monkeypatch, tmp_path):
     data, source = _fetch_secrets(_resolution(), offline=False, cache_ttl=3600)
     assert data == {"CACHED": "yes"}
     assert source == "cache-fallback"
+
+
+def test_fetch_secrets_does_not_fallback_on_missing_config_404(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("SSM_CACHE_DIR", str(tmp_path))
+    from ssm_cli.cache import save_secret_cache
+
+    save_secret_cache(
+        "http://localhost:8080/api", "project-a", "dev", {"CACHED": "yes"}
+    )
+
+    def fail_export(self, project, config, **kwargs):
+        raise ApiError("Config not found", status_code=404)
+
+    monkeypatch.setattr(
+        "ssm_cli.main.ApiClient.export_secrets_json", fail_export
+    )
+
+    try:
+        _fetch_secrets(_resolution(), offline=False, cache_ttl=3600)
+        raise AssertionError("Expected missing config guard failure")
+    except CliError as exc:
+        assert exc.exit_code == 2
+        assert "project/config not found" in exc.message
+        assert "project-a/dev" in exc.message
+
+
+def test_fetch_secrets_does_not_fallback_on_non_transient_4xx(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("SSM_CACHE_DIR", str(tmp_path))
+    from ssm_cli.cache import save_secret_cache
+
+    save_secret_cache(
+        "http://localhost:8080/api", "project-a", "dev", {"CACHED": "yes"}
+    )
+
+    def fail_export(self, project, config, **kwargs):
+        raise ApiError("Forbidden", status_code=403)
+
+    monkeypatch.setattr(
+        "ssm_cli.main.ApiClient.export_secrets_json", fail_export
+    )
+
+    try:
+        _fetch_secrets(_resolution(), offline=False, cache_ttl=3600)
+        raise AssertionError("Expected API failure")
+    except ApiError as exc:
+        assert exc.status_code == 403
+        assert exc.message == "Forbidden"
 
 
 def test_fetch_secrets_raises_when_offline_cache_missing(

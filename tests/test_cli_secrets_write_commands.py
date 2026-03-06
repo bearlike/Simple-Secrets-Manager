@@ -184,3 +184,53 @@ def test_secrets_upload_continues_on_failures(monkeypatch, tmp_path: Path):
     assert "failed=1" in result.output
     assert "B" in result.output
     assert "Missing scope: secrets:write" in result.output
+
+
+def test_secrets_set_missing_config_returns_guard_error(monkeypatch):
+    monkeypatch.setattr(
+        "ssm_cli.main.resolve_context", lambda **_: _resolution()
+    )
+
+    def fail_upsert(_self, project, config, key, value):
+        raise ApiError("Config not found", status_code=404)
+
+    monkeypatch.setattr("ssm_cli.main.ApiClient.upsert_secret", fail_upsert)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["secrets", "set", "--key", "API_KEY", "--value", "abc123"]
+    )
+
+    assert result.exit_code == 2
+    assert "project/config not found" in result.output
+    assert "payments/prod" in result.output
+
+
+def test_secrets_upload_fails_fast_on_missing_project_or_config(
+    monkeypatch, tmp_path: Path
+):
+    calls: list[tuple[str, str, str, str]] = []
+    env_file = tmp_path / "secrets.env"
+    env_file.write_text("A=1\nB=2\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "ssm_cli.main.resolve_context", lambda **_: _resolution()
+    )
+
+    def fail_upsert(_self, project, config, key, value):
+        calls.append((project, config, key, value))
+        raise ApiError("Project not found", status_code=404)
+
+    monkeypatch.setattr("ssm_cli.main.ApiClient.upsert_secret", fail_upsert)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli, ["secrets", "upload", "--env-file", str(env_file)]
+    )
+
+    assert result.exit_code == 2
+    assert len(calls) == 1
+    assert calls[0][2] == "A"
+    assert "project/config not found" in result.output
+    assert "payments/prod" in result.output
+    assert "Upload complete" not in result.output
