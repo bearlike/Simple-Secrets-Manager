@@ -28,7 +28,7 @@ Issues = "https://github.com/bearlike/simple-secrets-manager/issues"
 [dependency-groups]
 dev = [
     "ipykernel>=6.29.5,<7.0.0",
-    "pytest>=8.3.5,<9.0.0",
+    "pytest>=9.0.3,<10.0.0",
     "ruff>=0.13.0,<0.14.0",
     "mypy>=1.17.1,<2.0.0",
 ]
