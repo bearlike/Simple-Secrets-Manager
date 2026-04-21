@@ -9,7 +9,7 @@ license = "CC0-1.0"
 readme = "README.md"
 requires-python = ">=3.13,<4.0"
 dependencies = [
-    "python-dotenv>=1.1.0,<2.0.0",
+    "python-dotenv>=1.2.2,<2.0.0",
     "loguru>=0.7.3,<0.8.0",
     "flask-httpauth>4,<5",
     "flask-cors>=5.0.0,<6.0.0",
