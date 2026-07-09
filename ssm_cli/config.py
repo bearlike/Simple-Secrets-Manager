@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ssm_cli.fsio import atomic_write_text
+
 DEFAULT_PROFILE = "default"
 
 
@@ -60,10 +62,14 @@ class LocalConfig:
 
 
 def _read_json(path: Path) -> dict[str, Any]:
-    if not path.exists():
+    # A missing, unreadable or corrupt file degrades to defaults rather
+    # than crashing the CLI (json.JSONDecodeError subclasses ValueError,
+    # FileNotFoundError subclasses OSError).
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            data = json.load(handle)
+    except (OSError, ValueError):
         return {}
-    with path.open("r", encoding="utf-8") as handle:
-        data = json.load(handle)
     if not isinstance(data, dict):
         return {}
     return data
@@ -72,13 +78,8 @@ def _read_json(path: Path) -> dict[str, Any]:
 def _atomic_write_json(
     path: Path, data: dict[str, Any], mode: int = 0o600
 ) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp = path.with_suffix(path.suffix + ".tmp")
-    with temp.open("w", encoding="utf-8") as handle:
-        json.dump(data, handle, indent=2, sort_keys=True)
-        handle.write("\n")
-    os.chmod(temp, mode)
-    temp.replace(path)
+    text = json.dumps(data, indent=2, sort_keys=True) + "\n"
+    atomic_write_text(path, text, mode=mode)
 
 
 def load_global_config() -> GlobalConfig:

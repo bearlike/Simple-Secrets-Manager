@@ -45,6 +45,16 @@ def _handle_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
             _fail(exc.message, exc.exit_code)
         except ApiError as exc:
             _fail(f"{exc.message} (status={exc.status_code})", 1)
+        except (click.exceptions.Exit, click.exceptions.Abort):
+            # Deliberate control flow (e.g. `run` propagating a child's
+            # exit code) -- must pass straight through.
+            raise
+        except OSError as exc:
+            _fail(f"Local file error: {exc}", 1)
+        except Exception as exc:  # noqa: BLE001 - last-resort safety net
+            # Never surface a raw traceback to the user; a malformed API
+            # response or unexpected state degrades to a clean message.
+            _fail(f"Unexpected error: {exc}", 1)
 
     return wrapper
 

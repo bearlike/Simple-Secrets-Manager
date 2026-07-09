@@ -19,4 +19,8 @@ api = Api(
     authorizations=authorizations,
 )
 app = Flask(__name__)
+# Do not append flask-restx's "did you mean <route template>" help text to
+# 404 responses. It leaks internal URL patterns and turns clean messages
+# like "Project not found" into noise for API and CLI consumers.
+app.config["RESTX_ERROR_404_HELP"] = False
 app.register_blueprint(api_v1)

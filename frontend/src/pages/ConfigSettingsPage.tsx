@@ -1,24 +1,44 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { PlusIcon, GitBranchIcon, ArrowRightIcon, RefreshCwIcon } from 'lucide-react';
+import {
+  PlusIcon,
+  GitBranchIcon,
+  ArrowRightIcon,
+  RefreshCwIcon,
+  MoreVerticalIcon,
+  PencilIcon,
+  Trash2Icon } from
+'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger } from
+'@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { getProjects } from '../lib/api/projects';
-import { getConfigs } from '../lib/api/configs';
+import { getConfigs, deleteConfig } from '../lib/api/configs';
 import { recomputeProjectSecretIcons } from '../lib/api/secrets';
 import { queryKeys } from '../lib/api/queryKeys';
 import { CreateConfigDialog } from '../components/configs/CreateConfigDialog';
+import { EditConfigDialog } from '../components/configs/EditConfigDialog';
+import { ConfirmDialog } from '../components/common/ConfirmDialog';
 import { EmptyState } from '../components/common/EmptyState';
 import { notifyApiError } from '../lib/api/errorToast';
+import type { Config } from '../lib/api/types';
 
 export function ConfigSettingsPage() {
   const { projectSlug = '' } = useParams<{ projectSlug: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Config | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Config | null>(null);
 
   const { data: projects = [] } = useQuery({
     queryKey: queryKeys.projects(),
@@ -43,6 +63,19 @@ export function ConfigSettingsPage() {
     },
     onError: (error) => {
       notifyApiError(error, 'Failed to refresh auto icons');
+    }
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (slug: string) => deleteConfig(projectSlug, slug),
+    onSuccess: (_data, slug) => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.configs(projectSlug) });
+      queryClient.removeQueries({ queryKey: queryKeys.secrets(projectSlug, slug) });
+      toast.success('Config deleted');
+      setDeleteTarget(null);
+    },
+    onError: (error) => {
+      notifyApiError(error, 'Failed to delete config');
     }
   });
 
@@ -158,19 +191,51 @@ export function ConfigSettingsPage() {
                     {config.createdAt ? new Date(config.createdAt).toLocaleDateString() : '-'}
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 gap-1.5 text-xs"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        navigate(`/projects/${projectSlug}/configs/${config.slug}`);
-                      }}
-                      aria-label={`Open ${config.slug}`}
-                    >
-                      Open
-                      <ArrowRightIcon className="h-3.5 w-3.5" />
-                    </Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 gap-1.5 text-xs"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          navigate(`/projects/${projectSlug}/configs/${config.slug}`);
+                        }}
+                        aria-label={`Open ${config.slug}`}
+                      >
+                        Open
+                        <ArrowRightIcon className="h-3.5 w-3.5" />
+                      </Button>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-muted-foreground"
+                            onClick={(event) => event.stopPropagation()}
+                            aria-label={`Actions for ${config.slug}`}
+                          >
+                            <MoreVerticalIcon className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          align="end"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <DropdownMenuItem onSelect={() => setEditTarget(config)}>
+                            <PencilIcon className="h-3.5 w-3.5 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onSelect={() => setDeleteTarget(config)}
+                          >
+                            <Trash2Icon className="h-3.5 w-3.5 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -178,15 +243,37 @@ export function ConfigSettingsPage() {
         </table>
       </div>
 
-      <p className="text-xs text-muted-foreground mt-3">
-        Config deletion is not available in the current backend API.
-      </p>
-
       <CreateConfigDialog
         projectSlug={projectSlug}
         open={createOpen}
         onOpenChange={setCreateOpen}
         existingConfigs={configs}
+      />
+      <EditConfigDialog
+        projectSlug={projectSlug}
+        config={editTarget}
+        open={editTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditTarget(null);
+        }}
+        existingConfigs={configs}
+      />
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+        title="Delete config"
+        description={
+          deleteTarget
+            ? `Delete "${deleteTarget.name}" and all of its secrets? This can't be undone.`
+            : ''
+        }
+        destructive
+        loading={deleteMutation.isPending}
+        onConfirm={() => {
+          if (deleteTarget) deleteMutation.mutate(deleteTarget.slug);
+        }}
       />
     </div>
   );

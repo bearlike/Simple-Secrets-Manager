@@ -41,6 +41,100 @@ class Configs:
             return "Config already exists", 400
         return payload, 201
 
+    def _would_create_cycle(self, config_id, new_parent_id):
+        """True if reparenting ``config_id`` under ``new_parent_id`` would
+        form a cycle (the new parent chain leads back to the config)."""
+        seen = set()
+        current = new_parent_id
+        while current is not None:
+            if current == config_id:
+                return True
+            if current in seen:
+                break
+            seen.add(current)
+            doc = self._configs.find_one(
+                {"_id": current}, {"parent_config_id": 1}
+            )
+            if not doc:
+                break
+            current = doc.get("parent_config_id")
+        return False
+
+    def _validate_new_parent(self, project_id, config, parent_config_id):
+        """Return ``(error, code)`` if ``parent_config_id`` is not a legal new
+        parent for ``config``; ``(None, None)`` when it is (including a
+        ``None`` parent, which clears inheritance)."""
+        if parent_config_id is None:
+            return None, None
+        if not isinstance(parent_config_id, ObjectId):
+            return "Invalid parent config id", 400
+        if parent_config_id == config["_id"]:
+            return "Config cannot be its own parent", 400
+        parent = self._configs.find_one({"_id": parent_config_id})
+        if parent is None:
+            return "Parent config not found", 404
+        if parent["project_id"] != project_id:
+            return "Parent config must belong to the same project", 400
+        if self._would_create_cycle(config["_id"], parent_config_id):
+            return "Circular parent reference", 400
+        return None, None
+
+    def update(
+        self,
+        project_id,
+        slug,
+        name=None,
+        parent_config_id=None,
+        parent_provided=False,
+    ):
+        config = self._configs.find_one(
+            {"project_id": project_id, "slug": slug}
+        )
+        if config is None:
+            return "Config not found", 404
+
+        update_fields = {}
+        if name is not None:
+            if not str(name).strip():
+                return "Config name is required", 400
+            update_fields["name"] = str(name).strip()
+
+        if parent_provided:
+            error, code = self._validate_new_parent(
+                project_id, config, parent_config_id
+            )
+            if error:
+                return error, code
+            update_fields["parent_config_id"] = parent_config_id
+
+        if update_fields:
+            self._configs.update_one(
+                {"_id": config["_id"]}, {"$set": update_fields}
+            )
+        return self._configs.find_one({"_id": config["_id"]}), 200
+
+    def delete(self, project_id, slug):
+        config = self._configs.find_one(
+            {"project_id": project_id, "slug": slug}
+        )
+        if config is None:
+            return "Config not found", 404
+        child = self._configs.find_one(
+            {"project_id": project_id, "parent_config_id": config["_id"]}
+        )
+        if child is not None:
+            return (
+                "Config has child configs; delete or re-parent them first",
+                409,
+            )
+        self._configs.delete_one({"_id": config["_id"]})
+        return config, 200
+
+    def delete_all_for_project(self, project_id):
+        config_ids = self.list_ids(project_id)
+        self._configs.delete_many({"project_id": project_id})
+        return config_ids
+
     def get_by_slug(self, project_id, slug):
         return self._configs.find_one({"project_id": project_id, "slug": slug})
 

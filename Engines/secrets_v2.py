@@ -432,6 +432,19 @@ class SecretsV2:
             return "Secret not found", 404
         return {"status": "OK", "key": key}, 200
 
+    def delete_by_config(self, config_id):
+        """Purge every secret stored under a single config."""
+        res = self._secrets.delete_many({"config_id": config_id})
+        return res.deleted_count
+
+    def delete_by_configs(self, config_ids):
+        """Purge every secret stored under any of ``config_ids``."""
+        config_ids = list(config_ids or [])
+        if not config_ids:
+            return 0
+        res = self._secrets.delete_many({"config_id": {"$in": config_ids}})
+        return res.deleted_count
+
     def compare_key_across_configs(
         self,
         configs,

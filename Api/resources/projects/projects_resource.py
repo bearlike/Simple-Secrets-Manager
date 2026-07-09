@@ -21,6 +21,10 @@ project_create_parser.add_argument(
 project_create_parser.add_argument(
     "name", type=str, required=False, location="json"
 )
+project_update_parser = api.parser()
+project_update_parser.add_argument(
+    "name", type=str, required=True, location="json"
+)
 
 
 @projects_ns.route("")
@@ -121,3 +125,70 @@ class ProjectsResource(Resource):
             "status": "OK",
             "project": {"slug": result["slug"], "name": result["name"]},
         }, 201
+
+
+@projects_ns.route("/<string:project_slug>")
+class ProjectItemResource(Resource):
+    @api.doc(security=["Bearer", "Token"], parser=project_update_parser)
+    @with_token
+    def patch(self, project_slug):
+        require_scope("projects:write")
+        args = project_update_parser.parse_args()
+        result, code = conn.projects.update(project_slug, args.get("name"))
+        if code >= 400:
+            api.abort(code, result)
+        conn.audit.write_event(
+            {
+                "actor_type": "token",
+                "actor_id": g.actor.get("id"),
+                "token_id": g.actor.get("token_id"),
+                "action": "projects.write",
+                "project_slug": result.get("slug"),
+                "method": "PATCH",
+                "path": f"/api/projects/{project_slug}",
+                "status_code": 200,
+                "latency_ms": 0,
+            }
+        )
+        return {
+            "status": "OK",
+            "project": {
+                "slug": result.get("slug"),
+                "name": result.get("name"),
+            },
+        }, 200
+
+    @api.doc(security=["Bearer", "Token"])
+    @with_token
+    def delete(self, project_slug):
+        require_scope("projects:write")
+        project = conn.projects.get_by_slug(project_slug)
+        if not project:
+            api.abort(404, "Project not found")
+
+        config_ids = conn.configs.list_ids(project["_id"])
+        conn.secrets_v2.delete_by_configs(config_ids)
+        conn.configs.delete_all_for_project(project["_id"])
+
+        workspace_id = project.get("workspace_id") or g.actor.get(
+            "workspace_id"
+        )
+        if workspace_id is not None:
+            conn.memberships.remove_all_for_project(
+                workspace_id, project["_id"]
+            )
+        conn.projects.delete(project["slug"])
+        conn.audit.write_event(
+            {
+                "actor_type": "token",
+                "actor_id": g.actor.get("id"),
+                "token_id": g.actor.get("token_id"),
+                "action": "projects.delete",
+                "project_slug": project.get("slug"),
+                "method": "DELETE",
+                "path": f"/api/projects/{project_slug}",
+                "status_code": 200,
+                "latency_ms": 0,
+            }
+        )
+        return {"status": "OK"}, 200

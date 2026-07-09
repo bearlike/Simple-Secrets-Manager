@@ -36,6 +36,23 @@ class Projects:
             return "Project already exists", 400
         return payload, 201
 
+    def update(self, slug, name):
+        if not name or not str(name).strip():
+            return "Project name is required", 400
+        result = self._projects.update_one(
+            {"slug": slug}, {"$set": {"name": str(name).strip()}}
+        )
+        if result.matched_count == 0:
+            return "Project not found", 404
+        return self._projects.find_one({"slug": slug}), 200
+
+    def delete(self, slug):
+        doc = self._projects.find_one({"slug": slug})
+        if not doc:
+            return "Project not found", 404
+        self._projects.delete_one({"_id": doc["_id"]})
+        return doc, 200
+
     def get_by_id(self, project_id):
         try:
             lookup_id = ObjectId(project_id)

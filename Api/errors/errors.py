@@ -3,12 +3,15 @@ from flask import jsonify
 from Api.core import app
 
 
+# Use the same {"message": ...} envelope that flask-restx produces for
+# aborts, so every error response the API emits is shaped identically for
+# API and CLI consumers (both read "message" first).
 @app.errorhandler(404)
 def not_found(_error):
-    return jsonify(error="Resource not found"), 404
+    return jsonify(message="Resource not found"), 404
 
 
 @app.errorhandler(Exception)
 def server_error(error):
     app.logger.exception(error)
-    return jsonify(error="Server error. Contact administrator"), 500
+    return jsonify(message="Server error. Contact administrator"), 500

@@ -6,6 +6,7 @@ import time
 from pathlib import Path
 
 from ssm_cli.config import cache_root
+from ssm_cli.fsio import atomic_write_text
 
 
 def _cache_file(base_url: str, project: str, config: str) -> Path:
@@ -18,13 +19,10 @@ def save_secret_cache(
     base_url: str, project: str, config: str, data: dict[str, str]
 ) -> None:
     path = _cache_file(base_url, project, config)
-    path.parent.mkdir(parents=True, exist_ok=True)
     payload = {"fetched_at": int(time.time()), "data": data}
-    temp = path.with_suffix(path.suffix + ".tmp")
-    with temp.open("w", encoding="utf-8") as handle:
-        json.dump(payload, handle, sort_keys=True)
-        handle.write("\n")
-    temp.replace(path)
+    # Cache holds resolved secret values, so keep it owner-only (0o600).
+    text = json.dumps(payload, sort_keys=True) + "\n"
+    atomic_write_text(path, text)
 
 
 def load_secret_cache(
@@ -34,11 +32,13 @@ def load_secret_cache(
     max_age_seconds: int | None = None,
 ) -> dict[str, str] | None:
     path = _cache_file(base_url, project, config)
-    if not path.exists():
+    # A missing, unreadable or corrupt cache is treated as a miss (the
+    # caller re-fetches) instead of crashing the CLI.
+    try:
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, ValueError):
         return None
-
-    with path.open("r", encoding="utf-8") as handle:
-        payload = json.load(handle)
 
     if not isinstance(payload, dict):
         return None

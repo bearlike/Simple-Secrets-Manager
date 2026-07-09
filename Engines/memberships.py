@@ -195,3 +195,21 @@ class Memberships:
                 "subject_id": subject_id,
             }
         )
+
+    def remove_all_for_project(self, workspace_id, project_id):
+        """Remove every project membership for a project regardless of
+        whether ``project_id`` was stored as an ObjectId or its string form."""
+        candidates = [project_id]
+        if isinstance(project_id, ObjectId):
+            candidates.append(str(project_id))
+        else:
+            try:
+                candidates.append(ObjectId(project_id))
+            except Exception:
+                pass
+        self._project_memberships.delete_many(
+            {
+                "workspace_id": workspace_id,
+                "project_id": {"$in": candidates},
+            }
+        )
