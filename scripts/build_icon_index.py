@@ -104,7 +104,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Build icon lookup index")
     parser.add_argument(
         "--output",
-        default="Engines/icon_index.json",
+        default="ssm_server/engines/icon_index.json",
         help="Path to write the generated index JSON",
     )
     args = parser.parse_args()

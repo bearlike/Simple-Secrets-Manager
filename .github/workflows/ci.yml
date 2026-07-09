@@ -8,15 +8,13 @@ on:
       - ".github/workflows/publish.yml"
       - ".github/workflows/publish-preview.yml"
       - "Dockerfile"
-      - "docker/**"
+      - "deploy/**"
       - "frontend/**"
-      - "Api/**"
-      - "Access/**"
-      - "Engines/**"
+      - "ssm_server/**"
+      - "ssm_cli/**"
+      - "ssm_reload/**"
       - "pyproject.toml"
       - "uv.lock"
-      - "server.py"
-      - "connection.py"
       - "VERSION"
       - "scripts/version_sync.py"
   push:
@@ -25,25 +23,34 @@ on:
       - ".github/workflows/publish.yml"
       - ".github/workflows/publish-preview.yml"
       - "Dockerfile"
-      - "docker/**"
+      - "deploy/**"
       - "frontend/**"
-      - "Api/**"
-      - "Access/**"
-      - "Engines/**"
+      - "ssm_server/**"
+      - "ssm_cli/**"
+      - "ssm_reload/**"
       - "pyproject.toml"
       - "uv.lock"
-      - "server.py"
-      - "connection.py"
       - "VERSION"
       - "scripts/version_sync.py"
   workflow_dispatch:
 
 jobs:
   docker-build:
-    name: Build Docker image (no publish)
+    name: Build ${{ matrix.name }} image (no publish)
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: simple-secrets-manager
+            dockerfile: Dockerfile
+            build_args_extra: |
+              VITE_API_BASE_URL=/api
+          - name: ssm-reload
+            dockerfile: ssm_reload/Dockerfile
+            build_args_extra: ""
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -65,10 +72,11 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
           push: false
           build-args: |
-            VITE_API_BASE_URL=/api
             APP_VERSION=${{ steps.version.outputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+            ${{ matrix.build_args_extra }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

@@ -22,10 +22,13 @@ fi
 
 echo "Running targeted Pylint anti-pattern checks..."
 uvx pylint --disable=all --enable=R1711,R0401,W0613,W0125,W0621 \
-  Access Api Engines ssm_cli tests connection.py server.py
+  ssm_server ssm_cli tests
 
 echo "Running MyPy..."
 uv run mypy .
+
+echo "Running import-linter contracts..."
+uv run lint-imports
 
 echo "Running tests..."
 uv run pytest -q

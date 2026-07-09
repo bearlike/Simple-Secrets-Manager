@@ -22,7 +22,7 @@ jobs:
         run: pip install uv
 
       - name: Install dependencies
-        run: uv sync
+        run: uv sync --all-extras
 
       - name: Run quality command
         run: ./scripts/quality.sh fix

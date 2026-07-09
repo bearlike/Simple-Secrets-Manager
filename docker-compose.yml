@@ -47,6 +47,29 @@ services:
     networks:
       - app-tier
 
+  # Optional container reloader (ssm-reload). It is OPT-IN via the `reload`
+  # profile, so a plain `docker compose up` does NOT start it; bring it up with
+  #   docker compose --profile reload up -d
+  # Provide a scoped service token via the SSM_RELOAD_TOKEN env var (it maps to
+  # SSM_TOKEN inside the container). The Docker socket is mounted read-only so
+  # the reloader can inspect and recreate opted-in containers on this host.
+  ssm-reload:
+    image: ghcr.io/bearlike/ssm-reload:latest
+    build:
+      context: .
+      dockerfile: ssm_reload/Dockerfile
+    profiles: ["reload"]
+    restart: unless-stopped
+    depends_on:
+      - ssm
+    environment:
+      SSM_BASE_URL: http://ssm:5000/api
+      SSM_TOKEN: ${SSM_RELOAD_TOKEN:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - app-tier
+
 networks:
   app-tier:
     driver: bridge

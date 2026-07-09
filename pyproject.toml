@@ -8,18 +8,30 @@ authors = [
 license = "CC0-1.0"
 readme = "README.md"
 requires-python = ">=3.13,<4.0"
+# Base install = only what the `ssm` / `ssm-cli` client actually imports.
+# The Flask server and the reload sidecar pull their heavier deps via the
+# `server` / `reload` extras so a CLI-only install stays lean.
 dependencies = [
-    "python-dotenv>=1.1.0,<2.0.0",
-    "loguru>=0.7.3,<0.8.0",
-    "flask-httpauth>4,<5",
-    "flask-cors>=5.0.0,<6.0.0",
-    "flask-restx>=0.5.1",
-    "pymongo>4,<5",
     "click>=8.1.8,<9.0.0",
     "rich>=13.9.4,<14.0.0",
     "requests>=2.32.3,<3.0.0",
     "keyring>=25.6.0,<26.0.0",
 ]
+
+[project.optional-dependencies]
+# The Flask + flask-restx REST API server (`ssm_server`, `python -m ssm_server.main`).
+server = [
+    "flask-httpauth>4,<5",
+    "flask-cors>=5.0.0,<6.0.0",
+    "flask-restx>=0.5.1",
+    "pymongo>4,<5",
+    "loguru>=0.7.3,<0.8.0",
+    "python-dotenv>=1.1.0,<2.0.0",
+]
+# The `ssm-reload` container reloader sidecar (needs the Docker SDK).
+reload = ["docker>=7.0.0,<8.0.0"]
+# Everything, for a full local/dev checkout.
+all = ["simple-secrets-manager[server,reload]"]
 
 [project.urls]
 Repository = "https://github.com/bearlike/simple-secrets-manager.git"
@@ -31,6 +43,7 @@ dev = [
     "pytest>=8.3.5,<9.0.0",
     "ruff>=0.13.0,<0.14.0",
     "mypy>=1.17.1,<2.0.0",
+    "import-linter>=2.0,<3.0",
 ]
 
 [build-system]
@@ -40,10 +53,12 @@ build-backend = "setuptools.build_meta"
 [project.scripts]
 ssm = "ssm_cli.main:cli"
 ssm-cli = "ssm_cli.main:cli"
+ssm-reload = "ssm_reload.runner:main"
 
-[tool.setuptools]
-packages = ["Access", "Api", "Engines", "ssm_cli"]
-py-modules = ["connection", "server"]
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ssm_server*", "ssm_cli*", "ssm_reload*"]
+exclude = ["tests*"]
 
 [tool.setuptools.dynamic]
 version = { attr = "ssm_cli.__version__" }
@@ -54,13 +69,76 @@ target-version = "py313"
 exclude = [".venv"]
 
 [tool.ruff.lint]
-select = ["E", "F", "C901", "SIM102", "PERF403"]
+# E/F = pycodestyle+pyflakes core; C901 = mccabe complexity; SIM102/PERF403 =
+# targeted single rules; C4 = flake8-comprehensions (whole family passes clean).
+# Deferred families (violations exist today, would need source edits owned by
+# other work): I (import sort, 31), UP (pyupgrade, 97), B (bugbear, 2),
+# SIM full (15). Enable them once those are fixed.
+select = ["E", "F", "C901", "SIM102", "PERF403", "C4"]
 
 [tool.mypy]
 python_version = "3.13"
 ignore_missing_imports = true
+# Both pass the whole tree today. Deferred (violations exist, need source
+# edits): warn_unused_ignores (1: ssm_cli/auth.py redundant ignore) and
+# check_untyped_defs (46, mostly untyped test bodies).
+warn_redundant_casts = true
+no_implicit_optional = true
 exclude = [
     "^\\.venv/",
     "^build/",
     "^simple_secrets_manager\\.egg-info/",
 ]
+
+# The reload sidecar is small and fully typed — hold it to the strict bar so it
+# stays that way. Verified: `mypy --strict -p ssm_reload` is clean. NOTE: the
+# `strict = true` meta-flag is not scopable in a per-module override (it leaks
+# to every module), so the strict sub-flags are enumerated here instead.
+[[tool.mypy.overrides]]
+module = "ssm_reload.*"
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+disallow_untyped_calls = true
+disallow_untyped_decorators = true
+disallow_any_generics = true
+disallow_subclassing_any = true
+warn_return_any = true
+warn_unused_ignores = true
+no_implicit_reexport = true
+strict_equality = true
+check_untyped_defs = true
+extra_checks = true
+
+# --- import-linter: enforce the subproduct boundaries (dependencies flow
+# inward). Run via `uv run lint-imports` / `make lint-imports`; wired into
+# scripts/quality.sh after MyPy. ---
+[tool.importlinter]
+root_packages = ["ssm_server", "ssm_cli", "ssm_reload"]
+
+# The reload sidecar talks only to the API over HTTP + the Docker socket; it
+# must never import the server or CLI Python packages.
+[[tool.importlinter.contracts]]
+name = "ssm_reload is independent of ssm_server and ssm_cli"
+type = "forbidden"
+source_modules = ["ssm_reload"]
+forbidden_modules = ["ssm_server", "ssm_cli"]
+
+# The CLI is a standalone HTTP client; it must not pull in the server or the
+# reload sidecar.
+[[tool.importlinter.contracts]]
+name = "ssm_cli is independent of ssm_server and ssm_reload"
+type = "forbidden"
+source_modules = ["ssm_cli"]
+forbidden_modules = ["ssm_server", "ssm_reload"]
+
+# Dependencies flow inward: the engines (domain layer) must not reach up into
+# the API/HTTP layer. The one accepted edge is the leaf serialization util
+# (to_iso / sanitize_doc / oid_to_str — pure functions, no Flask), which the
+# engines legitimately reuse; everything else in ssm_server.api (the Flask app
+# in api.core, the flask-restx resources) stays out of the engines.
+[[tool.importlinter.contracts]]
+name = "ssm_server.engines does not depend on the API layer"
+type = "forbidden"
+source_modules = ["ssm_server.engines"]
+forbidden_modules = ["ssm_server.api"]
+ignore_imports = ["ssm_server.engines.* -> ssm_server.api.serialization"]

@@ -1,0 +1,40 @@
+# Example deployment of the ssm-reload service alongside an opted-in app.
+#
+#   docker compose -f ssm_reload/docker-compose.example.yml up -d --build
+#
+# ssm-reload polls the SSM API and watches the local Docker event stream.
+# When a managed config's secrets change it recreates every container
+# bound to that config, injecting the fresh secrets as environment.
+#
+# Run one ssm-reload per Docker host: it is stateless and manages only its
+# LOCAL daemon (all state lives on container labels + the SSM API).
+
+services:
+  ssm-reload:
+    build:
+      # Build context is the repo root so the Dockerfile can COPY ssm_reload/.
+      context: ..
+      dockerfile: ssm_reload/Dockerfile
+    image: ghcr.io/bearlike/ssm-reload:latest
+    restart: unless-stopped
+    environment:
+      # Point at the API root that serves /projects and /reload paths.
+      SSM_BASE_URL: "http://ssm:5000/api"
+      # A read-only, scoped token. Provide via your secret store / .env.
+      SSM_TOKEN: "${SSM_RELOAD_TOKEN:?set SSM_RELOAD_TOKEN}"
+      SSM_RELOAD_POLL_INTERVAL: "30"
+      SSM_RELOAD_LABEL_PREFIX: "ssm"
+    volumes:
+      # Read-only socket bind is enough for the Docker API calls used here.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  # An example workload that opts in to ssm-reload management.
+  example-app:
+    image: nginx:1.25-alpine
+    restart: unless-stopped
+    labels:
+      # Opt in to management.
+      ssm.enable: "true"
+      # Which SSM project/config this container tracks.
+      ssm.config: "demo/production"
+      # ssm.revision is written and updated by ssm-reload; do not set it.

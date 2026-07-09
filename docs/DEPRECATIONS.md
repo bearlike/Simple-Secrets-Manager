@@ -14,7 +14,7 @@ removal in a future release.
   - `POST /api/secrets/kv/<path>/<key>`
   - `PUT /api/secrets/kv/<path>/<key>`
   - `DELETE /api/secrets/kv/<path>/<key>`
-- Legacy backend engine: `Engines.kv.Key_Value_Secrets`
+- Legacy backend engine: `ssm_server.engines.kv.Key_Value_Secrets`
 - Replacement:
   - `PUT /api/projects/<project_slug>/configs/<config_slug>/secrets/<key>`
   - `GET /api/projects/<project_slug>/configs/<config_slug>/secrets/<key>`

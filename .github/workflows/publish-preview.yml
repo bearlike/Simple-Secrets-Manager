@@ -5,11 +5,24 @@ on:
 
 jobs:
   publish-preview:
-    name: Publish CI branch tags to GHCR
+    name: Publish ${{ matrix.name }} CI branch tags to GHCR
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: simple-secrets-manager
+            image: ghcr.io/bearlike/simple-secrets-manager
+            dockerfile: Dockerfile
+            build_args_extra: |
+              VITE_API_BASE_URL=/api
+          - name: ssm-reload
+            image: ghcr.io/bearlike/ssm-reload
+            dockerfile: ssm_reload/Dockerfile
+            build_args_extra: ""
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -66,17 +79,18 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64,linux/arm64
           push: true
           build-args: |
-            VITE_API_BASE_URL=/api
             APP_VERSION=${{ steps.version.outputs.version }}
+            ${{ matrix.build_args_extra }}
           tags: |
-            ghcr.io/bearlike/simple-secrets-manager:${{ steps.preview.outputs.branch_tag }}
-            ghcr.io/bearlike/simple-secrets-manager:${{ steps.preview.outputs.sha_tag }}
+            ${{ matrix.image }}:${{ steps.preview.outputs.branch_tag }}
+            ${{ matrix.image }}:${{ steps.preview.outputs.sha_tag }}
           labels: |
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=https://github.com/bearlike/simple-secrets-manager
             org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

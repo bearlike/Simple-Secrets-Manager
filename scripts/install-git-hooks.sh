@@ -10,5 +10,5 @@ chmod +x .githooks/pre-commit .githooks/pre-push scripts/quality.sh
 
 echo "Installed repository hooks via core.hooksPath=.githooks"
 echo "Active hooks:"
-echo "  - pre-commit (ruff auto-fix + format)"
-echo "  - pre-push (ruff fix + mypy + pytest)"
+echo "  - pre-commit (fast gate: ruff check + format --check + lint-imports)"
+echo "  - pre-push (clean-tree guard + full gate via quality.sh fix)"

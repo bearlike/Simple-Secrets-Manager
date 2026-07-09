@@ -13,9 +13,11 @@ FROM python:3.13-slim-bookworm AS backend-builder
 COPY --from=ghcr.io/astral-sh/uv:0.9.29 /uv /uvx /bin/
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev --no-install-project
+# The unified image runs the Flask REST API, so it needs the `server` extra
+# (flask-restx, pymongo, loguru, ...) on top of the lean base dependencies.
+RUN uv sync --frozen --no-dev --no-install-project --extra server
 COPY . .
-RUN uv sync --frozen --no-dev
+RUN uv sync --frozen --no-dev --extra server
 
 FROM python:3.13-slim-bookworm
 ARG APP_VERSION=unknown
@@ -38,8 +40,8 @@ RUN apt-get update \
 WORKDIR /app
 COPY --from=backend-builder /app /app
 COPY --from=frontend-builder /frontend/dist /usr/share/nginx/html
-COPY docker/nginx.unified.conf /etc/nginx/conf.d/default.conf
-COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY deploy/nginx.unified.conf /etc/nginx/conf.d/default.conf
+COPY deploy/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PORT=5000

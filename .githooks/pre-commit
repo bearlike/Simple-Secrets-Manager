@@ -9,13 +9,21 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
+# Fast pre-commit gate: lint + format-check + import contracts only.
+# MyPy and pytest are deliberately skipped here for speed — the full gate
+# (`./scripts/quality.sh check` / `make check`) still runs them in CI and on
+# pre-push. This hook only *checks*; if it fails, run `make fix` and re-stage.
 mapfile -t STAGED_FILES < <(git diff --cached --name-only --diff-filter=ACMR | grep -E '(\.py$|^pyproject\.toml$)' || true)
 
 if [[ ${#STAGED_FILES[@]} -eq 0 ]]; then
   exit 0
 fi
 
-echo "pre-commit: auto-fixing lint/style with Ruff for staged files..."
-uv run ruff check --fix "${STAGED_FILES[@]}"
-uv run ruff format "${STAGED_FILES[@]}"
-git add "${STAGED_FILES[@]}"
+echo "pre-commit: ruff check (staged files)..."
+uv run ruff check "${STAGED_FILES[@]}"
+
+echo "pre-commit: ruff format --check (staged files)..."
+uv run ruff format --check "${STAGED_FILES[@]}"
+
+echo "pre-commit: import-linter contracts..."
+uv run lint-imports

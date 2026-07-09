@@ -1,0 +1,27 @@
+# scripts — Agent Guide
+
+> Nearest-scope guide for `scripts/`. Read the [root `AGENTS.md`](../AGENTS.md) first for cross-cutting principles and the memory protocol. This file captures only what is **not obvious from the code** in this scope. `CLAUDE.md` here is a symlink to this file — edit this one.
+
+## Responsibility
+
+Dev/ops helper scripts — the quality gate, version sync, the icon-index build, and the git-hook installer.
+
+| Script | Does |
+| --- | --- |
+| `quality.sh` | The quality gate. `check` runs Ruff (lint + `format --check`), a targeted Pylint anti-pattern pass, MyPy, then pytest, in that order, and stops at the first failure (`set -euo pipefail`). `fix` runs `ruff check --fix` + `ruff format` instead of the check variants, then still runs Pylint/MyPy/pytest. |
+| `version_sync.py` | Validates that the repo-root `VERSION` file (strict `X.Y.Z`) is the single source of truth: `pyproject.toml` declares `dynamic = ["version"]` + the `ssm_cli.__version__` attr hook, `ssm_cli/__init__.py` derives `__version__` via `_resolve_version()`, and `Dockerfile` takes `ARG APP_VERSION` and labels the OCI image with it. `--check` fails loudly if any of the four drift apart; `--print` / `--github-output` emit the version for CI. |
+| `build_icon_index.py` | Calls the live Iconify API (`/collections`, `/collection?prefix=...`) and regenerates `ssm_server/engines/icon_index.json` — a deterministic term → icon-slug lookup used for secret-icon resolution. |
+| `deploy_stack.sh` | Reads `VERSION`, exports it as `APP_VERSION`, and runs `docker compose up -d --build` so the built image carries a deterministic version label. |
+| `install-git-hooks.sh` | Points Git at the versioned `.githooks/` dir (`git config core.hooksPath .githooks`) and `chmod +x`'s `pre-commit`, `pre-push`, and `quality.sh`. |
+
+## Non-obvious decisions
+
+- The Pylint pass is deliberately narrow — `pylint --disable=all --enable=R1711,R0401,W0613,W0125,W0621` (useless-return, cyclic-import, unused-argument, using-constant-test, redefined-outer-name) against `ssm_server ssm_cli tests`. WHY: Ruff already owns style/lint; running full Pylint on top would drown these five specific anti-patterns (the ones Ruff's rule set doesn't cover) in noise, so only they are enabled.
+- `ssm_server/engines/icon_index.json` is generated output, not hand-maintained source — re-run `build_icon_index.py` after changing icon-matching rules instead of editing the JSON directly. WHY: the file's content and ranking (`_rank`) are a deterministic function of the script plus Iconify's live catalog; hand edits get silently overwritten and drift from the ranking logic.
+- `.githooks/pre-push` refuses to even start the quality gate if the working tree has any staged or unstaged changes, unrelated to what's being pushed or not. WHY: `quality.sh fix` mutates files in place; the hook has no way to distinguish "the fix just changed something" from "you already had unstaged edits" unless it starts from a clean tree, so it exits 1 up front rather than risk silently including unreviewed changes in the push.
+- Hooks are wired via `core.hooksPath = .githooks` (a repo-tracked directory), not files dropped into the untracked `.git/hooks/`. WHY: keeps the hooks versioned and reviewable like any other source file, instead of every clone having to know to recreate them by hand.
+- `version_sync.py --check` cross-checks four independent files instead of just reading `VERSION`. WHY: the version is intentionally not a static string in `pyproject.toml` (it's `dynamic = ["version"]`, resolved via the `ssm_cli.__version__` attr) — the check exists specifically to catch someone reverting that indirection back to a hardcoded value in any one of the four places.
+
+## Session Lessons (Non-Trivial)
+
+- DeepSource's `PYL-R0201` finding maps to Pylint's `no-self-use` check, but that check is not part of core Pylint anymore — it only exists as the optional extension `pylint.extensions.no_self_use` (surfaced as `R6301` when loaded). WHY this matters: `quality.sh`'s targeted `--enable=` list above does not include it, and adding the code to `--enable` alone won't make bare `pylint` catch it — the plugin must be loaded explicitly (`pylint --load-plugins=pylint.extensions.no_self_use ...`). This is why a green local `quality.sh check` can still get a `PYL-R0201` flag from DeepSource in CI: a method that never touches `self` should be a `@staticmethod`, and only the cloud analyzer (or a locally-loaded extension) is checking for it.

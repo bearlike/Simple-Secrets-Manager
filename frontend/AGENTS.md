@@ -1,4 +1,9 @@
-# AGENTS (Frontend)
+# Frontend — Agent Guide
+
+> Nearest-scope guide for `frontend/`. Read the [root `AGENTS.md`](../AGENTS.md) first
+> for cross-cutting principles and the memory protocol. This file captures only what is
+> **not obvious from the code** in this scope. `CLAUDE.md` here is a symlink to this
+> file — edit this one.
 
 ## Scope
 
@@ -11,12 +16,16 @@ This folder contains the SSM Admin Console (Vite + React).
 - Lint: `npm run lint`
 - Production build: `npm run build`
 - Preview build: `npm run preview`
+- Type-check (does NOT run in build/lint — run it explicitly): `npx tsc --noEmit`
 
 ## Backend integration
 
 - API base URL is controlled by `VITE_API_BASE_URL`.
 - Default API base is `/api`.
 - Auth header expected by backend: `Authorization: Bearer <token>`.
+- The API error envelope is `{"message": ...}`; `errorToast.ts` reads `message` first,
+  then `error` (matches the backend — see
+  [`ssm_server/api/AGENTS.md`](../ssm_server/api/AGENTS.md)).
 
 ## KISS/DRY Reuse Policy (Frontend)
 
@@ -52,5 +61,6 @@ This folder contains the SSM Admin Console (Vite + React).
 - Keep theme mode controls out of crowded top bars on mobile-first layouts; place them in stable navigation surfaces (for example sidebar footer) to reduce header collisions and keep interaction targets accessible.
 - For dense tables on compact widths, prioritize search/input width by switching secondary action buttons to icon-only with `Tooltip` labels and use the same row action definition to render desktop icon actions plus mobile `DropdownMenu` actions without duplicating behavior logic.
 - For project-wide secret mutations (like icon recompute), invalidate shared query prefixes (for example `['secrets', projectSlug]` and `['compare-secret', projectSlug]`) so all config views refresh consistently.
+- Keep React Query derived views under the same key prefix when possible (for example `['secrets', projectSlug, configSlug, ...]`) so existing prefix invalidation still refreshes all related views.
 - TanStack `queryFn` typing footgun: an API-client function used directly as `queryFn: fn` MUST stay parameter-less. React Query calls it with a `QueryFunctionContext`, so giving `fn` an optional-object param (`fn(opts?: {...})`) makes it a *weak type* the context cannot satisfy → `tsc` errors at every bare `queryFn: fn` call site and the query `data` degrades to `unknown`. `npm run build` (vite) and `npm run lint` (eslint) do NOT run `tsc`, so it regresses silently — run `npx tsc --noEmit` to catch it. For a filtered variant, add a sibling fn (e.g. `getArchivedProjects`) over a shared private helper instead of parameterizing the shared one (`src/lib/api/projects.ts`).
 - Project archive UI reuses ONE `updateProject(slug, {name?, archived?})` (backend PATCH is a partial update) for BOTH the `ProjectCard` dropdown quick-action and the `EditProjectDialog` "Status" `Select` — no separate archive endpoint. The list filter is a shadcn `Select` (Active/Archived) mirroring `AuditPage`. Keep the default query key `queryKeys.projects()` === `['projects']` (archived view = `['projects','archived']`) so existing `invalidateQueries({ queryKey: queryKeys.projects() })` refreshes BOTH lists by prefix. `Sidebar` and other project dropdowns call the parameter-less `getProjects()`, so they stay active-only automatically.

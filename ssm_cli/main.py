@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import stat
+import sys
 from functools import wraps
 from pathlib import Path
 from typing import Any, Callable
@@ -12,6 +13,12 @@ from rich.console import Console
 from rich.table import Table
 
 from ssm_cli import auth
+from ssm_cli.agent_skill import (
+    AGENT_DIRS,
+    AgentSkillInstaller,
+    Scope,
+    SkillInstallResult,
+)
 from ssm_cli.api import ApiClient, ApiError, normalize_base_url
 from ssm_cli.cache import load_secret_cache, save_secret_cache
 from ssm_cli.config import (
@@ -568,6 +575,66 @@ def secrets_download(
     console.print(render_env_lines(secrets_data), soft_wrap=True)
 
 
+@secrets_cmd.command("keys", help="List secret KEY NAMES only (never values)")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--project", default=None, help="Project slug override")
+@click.option(
+    "--config", "config_name", default=None, help="Config slug override"
+)
+@click.option("--profile", default=None, help="Profile name")
+@click.option(
+    "--offline", is_flag=True, default=False, help="Use cached secrets only"
+)
+@click.option(
+    "--cache-ttl",
+    default=3600,
+    show_default=True,
+    type=int,
+    help="Cache max age in seconds",
+)
+@_handle_errors
+def secrets_keys(
+    base_url: str | None,
+    project: str | None,
+    config_name: str | None,
+    profile: str | None,
+    offline: bool,
+    cache_ttl: int,
+) -> None:
+    """Print only the KEY NAMES of the resolved secrets, never the values.
+
+    Agents use this to discover which secrets exist without a value ever
+    landing in a log or transcript. Values are fetched to build the merged
+    map, then dropped client-side before anything is printed -- there is no
+    flag on this command that reveals them.
+    """
+    resolution = _resolve_secret_context(
+        base_url=base_url,
+        project=project,
+        config_name=config_name,
+        profile=profile,
+    )
+    secrets_data, source = _fetch_secrets(
+        resolution,
+        offline=offline,
+        cache_ttl=cache_ttl,
+        resolve_references=True,
+        raw=False,
+    )
+    if source != "remote":
+        console.print(
+            f"Using secrets from [bold]{source}[/bold].", style="yellow"
+        )
+
+    table = Table(
+        title=f"Secret keys in {resolution.project}/{resolution.config}"
+    )
+    table.add_column("Key", style="cyan")
+    for key in sorted(secrets_data.keys()):
+        table.add_row(key)
+    console.print(table)
+
+
 @secrets_cmd.command("set", help="Set or update a single secret key")
 @click.option("--key", required=True, help="Secret key")
 @click.option("--value", default=None, help="Secret value")
@@ -848,6 +915,75 @@ def whoami(base_url: str | None, profile: str | None) -> None:
     table.add_row("Workspace", workspace_slug)
     table.add_row("Workspace Role", workspace_role)
     table.add_row("Project Scopes", str(project_scope_count))
+    console.print(table)
+
+
+@cli.group(name="projects", help="Discover projects (read-only)")
+def projects_cmd() -> None:
+    pass
+
+
+@projects_cmd.command("list", help="List projects you can access")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def projects_list(base_url: str | None, profile: str | None) -> None:
+    resolution = resolve_context(
+        base_url=base_url,
+        profile=profile,
+        require_base_url=True,
+        require_token=True,
+    )
+    client = ApiClient(resolution.base_url or "", token=resolution.token)
+    table = Table(title="Projects")
+    table.add_column("Slug", style="cyan")
+    table.add_column("Name")
+    table.add_column("Archived")
+    for project in client.list_projects():
+        table.add_row(
+            str(project.get("slug", "")),
+            str(project.get("name", "") or ""),
+            "yes" if project.get("archived") else "",
+        )
+    console.print(table)
+
+
+@cli.group(name="configs", help="Discover configs in a project (read-only)")
+def configs_cmd() -> None:
+    pass
+
+
+@configs_cmd.command("list", help="List configs in a project")
+@click.option("--project", default=None, help="Project slug override")
+@click.option("--base-url", default=None, help="Base URL override")
+@click.option("--profile", default=None, help="Profile name")
+@_handle_errors
+def configs_list(
+    project: str | None, base_url: str | None, profile: str | None
+) -> None:
+    resolution = resolve_context(
+        base_url=base_url,
+        project=project,
+        profile=profile,
+        require_base_url=True,
+        require_token=True,
+    )
+    if not resolution.project:
+        raise CliError(
+            "Project is not configured. Run `ssm setup` or pass --project.",
+            exit_code=2,
+        )
+    client = ApiClient(resolution.base_url or "", token=resolution.token)
+    table = Table(title=f"Configs in {resolution.project}")
+    table.add_column("Slug", style="cyan")
+    table.add_column("Name")
+    table.add_column("Parent")
+    for config_row in client.list_configs(resolution.project):
+        table.add_row(
+            str(config_row.get("slug", "")),
+            str(config_row.get("name", "") or ""),
+            str(config_row.get("parentSlug") or ""),
+        )
     console.print(table)
 
 
@@ -1414,6 +1550,99 @@ def profile_set(
 
     save_global_config(cfg)
     console.print(f"Profile [bold]{profile_name}[/bold] updated.")
+
+
+def _is_interactive() -> bool:
+    """Whether the scope questionnaire can run.
+
+    Extracted as a seam: Click's test runner swaps ``sys.stdin`` for a
+    non-tty stream, so tests toggle interactivity by patching this rather
+    than faking a terminal.
+    """
+    return sys.stdin.isatty()
+
+
+def _resolve_skill_scopes(target: str | None) -> list[Scope]:
+    if target == "all":
+        return ["user", "project"]
+    if target == "user":
+        return ["user"]
+    if target == "project":
+        return ["project"]
+    # --target omitted: prompt when interactive, else fail cleanly so a
+    # non-interactive caller (CI, an agent) gets a usage hint, not a hang.
+    if not _is_interactive():
+        raise CliError(
+            "No --target given and no interactive terminal. Pass "
+            "--target user|project|all.",
+            exit_code=2,
+        )
+    scopes: list[Scope] = []
+    if click.confirm(
+        "Install for this project (./.claude, ./.codex)?", default=True
+    ):
+        scopes.append("project")
+    if click.confirm(
+        "Install for your account (~/.claude, ~/.codex)?", default=False
+    ):
+        scopes.append("user")
+    return scopes
+
+
+def _report_skill_results(results: list[SkillInstallResult]) -> None:
+    installed = 0
+    for result in results:
+        if result.status == "installed":
+            installed += 1
+            console.print(
+                f"Installed [bold]{result.agent}[/bold] "
+                f"({result.scope}) -> {result.path}"
+            )
+        else:
+            console.print(
+                f"Skipped [bold]{result.agent}[/bold] ({result.scope}): "
+                f"{result.detail}",
+                style="yellow",
+            )
+    if installed == 0:
+        console.print("No skills installed.", style="yellow")
+
+
+@cli.group(name="skills", help="Install agent skills for coding agents")
+def skills_cmd() -> None:
+    pass
+
+
+@skills_cmd.command(
+    "install",
+    help="Install the using-ssm skill for Claude Code / Codex agents",
+)
+@click.option(
+    "--agent",
+    "agent_choice",
+    type=click.Choice(["claude", "codex", "all"]),
+    default="all",
+    show_default=True,
+    help="Which agent(s) to target",
+)
+@click.option(
+    "--target",
+    "target_choice",
+    type=click.Choice(["user", "project", "all"]),
+    default=None,
+    help="Install scope; omit to choose interactively",
+)
+@_handle_errors
+def skills_install(agent_choice: str, target_choice: str | None) -> None:
+    agents = (
+        list(AGENT_DIRS.keys()) if agent_choice == "all" else [agent_choice]
+    )
+    scopes = _resolve_skill_scopes(target_choice)
+    if not scopes:
+        console.print("No scopes selected; nothing installed.", style="yellow")
+        return
+    installer = AgentSkillInstaller()
+    _report_skill_results(installer.install(agents, scopes))
 
 
 if __name__ == "__main__":

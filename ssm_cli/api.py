@@ -192,6 +192,19 @@ class ApiClient:
             )
         return [item for item in projects if isinstance(item, dict)]
 
+    def list_configs(self, project: str) -> list[dict[str, Any]]:
+        payload = self.request(
+            "GET",
+            f"/projects/{project}/configs",
+            accept="application/json",
+        )
+        configs = payload.get("configs") if isinstance(payload, dict) else None
+        if not isinstance(configs, list):
+            raise ApiError(
+                "Configs response is invalid", status_code=1, body=payload
+            )
+        return [item for item in configs if isinstance(item, dict)]
+
     def get_me(self) -> dict[str, Any]:
         payload = self.request("GET", "/me", accept="application/json")
         if not isinstance(payload, dict):

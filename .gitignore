@@ -146,6 +146,10 @@ cython_debug/
 .idea/
 .vscode/
 
+# Machine-local agent guidance (never shipped; see AGENTS.md header)
+AGENTS.local.md
+CLAUDE.local.md
+
 # Frontend workspace artifacts
 node_modules/
 frontend/node_modules/
