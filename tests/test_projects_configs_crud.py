@@ -59,6 +59,9 @@ class FakeCollection:
     def create_index(self, *_args, **_kwargs):
         return None
 
+    def insert_one(self, doc):
+        self.docs.append(doc)
+
     def find(self, query=None, projection=None):
         _ = projection
         query = query or {}
@@ -149,6 +152,72 @@ def test_project_delete_missing_is_404():
     msg, code = projects.delete("ghost")
     assert code == 404
     assert msg == "Project not found"
+
+
+def test_project_create_defaults_archived_false():
+    projects = Projects(FakeCollection([]))
+    payload, code = projects.create("alpha", "Alpha")
+    assert code == 201
+    assert payload["archived"] is False
+
+
+def test_project_update_archives():
+    projects = _projects_with("alpha")
+    doc, code = projects.update("alpha", archived=True)
+    assert code == 200
+    assert doc["archived"] is True
+
+
+def test_project_update_unarchives():
+    projects = _projects_with("alpha")
+    projects.update("alpha", archived=True)
+    doc, code = projects.update("alpha", archived=False)
+    assert code == 200
+    assert doc["archived"] is False
+
+
+def test_project_update_no_fields_is_400():
+    projects = _projects_with("alpha")
+    msg, code = projects.update("alpha")
+    assert code == 400
+    assert msg == "No fields to update"
+
+
+def _projects_with_flags(*specs):
+    """Build Projects from (slug, archived_or_missing) tuples.
+
+    Passing ``None`` as the flag omits the ``archived`` key entirely, i.e.
+    a legacy document that predates the feature.
+    """
+    docs = []
+    for slug, archived in specs:
+        doc = {"_id": ObjectId(), "slug": slug, "name": slug.title()}
+        if archived is not None:
+            doc["archived"] = archived
+        docs.append(doc)
+    return Projects(FakeCollection(docs))
+
+
+def test_project_list_excludes_archived_by_default():
+    projects = _projects_with_flags(("active", False), ("gone", True))
+    result = projects.list()
+    assert [p["slug"] for p in result] == ["active"]
+    assert result[0]["archived"] is False
+
+
+def test_project_list_archived_only():
+    projects = _projects_with_flags(("active", False), ("gone", True))
+    result = projects.list(archived=True)
+    assert [p["slug"] for p in result] == ["gone"]
+    assert result[0]["archived"] is True
+
+
+def test_project_list_missing_field_is_active():
+    projects = _projects_with_flags(("legacy", None))
+    active = projects.list()
+    assert [p["slug"] for p in active] == ["legacy"]
+    assert active[0]["archived"] is False
+    assert projects.list(archived=True) == []
 
 
 # --------------------------------------------------------------------------

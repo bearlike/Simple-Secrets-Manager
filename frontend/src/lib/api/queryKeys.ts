@@ -2,7 +2,8 @@ export const queryKeys = {
   me: () => ['me'] as const,
   onboardingStatus: () => ['onboarding', 'status'] as const,
   appVersion: () => ['app', 'version'] as const,
-  projects: () => ['projects'] as const,
+  projects: (archived?: boolean) =>
+    (archived ? (['projects', 'archived'] as const) : (['projects'] as const)),
   project: (slug: string) => ['projects', slug] as const,
   configs: (projectSlug: string) => ['configs', projectSlug] as const,
   secrets: (projectSlug: string, configSlug: string) =>

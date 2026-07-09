@@ -15,7 +15,7 @@ interface SecretValueEditorProps {
   className?: string;
   autoFocus?: boolean;
   readOnly?: boolean;
-  onKeyDown?: KeyboardEventHandler<HTMLTextAreaElement>;
+  onKeyDown?: KeyboardEventHandler<HTMLDivElement>;
   autocompleteItems?: string[];
 }
 

@@ -13,12 +13,22 @@ interface CreateProjectInput {
 }
 
 interface UpdateProjectInput {
-  name: string;
+  name?: string;
+  archived?: boolean;
 }
 
-export async function getProjects(): Promise<Project[]> {
-  const response = await apiClient<ProjectsResponseDto>('/projects');
+async function fetchProjects(archived: boolean): Promise<Project[]> {
+  const endpoint = archived ? '/projects?archived=true' : '/projects';
+  const response = await apiClient<ProjectsResponseDto>(endpoint);
   return (response.projects ?? []).map(mapProjectDto);
+}
+
+export function getProjects(): Promise<Project[]> {
+  return fetchProjects(false);
+}
+
+export function getArchivedProjects(): Promise<Project[]> {
+  return fetchProjects(true);
 }
 
 export async function createProject(data: CreateProjectInput): Promise<Project> {
@@ -40,7 +50,7 @@ export async function updateProject(
 ): Promise<Project> {
   const response = await apiClient<CreateProjectResponseDto>(`/projects/${slug}`, {
     method: 'PATCH',
-    body: JSON.stringify({ name: data.name })
+    body: JSON.stringify(data)
   });
 
   return mapProjectDto(response.project);

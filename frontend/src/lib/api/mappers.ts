@@ -61,7 +61,8 @@ export function mapProjectDto(dto: ProjectDto): Project {
     slug,
     name: asString(dto.name) ?? slug,
     description: asString(dto.description),
-    createdAt: asString(dto.createdAt) ?? asString(dto.created_at)
+    createdAt: asString(dto.createdAt) ?? asString(dto.created_at),
+    archived: Boolean(dto.archived)
   };
 }
 

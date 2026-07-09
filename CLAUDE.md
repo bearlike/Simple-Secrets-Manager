@@ -40,3 +40,8 @@ formatter would change anything.
   `Api.core` builds `Connection()` and creates Mongo indexes eagerly, so
   HTTP-level API behaviour is verified against a throwaway `mongo` container
   or in-process `app.test_client()`, not in the hermetic CI suite.
+- **Frontend `queryFn` must be param-less:** an API fn used as
+  `queryFn: fn` breaks `tsc` if given an optional-object arg (React Query
+  passes a `QueryFunctionContext` that becomes a weak type). `vite build`
+  and `eslint` don't run `tsc`, so it fails silently — add a sibling fn for
+  filtered variants (e.g. `getArchivedProjects`). See `frontend/AGENTS.md`.

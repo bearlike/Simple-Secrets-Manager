@@ -3,6 +3,7 @@ export interface Project {
   name: string;
   description?: string;
   createdAt?: string;
+  archived?: boolean;
 }
 
 export interface Config {
@@ -197,6 +198,7 @@ export interface ProjectDto {
   description?: string;
   createdAt?: string;
   created_at?: string;
+  archived?: boolean;
 }
 
 export interface ConfigDto {

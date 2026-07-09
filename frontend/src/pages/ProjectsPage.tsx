@@ -6,10 +6,20 @@ import {
   FolderIcon,
   MoreVerticalIcon,
   PencilIcon,
-  Trash2Icon } from
+  Trash2Icon,
+  ArchiveIcon,
+  ArchiveRestoreIcon } from
 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue } from
+'@/components/ui/select';
 import {
   Card,
   CardContent,
@@ -25,7 +35,7 @@ import {
   DropdownMenuTrigger } from
 '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
-import { getProjects, deleteProject } from '../lib/api/projects';
+import { getProjects, getArchivedProjects, deleteProject, updateProject } from '../lib/api/projects';
 import { getConfigs } from '../lib/api/configs';
 import { queryKeys } from '../lib/api/queryKeys';
 import { CreateProjectDialog } from '../components/projects/CreateProjectDialog';
@@ -40,9 +50,23 @@ function ProjectCard({
   onDelete
 }: {project: Project;onEdit: (project: Project) => void;onDelete: (project: Project) => void;}) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: configs = [] } = useQuery({
     queryKey: queryKeys.configs(project.slug),
     queryFn: () => getConfigs(project.slug)
+  });
+  const archiveMutation = useMutation({
+    mutationFn: () => updateProject(project.slug, { archived: !project.archived }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
+      toast.success(project.archived ? 'Project unarchived' : 'Project archived');
+    },
+    onError: (error) => {
+      notifyApiError(
+        error,
+        project.archived ? 'Failed to unarchive project' : 'Failed to archive project'
+      );
+    }
   });
   const handleClick = () => {
     navigate(`/projects/${project.slug}/settings`);
@@ -59,6 +83,11 @@ function ProjectCard({
             <CardTitle className="text-sm font-semibold">
               {project.name}
             </CardTitle>
+            {project.archived &&
+            <Badge variant="secondary" className="text-[10px] font-normal">
+                Archived
+              </Badge>
+            }
           </div>
           <div className="flex items-center gap-1">
             <span className="text-xs text-muted-foreground">
@@ -83,6 +112,22 @@ function ProjectCard({
                 <DropdownMenuItem onSelect={() => onEdit(project)}>
                   <PencilIcon className="h-3.5 w-3.5 mr-2" />
                   Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={archiveMutation.isPending}
+                  onSelect={() => archiveMutation.mutate()}>
+
+                  {project.archived ?
+                  <>
+                      <ArchiveRestoreIcon className="h-3.5 w-3.5 mr-2" />
+                      Unarchive
+                    </> :
+
+                  <>
+                      <ArchiveIcon className="h-3.5 w-3.5 mr-2" />
+                      Archive
+                    </>
+                  }
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
@@ -118,9 +163,10 @@ export function ProjectsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Project | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Project | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const { data: projects = [], isLoading } = useQuery({
-    queryKey: queryKeys.projects(),
-    queryFn: getProjects
+    queryKey: queryKeys.projects(showArchived),
+    queryFn: showArchived ? getArchivedProjects : getProjects
   });
   const deleteMutation = useMutation({
     mutationFn: (slug: string) => deleteProject(slug),
@@ -143,14 +189,28 @@ export function ProjectsPage() {
             Manage your secret namespaces
           </p>
         </div>
-        <Button
-          size="sm"
-          className="gap-1.5"
-          onClick={() => setCreateOpen(true)}>
+        <div className="flex items-center gap-2">
+          <Select
+            value={showArchived ? 'archived' : 'active'}
+            onValueChange={(value) => setShowArchived(value === 'archived')}>
 
-          <PlusIcon className="h-3.5 w-3.5" />
-          New Project
-        </Button>
+            <SelectTrigger className="h-8 w-28 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="archived">Archived</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            className="gap-1.5"
+            onClick={() => setCreateOpen(true)}>
+
+            <PlusIcon className="h-3.5 w-3.5" />
+            New Project
+          </Button>
+        </div>
       </div>
 
       {isLoading ?
@@ -173,9 +233,15 @@ export function ProjectsPage() {
       projects.length === 0 ?
       <EmptyState
         icon={FolderIcon}
-        title="No projects yet"
-        description="Create your first project to start managing secrets"
+        title={showArchived ? 'No archived projects' : 'No projects yet'}
+        description={
+        showArchived ?
+        'Projects you archive will appear here' :
+        'Create your first project to start managing secrets'
+        }
         action={
+        showArchived ?
+        undefined :
         <Button size="sm" onClick={() => setCreateOpen(true)}>
               <PlusIcon className="h-3.5 w-3.5 mr-1.5" />
               New Project

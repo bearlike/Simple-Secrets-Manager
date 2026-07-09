@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -14,13 +14,21 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue } from
+'@/components/ui/select';
 import { updateProject } from '../../lib/api/projects';
 import { queryKeys } from '../../lib/api/queryKeys';
 import { notifyApiError } from '../../lib/api/errorToast';
 import type { Project } from '../../lib/api/types';
 
 const schema = z.object({
-  name: z.string().min(1, 'Name is required')
+  name: z.string().min(1, 'Name is required'),
+  archived: z.boolean()
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -38,16 +46,18 @@ export function EditProjectDialog({
   const queryClient = useQueryClient();
   const {
     register,
+    control,
     handleSubmit,
     reset,
     formState: { errors }
   } = useForm<FormValues>({
-    resolver: zodResolver(schema)
+    resolver: zodResolver(schema),
+    defaultValues: { name: '', archived: false }
   });
 
   useEffect(() => {
     if (open && project) {
-      reset({ name: project.name });
+      reset({ name: project.name, archived: Boolean(project.archived) });
     }
   }, [open, project, reset]);
 
@@ -56,7 +66,10 @@ export function EditProjectDialog({
       if (!project) {
         return Promise.reject(new Error('No project selected'));
       }
-      return updateProject(project.slug, { name: data.name });
+      return updateProject(project.slug, {
+        name: data.name,
+        archived: data.archived
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.projects() });
@@ -87,6 +100,27 @@ export function EditProjectDialog({
             {errors.name &&
             <p className="text-xs text-destructive">{errors.name.message}</p>
             }
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-project-status">Status</Label>
+            <Controller
+              control={control}
+              name="archived"
+              render={({ field }) =>
+              <Select
+                value={field.value ? 'archived' : 'active'}
+                onValueChange={(value) => field.onChange(value === 'archived')}>
+
+                  <SelectTrigger id="edit-project-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Active</SelectItem>
+                    <SelectItem value="archived">Archived</SelectItem>
+                  </SelectContent>
+                </Select>
+              } />
+
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="edit-project-slug">Slug</Label>

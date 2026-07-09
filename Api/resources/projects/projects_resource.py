@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from flask_restx import Resource, fields
+from flask_restx import Resource, fields, inputs
 from flask import g
 
 from Api.core import api, conn
@@ -12,7 +12,12 @@ project_model = api.model(
     {
         "slug": fields.String(required=True),
         "name": fields.String(required=True),
+        "archived": fields.Boolean(),
     },
+)
+projects_list_parser = api.parser()
+projects_list_parser.add_argument(
+    "archived", type=inputs.boolean, default=False, location="args"
 )
 project_create_parser = api.parser()
 project_create_parser.add_argument(
@@ -23,7 +28,10 @@ project_create_parser.add_argument(
 )
 project_update_parser = api.parser()
 project_update_parser.add_argument(
-    "name", type=str, required=True, location="json"
+    "name", type=str, required=False, location="json"
+)
+project_update_parser.add_argument(
+    "archived", type=inputs.boolean, required=False, location="json"
 )
 
 
@@ -62,9 +70,10 @@ class ProjectsResource(Resource):
                 project_ids.add(str(project_id))
         return list(project_ids)
 
-    @api.doc(security=["Bearer", "Token"])
+    @api.doc(security=["Bearer", "Token"], parser=projects_list_parser)
     @with_token
     def get(self):
+        args = projects_list_parser.parse_args()
         actor = g.actor
         workspace_role = actor.get("workspace_role")
         workspace_id = actor.get("workspace_id")
@@ -96,7 +105,9 @@ class ProjectsResource(Resource):
             return {"projects": []}
         return {
             "projects": conn.projects.list(
-                workspace_id=workspace_id, project_ids=authorized_project_ids
+                workspace_id=workspace_id,
+                project_ids=authorized_project_ids,
+                archived=args["archived"],
             )
         }
 
@@ -123,7 +134,11 @@ class ProjectsResource(Resource):
         )
         return {
             "status": "OK",
-            "project": {"slug": result["slug"], "name": result["name"]},
+            "project": {
+                "slug": result["slug"],
+                "name": result["name"],
+                "archived": bool(result.get("archived", False)),
+            },
         }, 201
 
 
@@ -134,7 +149,11 @@ class ProjectItemResource(Resource):
     def patch(self, project_slug):
         require_scope("projects:write")
         args = project_update_parser.parse_args()
-        result, code = conn.projects.update(project_slug, args.get("name"))
+        result, code = conn.projects.update(
+            project_slug,
+            name=args.get("name"),
+            archived=args.get("archived"),
+        )
         if code >= 400:
             api.abort(code, result)
         conn.audit.write_event(
@@ -155,6 +174,7 @@ class ProjectItemResource(Resource):
             "project": {
                 "slug": result.get("slug"),
                 "name": result.get("name"),
+                "archived": bool(result.get("archived", False)),
             },
         }, 200
 

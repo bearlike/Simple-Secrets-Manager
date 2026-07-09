@@ -1,4 +1,4 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, type SVGProps } from 'react';
 import { KeyRoundIcon } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -26,11 +26,21 @@ function sanitizeIconSlug(value?: string | null): string {
 
 export function AppIcon({ icon, className, title }: AppIconProps) {
   const resolvedIcon = sanitizeIconSlug(icon);
-  const fallback = <KeyRoundIcon className={cn('h-4 w-4', className)} aria-hidden={!title} title={title} />;
+  // `title` is a valid global DOM attribute (renders a native tooltip) but React
+  // types it only on HTMLAttributes, not SVGAttributes; picking just the SVG
+  // props we set and adding `title` lets both icon components accept it cleanly.
+  const iconProps: Pick<SVGProps<SVGSVGElement>, 'className' | 'aria-hidden'> & {
+    title?: string;
+  } = {
+    className: cn('h-4 w-4', className),
+    'aria-hidden': !title,
+    title
+  };
+  const fallback = <KeyRoundIcon {...iconProps} />;
 
   return (
     <Suspense fallback={fallback}>
-      <IconifyIcon icon={resolvedIcon} className={cn('h-4 w-4', className)} aria-hidden={!title} title={title} />
+      <IconifyIcon icon={resolvedIcon} {...iconProps} />
     </Suspense>
   );
 }

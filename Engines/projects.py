@@ -28,6 +28,7 @@ class Projects:
             "slug": slug,
             "name": name or slug,
             "workspace_id": workspace_id,
+            "archived": False,
             "created_at": datetime.now(timezone.utc),
         }
         try:
@@ -36,12 +37,19 @@ class Projects:
             return "Project already exists", 400
         return payload, 201
 
-    def update(self, slug, name):
-        if not name or not str(name).strip():
-            return "Project name is required", 400
-        result = self._projects.update_one(
-            {"slug": slug}, {"$set": {"name": str(name).strip()}}
-        )
+    def update(self, slug, name=None, archived=None):
+        set_dict = {}
+        if name is not None:
+            if not str(name).strip():
+                return "Project name is required", 400
+            set_dict["name"] = str(name).strip()
+        if archived is not None:
+            if not isinstance(archived, bool):
+                return "archived must be boolean", 400
+            set_dict["archived"] = archived
+        if not set_dict:
+            return "No fields to update", 400
+        result = self._projects.update_one({"slug": slug}, {"$set": set_dict})
         if result.matched_count == 0:
             return "Project not found", 404
         return self._projects.find_one({"slug": slug}), 200
@@ -87,7 +95,7 @@ class Projects:
             )
         )
 
-    def list(self, workspace_id=None, project_ids=None):
+    def list(self, workspace_id=None, project_ids=None, archived=False):
         if project_ids is not None:
             docs = self.list_by_ids(project_ids)
             if workspace_id is not None:
@@ -99,6 +107,15 @@ class Projects:
         else:
             docs = self.list_docs(workspace_id=workspace_id)
 
+        # Filter in Python: list_docs/list_by_ids build the DB query and stay
+        # archive-agnostic (the RBAC path depends on them), so the split lives
+        # here. Legacy docs without the field count as active (archived is not
+        # True); archived=True keeps only archived.
+        if archived:
+            docs = [doc for doc in docs if doc.get("archived") is True]
+        else:
+            docs = [doc for doc in docs if doc.get("archived") is not True]
+
         for doc in docs:
             doc["created_at"] = to_iso(doc.get("created_at"))
         return [
@@ -106,6 +123,7 @@ class Projects:
                 "slug": doc.get("slug"),
                 "name": doc.get("name") or doc.get("slug"),
                 "created_at": doc.get("created_at"),
+                "archived": bool(doc.get("archived", False)),
             }
             for doc in docs
         ]
