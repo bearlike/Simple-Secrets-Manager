@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
 from ssm_server.api.serialization import to_iso
 from ssm_server.engines.common import is_valid_slug
@@ -14,7 +15,9 @@ class Configs:
             [("project_id", 1), ("slug", 1)], unique=True
         )
 
-    def create(self, project_id, slug, name, parent_config_id=None):
+    def create(
+        self, project_id, slug, name, parent_config_id=None, description=None
+    ):
         if not is_valid_slug(slug):
             return "Invalid config slug", 400
         if parent_config_id is not None and not isinstance(
@@ -28,18 +31,26 @@ class Configs:
                 return "Parent config not found", 404
             if parent["project_id"] != project_id:
                 return "Parent config must belong to the same project", 400
+        created_at = datetime.now(timezone.utc)
         payload = {
             "project_id": project_id,
             "slug": slug,
             "name": name or slug,
             "parent_config_id": parent_config_id,
-            "created_at": datetime.now(timezone.utc),
+            "description": (str(description).strip() or None)
+            if description is not None
+            else None,
+            "created_at": created_at,
         }
         try:
             self._configs.insert_one(payload)
-        except Exception:
+        except DuplicateKeyError:
             return "Config already exists", 400
-        return payload, 201
+        # Dual-emit camelCase `createdAt` (canonical, matches list()) next to
+        # snake_case `created_at`, in the RETURNED dict ONLY — added after the
+        # insert so the stored doc stays snake_case. snake_case is deprecated
+        # for removal in the next major.
+        return {**payload, "createdAt": to_iso(created_at)}, 201
 
     def _would_create_cycle(self, config_id, new_parent_id):
         """True if reparenting ``config_id`` under ``new_parent_id`` would
@@ -86,6 +97,7 @@ class Configs:
         name=None,
         parent_config_id=None,
         parent_provided=False,
+        description=None,
     ):
         config = self._configs.find_one(
             {"project_id": project_id, "slug": slug}
@@ -98,6 +110,11 @@ class Configs:
             if not str(name).strip():
                 return "Config name is required", 400
             update_fields["name"] = str(name).strip()
+
+        # None leaves the description untouched; "" clears it (matches the
+        # Groups.update_group convention).
+        if description is not None:
+            update_fields["description"] = str(description).strip() or None
 
         if parent_provided:
             error, code = self._validate_new_parent(
@@ -168,6 +185,7 @@ class Configs:
                     "slug": 1,
                     "name": 1,
                     "parent_config_id": 1,
+                    "description": 1,
                     "created_at": 1,
                 },
             ).sort("slug", 1)
@@ -187,6 +205,7 @@ class Configs:
                     "slug": doc["slug"],
                     "name": doc.get("name") or doc["slug"],
                     "parentSlug": parent_slug,
+                    "description": doc.get("description"),
                     "createdAt": to_iso(doc.get("created_at")),
                 }
             )

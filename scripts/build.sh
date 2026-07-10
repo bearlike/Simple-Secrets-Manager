@@ -7,7 +7,26 @@
 # (backend API + frontend admin console in one container).
 #
 # We try to follow [SemVer v2.0.0](https://semver.org/)
-VERSION="1.5.0"
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+VERSION_FILE="$REPO_ROOT/VERSION"
+
+if [[ ! -f "$VERSION_FILE" ]]; then
+  echo "Missing VERSION file at $VERSION_FILE"
+  exit 1
+fi
+
+# Single source of truth for the version (see scripts/version_sync.py) —
+# read from VERSION rather than a hardcoded string here, so a version bump
+# can't ship an image mis-tagged against a stale copy in this script.
+VERSION="$(tr -d '[:space:]' <"$VERSION_FILE")"
+if [[ -z "$VERSION" ]]; then
+  echo "VERSION file is empty"
+  exit 1
+fi
+
 IMAGE_NAME="ghcr.io/bearlike/simple-secrets-manager"
 # If $VERSION = "1.2.3"
 # ${VERSION::3} will be "1.2"

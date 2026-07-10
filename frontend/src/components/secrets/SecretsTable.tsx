@@ -42,6 +42,7 @@ import {
   type SecretUpsertInput,
   upsertSecretsBulk
 } from '../../lib/api/secrets';
+import { getConfigs } from '../../lib/api/configs';
 import { parseEnvContent } from '../../lib/env';
 import { queryKeys } from '../../lib/api/queryKeys';
 import type { Secret } from '../../lib/api/types';
@@ -59,20 +60,7 @@ import { EmptyState } from '../common/EmptyState';
 import { getConfigBadgeClass } from '../../lib/badgeStyles';
 import { AppIcon } from '../icons/AppIcon';
 import { notifyApiError } from '../../lib/api/errorToast';
-
-function formatRelativeTime(dateStr?: string): string {
-  if (!dateStr) return '—';
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return '—';
-  const diff = Date.now() - date.getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
+import { formatAbsolute, formatRelativeTime } from '../../lib/time';
 
 function hasOwnKey(record: Record<string, string>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
@@ -183,6 +171,17 @@ export function SecretsTable({
 
   const isFork = Boolean(parentSlug);
 
+  const { data: configs = [] } = useQuery({
+    queryKey: queryKeys.configs(projectSlug),
+    queryFn: () => getConfigs(projectSlug),
+    enabled: !!projectSlug
+  });
+  const configDescriptionBySlug = useMemo(() => {
+    const map = new Map<string, string | null | undefined>();
+    for (const config of configs) map.set(config.slug, config.description);
+    return map;
+  }, [configs]);
+
   useEffect(() => {
     setOverridesOpen(true);
     setInheritedOpen(false);
@@ -194,6 +193,7 @@ export function SecretsTable({
       const effectiveSecrets = await getSecrets(projectSlug, configSlug, {
         includeParent: true,
         includeMeta: true,
+        includeProvenance: true,
         resolveReferences: false,
         raw: false
       });
@@ -422,14 +422,48 @@ export function SecretsTable({
         header: 'KEY',
         cell: ({ row }) => {
           const inherited = row.original.forkBucket === 'inherited';
+          const source = row.original.source ?? undefined;
+          const showProvenance = Boolean(row.original.isInherited && source);
+          const sourceDescription = source ? configDescriptionBySlug.get(source) : null;
+          const isSensitive = row.original.sensitive !== false;
           return (
-            <span
-              className={`block max-w-full break-all font-mono text-sm font-medium leading-5 ${
-                inherited ? 'text-muted-foreground' : ''
-              }`}
-            >
-              {row.original.key}
-            </span>
+            <div className="flex flex-col gap-1">
+              <span
+                className={`block max-w-full break-all font-mono text-sm font-medium leading-5 ${
+                  inherited ? 'text-muted-foreground' : ''
+                }`}
+              >
+                {row.original.key}
+              </span>
+              {row.original.description && (
+                <p className="line-clamp-2 max-w-full break-words text-xs text-muted-foreground">
+                  {row.original.description}
+                </p>
+              )}
+              {(showProvenance || !isSensitive) && (
+                <div className="flex flex-wrap items-center gap-1">
+                  {showProvenance && (
+                    <Badge
+                      variant="outline"
+                      className="w-fit text-[10px] font-normal text-muted-foreground"
+                      title={sourceDescription ?? undefined}
+                    >
+                      inherited from {source}
+                    </Badge>
+                  )}
+                  {!isSensitive && (
+                    <Badge
+                      variant="outline"
+                      className="w-fit gap-1 text-[10px] font-normal text-muted-foreground"
+                      title="Not marked sensitive; shown in the clear"
+                    >
+                      <EyeIcon className="h-3 w-3" />
+                      visible
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
           );
         }
       },
@@ -437,7 +471,10 @@ export function SecretsTable({
         accessorKey: 'value',
         header: 'VALUE',
         cell: ({ row }) => {
-          const revealed = revealedKeys.has(row.original.key);
+          // Non-sensitive rows are always shown in the clear; the reveal
+          // toggle is hidden for them (see the actions cell).
+          const isSensitive = row.original.sensitive !== false;
+          const revealed = !isSensitive || revealedKeys.has(row.original.key);
           const inherited = row.original.forkBucket === 'inherited';
           return revealed ? (
             <div
@@ -456,7 +493,12 @@ export function SecretsTable({
         accessorKey: 'updatedAt',
         header: 'UPDATED',
         cell: ({ row }) => (
-          <span className="text-xs text-muted-foreground">{formatRelativeTime(row.original.updatedAt)}</span>
+          <span
+            className="text-xs text-muted-foreground"
+            title={row.original.updatedAt ? formatAbsolute(row.original.updatedAt) : undefined}
+          >
+            {formatRelativeTime(row.original.updatedAt)}
+          </span>
         )
       },
       {
@@ -465,14 +507,21 @@ export function SecretsTable({
         cell: ({ row }) => {
           const isInherited = row.original.forkBucket === 'inherited';
           const editLabel = isInherited ? 'Override inherited secret' : 'Edit secret';
+          const isSensitive = row.original.sensitive !== false;
           const isRevealed = revealedKeys.has(row.original.key);
           const rowActions: RowAction[] = [
-            {
-              key: 'toggle-visibility',
-              label: isRevealed ? 'Hide value' : 'Reveal value',
-              onSelect: () => toggleReveal(row.original.key),
-              icon: isRevealed ? EyeOffIcon : EyeIcon
-            },
+            // Non-sensitive values render in the clear, so a reveal toggle
+            // would be a no-op -- omit it entirely for those rows.
+            ...(isSensitive
+              ? [
+                  {
+                    key: 'toggle-visibility',
+                    label: isRevealed ? 'Hide value' : 'Reveal value',
+                    onSelect: () => toggleReveal(row.original.key),
+                    icon: isRevealed ? EyeOffIcon : EyeIcon
+                  }
+                ]
+              : []),
             {
               key: 'compare',
               label: 'Compare secret',
@@ -542,7 +591,7 @@ export function SecretsTable({
         }
       }
     ],
-    [navigate, projectSlug, revealedKeys]
+    [navigate, projectSlug, revealedKeys, configDescriptionBySlug]
   );
 
   const table = useReactTable({

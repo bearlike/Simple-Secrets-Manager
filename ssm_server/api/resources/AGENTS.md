@@ -12,7 +12,9 @@ The endpoint layer — thin HTTP resource adapters, roughly one flask-restx name
 | `auth/` | Onboarding bootstrap, legacy token auth, scoped v2 tokens (service + personal), username/password register/delete. |
 | `compare/` | Cross-config comparison of a single secret key within a project, with reference-resolution and issue annotation. |
 | `configs/` | CRUD for configs nested under a project (`/api/projects/<slug>/configs`). |
+| `icons/` | Read-only static icon catalog for the secret-icon picker — `GET /api/icons/prefixes` and `GET /api/icons/prefixes/<prefix>/names`; `@with_token` only, no `require_scope`/audit (the catalog is identical for every user). A published contract, but the console now sources icons from the Iconify API directly and no longer calls these (see [`../../engines/AGENTS.md`](../../engines/AGENTS.md)). |
 | `projects/` | CRUD for projects, including scope-filtered listing and archive toggling. |
+| `reload/` | Reloader fleet reporting (machine/service-token only): `POST /api/reload/events` (records a `reload.applied` audit event, `reload:report` scope), `POST /api/reload/report` (per-cycle heartbeat upserted into `reload_status`, `reload:report`, deliberately no audit event), and `GET /api/reload/status` (fleet read model, gated on `audit:read`). |
 | `secrets/` | Config-scoped secret CRUD + export (`secrets_resource.py`), the deprecated legacy KV store (`kv_resource.py`), project icon recompute (`project_icons_resource.py`), and the `${...}` reference resolver shared by secrets and compare (`references.py`). |
 | `workspace/` | Workspace-level RBAC admin: settings, members, project-member bindings, groups, group membership, IdP group mappings. |
 | `meta/` | `GET /api/version` — application version only. |
@@ -32,3 +34,34 @@ The endpoint layer — thin HTTP resource adapters, roughly one flask-restx name
 
 - **The secrets-export 304 branch must audit too.** In `secrets/secrets_resource.py`, the `If-None-Match` fast-path that returns `304 Not Modified` still writes the `secrets.export` audit event (with `status_code=304`), exactly like the 200 branch. WHY: the `ssm_reload/` reloader polls the export endpoint continuously and in steady state is *almost always* 304 — auditing only the 200 branch would leave the vast majority of `secrets:export` accesses unlogged, silently blinding the audit trail to the very reads that dominate. If you refactor the ETag/304 short-circuit, keep the `audit_event` call on both exits.
 - **The reload endpoint is machine-only by design.** `reload/reload_resource.py` (`POST /api/reload/events`) records each applied reload as a `reload.applied` audit event via the shared `ssm_server.access.is_auth.audit_event` path — same helper every other resource uses, not a bespoke log. It gates on the `reload:report` scope, which is granted **only** through `ssm_server/access/scopes.py::DEFAULT_TOKEN_ACTION_SCOPES` (service/bootstrap tokens accept arbitrary scoped actions). It is deliberately absent from `ssm_server/engines/rbac.py`'s role maps, so no personal/role RBAC path ever grants it — the reporting endpoint is reachable by service tokens only.
+- **The export ETag must identify the SERVED representation, and
+  `include_meta` defaults to TRUE — the stale-icon root cause.**
+  Symptom: picking a new icon (or flipping `sensitive`) on an EXISTING secret
+  looked like a no-op — the PUT persisted correctly, but the console's
+  follow-up refetch carried `If-None-Match` with the pre-edit tag; the tag
+  was value-only, metadata edits don't move values, so the server answered
+  `304` and the browser re-rendered its STALE cached body with the old icon.
+  (New secrets "worked" because adding a key changes the value set and flips
+  even the value-only tag.) Fix: `config_export_etag(resolved, meta)` — the
+  tag folds in `meta` whenever the export built it, so a metadata edit (which
+  also bumps `updatedAt`) flips the console's tag; the reloader explicitly
+  requests `include_meta=false` to keep the value-only tag (see
+  [`../../../ssm_reload/AGENTS.md`](../../../ssm_reload/AGENTS.md)). Two
+  traps for refactorers: (1) `include_meta` DEFAULTS to true, so "the caller
+  didn't ask for meta" does NOT mean meta is absent — an omitted param still
+  yields a meta-inclusive body and tag; (2) never gate the meta-hash on
+  anything narrower than "was meta built" — any representation whose body
+  varies with data its tag ignores can serve stale 304s, which is exactly
+  this bug. Debug affordance added with the fix: `logger.debug` traces on
+  `secrets.put` (which fields the client provided) and `secrets.export`
+  (etag + representation flags + key count) — one log read now answers "did
+  the client send it?" and "which representation/tag was served?".
+- **Log hygiene is a hard rule: loguru lines carry metadata ONLY, never
+  secret material.** Allowed: slugs, key names (already
+  established by audit events), key COUNTS, booleans/provided-flags, icon
+  slugs, and ETags (already exposed as response headers and stored in
+  world-readable container labels by the reloader). Never log: secret
+  `value`s, resolved value maps, token plaintext or hashes, or `description`
+  CONTENT (operator free text — log only `description_provided`). When
+  adding a log line to any resource, check every interpolated variable
+  against this rule first.

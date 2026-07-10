@@ -63,17 +63,49 @@ def test_conditional_export_304_not_modified():
     assert session.calls[0]["headers"]["If-None-Match"] == '"v1"'
 
 
+def test_conditional_export_requests_value_only_representation():
+    # PINNED CONTRACT: the reloader must request include_meta=false. The
+    # server's include_meta DEFAULTS to true and the export ETag covers
+    # everything the body carries -- omit this param and every icon/
+    # description/sensitivity edit would flip the revision and recreate
+    # containers.
+    client, session = _client([FakeResponse(304)])
+    client.conditional_export("p", "c", None)
+    params = session.calls[0]["params"]
+    assert params["include_meta"] == "false"
+    assert params["resolve_references"] == "true"
+    assert params["include_parent"] == "true"
+
+
 def test_conditional_export_200_returns_secrets_and_etag():
+    # The REAL wire shape: secrets live under "data", alongside "meta"
+    # and "status". Parsing the envelope top-level once injected
+    # {"status": "OK"} as a container's entire environment in production
+    # -- this fixture must stay envelope-shaped.
     resp = FakeResponse(
         200,
         headers={"ETag": '"v2"'},
-        body={"A": "1", "B": "2", "skip": 3},
+        body={
+            "data": {"A": "1", "B": "2", "skip": 3},
+            "meta": {"A": {"sensitive": True}},
+            "status": "OK",
+        },
     )
     client, _ = _client([resp])
     changed, secrets, etag = client.conditional_export("p", "c", None)
     assert changed is True
     assert secrets == {"A": "1", "B": "2"}  # non-str values dropped
     assert etag == '"v2"'
+
+
+def test_conditional_export_missing_data_map_raises():
+    # FAIL-SAFE: a 200 without a "data" map must raise (reconcile then
+    # skips the config), never return an empty/garbage env that would be
+    # injected as a container's entire environment.
+    resp = FakeResponse(200, headers={"ETag": '"v2"'}, body={"status": "OK"})
+    client, _ = _client([resp])
+    with pytest.raises(SsmClientError):
+        client.conditional_export("p", "c", None)
 
 
 def test_conditional_export_403_raises_with_status():

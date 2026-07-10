@@ -1,7 +1,12 @@
-import { type LucideIcon, FolderIcon, GroupIcon, KeyRoundIcon, LockIcon, LogOutIcon, MoonIcon, ScrollTextIcon, SunIcon, UserIcon, UsersIcon } from 'lucide-react';
+import { type LucideIcon, ChevronRightIcon, FolderIcon, KeyRoundIcon, LockIcon, RefreshCwIcon, ScrollTextIcon } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger
+} from '@/components/ui/collapsible';
 import {
   Sidebar as SidebarRoot,
   SidebarContent,
@@ -20,8 +25,7 @@ import {
 
 import { getProjects } from '../../lib/api/projects';
 import { queryKeys } from '../../lib/api/queryKeys';
-import { useAuth } from '../../lib/auth';
-import { useTheme } from '../../lib/theme';
+import { NavUser } from './NavUser';
 
 function isProjectRouteActive(pathname: string, slug: string): boolean {
   return pathname.startsWith(`/projects/${slug}/`);
@@ -49,9 +53,6 @@ function NavItem({ icon: Icon, isActive, label, onClick, to }: NavItemProps) {
 }
 
 export function Sidebar() {
-  const { logout } = useAuth();
-  const { theme, toggleTheme } = useTheme();
-  const navigate = useNavigate();
   const location = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -64,17 +65,6 @@ export function Sidebar() {
     if (isMobile) {
       setOpenMobile(false);
     }
-  };
-
-  const handleLogout = () => {
-    closeOnMobile();
-    logout();
-    navigate('/login');
-  };
-
-  const handleToggleTheme = () => {
-    closeOnMobile();
-    toggleTheme();
   };
 
   return (
@@ -128,62 +118,51 @@ export function Sidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        <Collapsible defaultOpen className="group/collapsible">
+          <SidebarGroup className="px-2 py-3">
+            <SidebarGroupLabel
+              asChild
+              className="px-2 text-[11px] uppercase tracking-wider hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            >
+              <CollapsibleTrigger>
+                Administration
+                <ChevronRightIcon className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
+              </CollapsibleTrigger>
+            </SidebarGroupLabel>
+            <CollapsibleContent>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <NavItem
+                    to="/tokens"
+                    label="Tokens"
+                    icon={KeyRoundIcon}
+                    isActive={location.pathname === '/tokens'}
+                    onClick={closeOnMobile}
+                  />
+                  <NavItem
+                    to="/audit"
+                    label="Audit Log"
+                    icon={ScrollTextIcon}
+                    isActive={location.pathname === '/audit'}
+                    onClick={closeOnMobile}
+                  />
+                  <NavItem
+                    to="/reload"
+                    label="Reloader Fleet"
+                    icon={RefreshCwIcon}
+                    isActive={location.pathname === '/reload'}
+                    onClick={closeOnMobile}
+                  />
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </CollapsibleContent>
+          </SidebarGroup>
+        </Collapsible>
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-2">
-        <SidebarMenu>
-          <NavItem
-            to="/account"
-            label="Account"
-            icon={UserIcon}
-            isActive={location.pathname === '/account'}
-            onClick={closeOnMobile}
-          />
-          <NavItem
-            to="/team"
-            label="Team"
-            icon={UsersIcon}
-            isActive={location.pathname === '/team'}
-            onClick={closeOnMobile}
-          />
-          <NavItem
-            to="/groups"
-            label="Groups"
-            icon={GroupIcon}
-            isActive={location.pathname === '/groups'}
-            onClick={closeOnMobile}
-          />
-          <NavItem
-            to="/tokens"
-            label="Tokens"
-            icon={KeyRoundIcon}
-            isActive={location.pathname === '/tokens'}
-            onClick={closeOnMobile}
-          />
-          <NavItem
-            to="/audit"
-            label="Audit Log"
-            icon={ScrollTextIcon}
-            isActive={location.pathname === '/audit'}
-            onClick={closeOnMobile}
-          />
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleToggleTheme}>
-              {theme === 'dark' ? (
-                <SunIcon className="h-3.5 w-3.5 shrink-0" />
-              ) : (
-                <MoonIcon className="h-3.5 w-3.5 shrink-0" />
-              )}
-              <span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleLogout}>
-              <LogOutIcon className="h-3.5 w-3.5 shrink-0" />
-              <span>Sign Out</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <NavUser />
       </SidebarFooter>
       <SidebarRail />
     </SidebarRoot>

@@ -314,7 +314,11 @@ export function CompareBySecretPage() {
 
                 {!comparisonQuery.isLoading &&
                   filteredRows.map((row) => {
-                    const visible = revealAll || revealedConfigSlugs.has(row.configSlug);
+                    // Non-sensitive keys are shown in the clear and are not
+                    // gated by the reveal toggle.
+                    const isSensitive = row.effective.sensitive !== false;
+                    const visible =
+                      !isSensitive || revealAll || revealedConfigSlugs.has(row.configSlug);
                     const value = row.effective.value;
                     const hasValue = value !== null;
                     const issues = row.issues ?? [];
@@ -370,16 +374,20 @@ export function CompareBySecretPage() {
                         </td>
                         <td className="px-4 py-2">
                           <div className="flex items-center justify-end gap-1">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 w-7 p-0"
-                              onClick={() => toggleRevealRow(row.configSlug)}
-                              disabled={!hasValue}
-                              aria-label={visible ? 'Hide value' : 'Reveal value'}
-                            >
-                              {visible ? <EyeOffIcon className="h-3.5 w-3.5" /> : <EyeIcon className="h-3.5 w-3.5" />}
-                            </Button>
+                            {isSensitive ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                onClick={() => toggleRevealRow(row.configSlug)}
+                                disabled={!hasValue}
+                                aria-label={visible ? 'Hide value' : 'Reveal value'}
+                              >
+                                {visible ? <EyeOffIcon className="h-3.5 w-3.5" /> : <EyeIcon className="h-3.5 w-3.5" />}
+                              </Button>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">visible</span>
+                            )}
                           </div>
                         </td>
                       </tr>

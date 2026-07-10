@@ -1,34 +1,6 @@
 from ssm_server.engines.secrets_v2 import SecretsV2
 
-
-class FakeSecrets:
-    def __init__(self, docs):
-        self.docs = docs
-
-    def create_index(self, *_args, **_kwargs):
-        return None
-
-    def find(self, query):
-        return [d for d in self.docs if d["config_id"] == query["config_id"]]
-
-    def update_one(self, query, update, upsert=False):
-        _ = upsert
-        for doc in self.docs:
-            if doc.get("config_id") == query.get("config_id") and doc.get(
-                "key"
-            ) == query.get("key"):
-                for key, value in update.get("$set", {}).items():
-                    doc[key] = value
-                return None
-        return None
-
-
-class FakeConfigs:
-    def __init__(self, cfgs):
-        self.cfgs = cfgs
-
-    def get_by_id(self, cfg_id):
-        return self.cfgs.get(cfg_id)
+from tests.server.fakes import FakeConfigs, FakeSecrets
 
 
 def test_export_merge_child_overrides_parent():

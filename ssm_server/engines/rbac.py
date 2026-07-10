@@ -7,7 +7,6 @@ DEFAULT_WORKSPACE_ROLE = "viewer"
 DEFAULT_PROJECT_ROLE = "none"
 
 PROJECT_ROLE_RANK = {"none": 0, "viewer": 1, "collaborator": 2, "admin": 3}
-WORKSPACE_ROLE_RANK = {"viewer": 1, "collaborator": 2, "admin": 3, "owner": 4}
 
 PROJECT_ROLE_ACTIONS = {
     "none": [],

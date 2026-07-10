@@ -25,6 +25,9 @@ DATA = {f"KEY_{i}": f"value_{i}" * 16 for i in range(32)}
 def _cache_worker(cache_dir: str, iterations: int, err_q) -> None:
     import os
 
+    # Raw os.environ mutation is deliberate here: this runs inside a forked
+    # child process, so the parent test's `monkeypatch` fixture (which
+    # undoes itself via the parent's teardown) can never reach it.
     os.environ["SSM_CACHE_DIR"] = cache_dir
     from ssm_cli.cache import load_secret_cache, save_secret_cache
 
@@ -40,6 +43,8 @@ def _cache_worker(cache_dir: str, iterations: int, err_q) -> None:
 def _config_worker(config_file: str, iterations: int, err_q) -> None:
     import os
 
+    # Same as _cache_worker above: a forked child process, so this can't
+    # go through the parent test's `monkeypatch` fixture.
     os.environ["SSM_GLOBAL_CONFIG_FILE"] = config_file
     from ssm_cli.config import _atomic_write_json, _read_json, Path as _P
 
@@ -69,7 +74,9 @@ def _run_workers(target, arg, nproc=10, iterations=120):
     return errors
 
 
-def test_save_secret_cache_survives_concurrent_processes(tmp_path):
+def test_save_secret_cache_survives_concurrent_processes(
+    monkeypatch, tmp_path
+):
     cache_dir = str(tmp_path / "cache")
     errors = _run_workers(_cache_worker, cache_dir)
     assert errors == [], f"concurrent cache writers crashed: {errors}"
@@ -77,9 +84,9 @@ def test_save_secret_cache_survives_concurrent_processes(tmp_path):
     # Final file must be intact, valid JSON with the expected payload.
     from ssm_cli.cache import load_secret_cache
 
-    import os
-
-    os.environ["SSM_CACHE_DIR"] = cache_dir
+    # This runs in the main test process, so monkeypatch (unlike the raw
+    # os.environ writes in the forked worker functions above) can reach it.
+    monkeypatch.setenv("SSM_CACHE_DIR", cache_dir)
     loaded = load_secret_cache(BASE, PROJECT, CONFIG)
     assert loaded == DATA
 

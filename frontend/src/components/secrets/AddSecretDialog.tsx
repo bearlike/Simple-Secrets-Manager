@@ -14,10 +14,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { ApiClientError } from '../../lib/api/client';
 import { createSecret } from '../../lib/api/secrets';
 import { queryKeys } from '../../lib/api/queryKeys';
 import { SecretValueEditor } from './SecretValueEditor';
+import { IconSlugPicker } from './IconSlugPicker';
 import { useReferenceSuggestions } from './useReferenceSuggestions';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import {
@@ -42,7 +44,8 @@ const schema = z.object({
     .transform((value) => value?.trim().toLowerCase() ?? '')
     .refine((value) => value.length === 0 || ICON_SLUG_PATTERN.test(value), {
       message: 'Icon slug must match "prefix:name"'
-    })
+    }),
+  description: z.string().optional()
 });
 type FormValues = z.infer<typeof schema>;
 interface AddSecretDialogProps {
@@ -71,7 +74,8 @@ export function AddSecretDialog({
     defaultValues: {
       key: '',
       value: '',
-      iconSlug: ''
+      iconSlug: '',
+      description: ''
     }
   });
   const mutation = useMutation({
@@ -79,7 +83,8 @@ export function AddSecretDialog({
     createSecret(projectSlug, configSlug, {
       key: data.key,
       value: data.value,
-      iconSlug: data.iconSlug || undefined
+      iconSlug: data.iconSlug || undefined,
+      description: data.description?.trim() || null
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -150,15 +155,30 @@ export function AddSecretDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="iconSlug">Icon slug (optional)</Label>
-              <Input
-                id="iconSlug"
-                {...register('iconSlug')}
-                placeholder="simple-icons:sqlalchemy"
-                className="font-mono"
-                autoComplete="off"
+              <Controller
+                name="iconSlug"
+                control={control}
+                render={({ field }) => (
+                  <IconSlugPicker
+                    id="iconSlug"
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    placeholder="simple-icons:sqlalchemy"
+                  />
+                )}
               />
               {errors.iconSlug && <p className="text-xs text-destructive">{errors.iconSlug.message}</p>}
               <p className="text-xs text-muted-foreground">Leave blank to auto-detect icon</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="description">Description (optional)</Label>
+              <Textarea
+                id="description"
+                {...register('description')}
+                rows={2}
+                placeholder="What is this secret for?" />
+
+              <p className="text-xs text-muted-foreground">Optional. A short note about what this secret is for.</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="value">Value</Label>

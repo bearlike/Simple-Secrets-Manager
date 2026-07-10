@@ -140,7 +140,7 @@ class Onboarding:
                     created_by=username,
                     subject_user=username,
                     scopes=global_scopes(self.BOOTSTRAP_ACTION_SCOPES),
-                    expires_at=datetime.utcnow()
+                    expires_at=datetime.now(timezone.utc)
                     + timedelta(seconds=self.BOOTSTRAP_TOKEN_TTL_SECONDS),
                 )
             except Exception as exc:  # pragma: no cover - defensive path

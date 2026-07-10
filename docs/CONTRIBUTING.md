@@ -26,26 +26,37 @@ the lean CLI-only base install, so the whole monorepo imports locally.
 - Backend API: `ssm_server/` (`api/`, `engines/`, `access/`, `connection.py`, `main.py`)
 - CLI client: `ssm_cli/`
 - Container reloader: `ssm_reload/`
+- Shared wire contracts: `ssm_contracts/` (Pydantic v2 models for the reload
+  report/status shape, imported by both `ssm_server` and `ssm_reload`)
+- Telemetry leaf: `ssm_telemetry/` (OpenTelemetry event emission, a no-op
+  unless an OTLP endpoint is set)
 - Frontend admin console: `frontend/`
-- Tests: `tests/{server,cli,reload}`
+- Tests: `tests/{server,cli,reload,contracts,telemetry}`
 
 Dependencies are split in `pyproject.toml`: the base install is CLI-only
 (what `ssm_cli` actually imports); the `server` extra adds Flask/flask-restx/
-PyMongo; the `reload` extra adds the Docker SDK; `all` pulls in both for a
-full local checkout (`uv sync --all-extras`).
+PyMongo; the `reload` extra adds the Docker SDK; both `server` and `reload`
+also pull `pydantic` + `pydantic-settings` and layer in the `otel` extra
+(`opentelemetry-api`/`opentelemetry-sdk`/`opentelemetry-exporter-otlp-proto-http`,
+pinned to `1.43.0`); `all` pulls in both for a full local checkout
+(`uv sync --all-extras`).
 
 ## Local runs
 
 ### Backend
 
-Create `.env` at repository root:
+Create `.env` at repository root. Every variable is read and validated in
+exactly one place — `ServerSettings` in `ssm_server/settings.py` (a
+`pydantic-settings` model that also loads this `.env`); a raw `os.environ`
+read elsewhere in `ssm_server/` is a defect. Full reference (every
+variable, default, description): [`docs/ENV_REFERENCE.md`](ENV_REFERENCE.md).
+The three below are what a local dev setup needs — note `CORS_ORIGINS`
+carries the Vite dev server's origin, which differs from a Docker deploy:
 
 ```bash
 CONNECTION_STRING=mongodb://username:password@mongo.hostname:27017
 TOKEN_SALT=change-me
 CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080
-BIND_HOST=0.0.0.0
-PORT=5000
 ```
 
 Start backend:
@@ -106,11 +117,7 @@ export PATH="$(uv tool dir --bin):$PATH"
 ./scripts/deploy_stack.sh
 ```
 
-Endpoints:
-
-- Frontend: `http://localhost:8080`
-- Backend API proxy: `http://localhost:8080/api`
-- Backend API direct: `http://localhost:5000/api`
+Endpoints: see [Server Installation → Endpoints](SERVER_INSTALLATION.md#endpoints).
 
 ## Quality gates & pre-commit
 

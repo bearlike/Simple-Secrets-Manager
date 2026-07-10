@@ -8,6 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { outcomeBadgeClass } from '../../lib/badgeStyles';
 
 export type EnvImportAction = 'create' | 'overwrite' | 'override_inherited';
 
@@ -44,12 +45,15 @@ function actionLabel(action: EnvImportAction): string {
 
 function actionBadgeClass(action: EnvImportAction): string {
   if (action === 'create') {
-    return 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800';
+    return outcomeBadgeClass('success');
   }
   if (action === 'overwrite') {
+    // Distinct "overwrite" tone (orange) is unique to this dialog -- not
+    // part of the shared outcome axis, since no other verified duplicate
+    // uses orange.
     return 'bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950 dark:text-orange-300 dark:border-orange-800';
   }
-  return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-300 dark:border-blue-800';
+  return outcomeBadgeClass('info');
 }
 
 export function ImportEnvDialog({ open, onOpenChange, preview, loading, onConfirm }: ImportEnvDialogProps) {

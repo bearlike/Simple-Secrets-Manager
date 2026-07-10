@@ -25,7 +25,7 @@ Expected on fresh install:
 ```bash
 curl -sS -X POST "http://localhost:5000/api/onboarding/bootstrap" \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"Str0ng!Passw0rd","issueToken":true}'
+  -d '{"username":"admin","password":"Str0ng!Passw0rd"}'
 ```
 
 ## Step 3: Sign in from UI
@@ -108,3 +108,20 @@ curl -sS http://localhost:5000/api/workspace/members \
 - Scope tokens with least privilege.
 - Prefer service tokens for CI/CD.
 - Rotate/revoke tokens via `/api/auth/tokens/v2/revoke`.
+- Secrets are **sensitive by default** (masked in the admin console until
+  revealed). Flip a key to non-sensitive in the Edit Secret dialog for values
+  that are not secret (e.g. a public URL); sensitivity is most-restrictive
+  across inheritance, so a child can never un-hide a key a parent config marks
+  sensitive.
+- Projects and configs support an optional free-text **description** to record
+  what each is for; config descriptions also surface as `# from <config>`
+  provenance comments in annotated `.env` exports.
+
+## Secret icons (admin console)
+
+Each secret shows a small icon drawn from the [Iconify](https://iconify.design)
+catalog. The Add/Edit Secret dialog offers a search-first icon picker backed
+by the live Iconify catalog — type to search across all packs (or filter to a
+single pack), with live previews in a virtualized grid. Free-text `prefix:name`
+entry still works, and clearing the field restores the auto-detected icon
+guessed from the key name.

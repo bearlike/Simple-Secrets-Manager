@@ -3,7 +3,7 @@
 # the logic (scripts/*.sh, uv, npm). Keep behaviour in those scripts, not here.
 .DEFAULT_GOAL := help
 
-.PHONY: help check fix test lint-imports precommit-install stack build frontend
+.PHONY: help check fix test lint-imports precommit-install stack build frontend env-ref
 
 help: ## Show this help
 	@echo "Simple Secrets Manager — make targets:"
@@ -22,6 +22,9 @@ test: ## Run the pytest suite
 
 lint-imports: ## Check the import-linter architecture contracts
 	uv run lint-imports
+
+env-ref: ## Regenerate docs/ENV_REFERENCE.md from ServerSettings/ReloadSettings
+	uv run python3 scripts/generate_env_reference.py
 
 precommit-install: ## Install the repo git hooks (core.hooksPath=.githooks)
 	./scripts/install-git-hooks.sh

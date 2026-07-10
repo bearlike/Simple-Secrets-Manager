@@ -24,6 +24,15 @@ class Resolution:
     token_source: str | None
 
 
+def profile_from_env() -> str | None:
+    """The ``SSM_PROFILE`` override, if set — the single read site for it.
+
+    Both the resolution precedence chain here and ``main._profile_name`` route
+    through this, so the variable has exactly one place it is read.
+    """
+    return os.getenv("SSM_PROFILE")
+
+
 def _pick(*values: str | None) -> str | None:
     for value in values:
         if value is not None:
@@ -49,7 +58,7 @@ def resolve_context(
 
     resolved_profile = _pick(
         profile,
-        os.getenv("SSM_PROFILE"),
+        profile_from_env(),
         local_cfg.profile,
         global_cfg.active_profile,
         DEFAULT_PROFILE,

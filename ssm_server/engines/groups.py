@@ -2,6 +2,8 @@
 from datetime import datetime, timezone
 
 from bson import ObjectId
+from bson.errors import InvalidId
+from pymongo.errors import DuplicateKeyError
 
 from ssm_server.engines.common import is_valid_slug
 
@@ -44,7 +46,7 @@ class Groups:
     def get_by_id(self, workspace_id, group_id):
         try:
             lookup_id = ObjectId(group_id)
-        except Exception:
+        except (InvalidId, TypeError, ValueError):
             lookup_id = group_id
         return self._groups.find_one(
             {"workspace_id": workspace_id, "_id": lookup_id}
@@ -68,7 +70,7 @@ class Groups:
         }
         try:
             self._groups.insert_one(payload)
-        except Exception:
+        except DuplicateKeyError:
             return None, "Group already exists", 400
         return payload, "OK", 201
 
@@ -94,7 +96,7 @@ class Groups:
     def delete_group(self, workspace_id, group_slug):
         group = self._get_by_slug(workspace_id, group_slug)
         if not group:
-            return "Group not found", 404
+            return None, "Group not found", 404
 
         group_id = group["_id"]
         self._group_members.delete_many(
@@ -109,7 +111,7 @@ class Groups:
             )
 
         self._groups.delete_one({"_id": group_id})
-        return "OK", 200
+        return None, "OK", 200
 
     def list_group_members(self, workspace_id, group_id):
         return list(
@@ -209,19 +211,19 @@ class Groups:
         }
         try:
             self._group_mappings.insert_one(payload)
-        except Exception:
+        except DuplicateKeyError:
             return None, "Group mapping already exists", 400
         return payload, "OK", 201
 
     def delete_group_mapping(self, workspace_id, mapping_id):
         try:
             lookup_id = ObjectId(mapping_id)
-        except Exception:
+        except (InvalidId, TypeError, ValueError):
             lookup_id = mapping_id
 
         res = self._group_mappings.delete_one(
             {"workspace_id": workspace_id, "_id": lookup_id}
         )
         if res.deleted_count == 0:
-            return "Group mapping not found", 404
-        return "OK", 200
+            return None, "Group mapping not found", 404
+        return None, "OK", 200

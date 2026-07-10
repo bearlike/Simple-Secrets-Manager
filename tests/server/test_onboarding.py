@@ -1,35 +1,6 @@
 from ssm_server.access.onboarding import Onboarding
-from pymongo.errors import DuplicateKeyError
 
-
-class FakeStateCollection:
-    def __init__(self):
-        self.docs = {}
-
-    def create_index(self, *_args, **_kwargs):
-        return None
-
-    def find_one(self, query):
-        doc_id = query.get("_id")
-        if doc_id is None:
-            return None
-        return self.docs.get(doc_id)
-
-    def insert_one(self, doc):
-        doc_id = doc.get("_id")
-        if doc_id in self.docs:
-            raise DuplicateKeyError("duplicate key")
-        self.docs[doc_id] = dict(doc)
-
-    def update_one(self, query, update):
-        doc_id = query.get("_id")
-        if doc_id not in self.docs:
-            self.docs[doc_id] = {"_id": doc_id}
-        target = self.docs[doc_id]
-        for key, value in update.get("$set", {}).items():
-            target[key] = value
-        for key in update.get("$unset", {}).keys():
-            target.pop(key, None)
+from tests.server.fakes import FakeCollection
 
 
 class FakeUserPass:
@@ -99,18 +70,14 @@ class FakeMemberships:
 
 
 def test_onboarding_status_default_not_initialized():
-    onboarding = Onboarding(
-        FakeStateCollection(), FakeUserPass(), FakeTokens()
-    )
+    onboarding = Onboarding(FakeCollection(), FakeUserPass(), FakeTokens())
     state = onboarding.get_state()
     assert state["isInitialized"] is False
     assert state["state"] == "not_initialized"
 
 
 def test_bootstrap_success_and_lock_after_completion():
-    onboarding = Onboarding(
-        FakeStateCollection(), FakeUserPass(), FakeTokens()
-    )
+    onboarding = Onboarding(FakeCollection(), FakeUserPass(), FakeTokens())
     result, code = onboarding.bootstrap("admin", "password", issue_token=True)
     assert code == 201
     assert result["status"] == "OK"
@@ -129,7 +96,7 @@ def test_bootstrap_seeds_workspace_owner_membership():
     users = FakeUsers()
     memberships = FakeMemberships()
     onboarding = Onboarding(
-        FakeStateCollection(),
+        FakeCollection(),
         FakeUserPass(),
         FakeTokens(),
         workspaces_engine=workspaces,

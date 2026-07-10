@@ -98,9 +98,12 @@ services:
 
 ## Environment variables
 
-- `CONNECTION_STRING`: MongoDB URI for backend storage
-- `TOKEN_SALT`: token hashing salt
-- `CORS_ORIGINS`: comma-separated origins for direct backend access
-- `BIND_HOST`: backend bind host (default `0.0.0.0`)
-- `PORT`: backend port inside container (default `5000`)
-- `VITE_API_BASE_URL`: build arg used by frontend build in Docker (default `/api`)
+Full reference — every variable, default, and description for both the
+server and the reloader — lives in [`ENV_REFERENCE.md`](ENV_REFERENCE.md).
+The two most likely to need a per-deployment value:
+
+- `CONNECTION_STRING`: MongoDB URI for backend storage (required)
+- `CORS_ORIGINS`: comma-separated origins for direct backend access — set
+  per deployment (see the compose example above)
+- `VITE_API_BASE_URL`: build arg used by the frontend build in Docker
+  (default `/api`); not a backend setting, so it isn't in `ENV_REFERENCE.md`

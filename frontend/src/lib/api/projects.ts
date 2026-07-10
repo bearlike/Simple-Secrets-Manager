@@ -1,5 +1,6 @@
 import { apiClient } from './client';
 import { mapProjectDto } from './mappers';
+import { parseListSafely, projectDtoSchema } from './schemas';
 import type {
   CreateProjectResponseDto,
   Project,
@@ -15,12 +16,14 @@ interface CreateProjectInput {
 interface UpdateProjectInput {
   name?: string;
   archived?: boolean;
+  // undefined: leave the description unchanged; '' clears it.
+  description?: string;
 }
 
 async function fetchProjects(archived: boolean): Promise<Project[]> {
   const endpoint = archived ? '/projects?archived=true' : '/projects';
   const response = await apiClient<ProjectsResponseDto>(endpoint);
-  return (response.projects ?? []).map(mapProjectDto);
+  return parseListSafely(projectDtoSchema, response.projects).map(mapProjectDto);
 }
 
 export function getProjects(): Promise<Project[]> {
@@ -41,7 +44,7 @@ export async function createProject(data: CreateProjectInput): Promise<Project> 
     })
   });
 
-  return mapProjectDto(response.project);
+  return mapProjectDto(projectDtoSchema.parse(response.project));
 }
 
 export async function updateProject(
@@ -53,7 +56,7 @@ export async function updateProject(
     body: JSON.stringify(data)
   });
 
-  return mapProjectDto(response.project);
+  return mapProjectDto(projectDtoSchema.parse(response.project));
 }
 
 export async function deleteProject(slug: string): Promise<void> {

@@ -6,6 +6,18 @@
 volumes:
   mongo_data:
 
+  # Where ssm-reload projects each managed config as a `<project>-<config>.env`
+  # dotenv file. RAM-backed (tmpfs), so projected secrets never touch the disk,
+  # and its contents live only while a container holds it mounted. `name:` pins
+  # it unprefixed so OTHER stacks can mount it with `external: true`.
+  ssm-env:
+    name: ssm-env
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=8m,mode=0750
+
 services:
   # From v5.0.0, mongoDB requires atleast ARMv8.2-A microarchitecture to run.
   # So we're going with v4 to improve compatibility on SBCs such as
@@ -44,6 +56,17 @@ services:
       CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080,http://localhost:5000,http://127.0.0.1:5000
       BIND_HOST: 0.0.0.0
       PORT: 5000
+    healthcheck:
+      # Gates ssm-reload's first poll (via depends_on: service_healthy below).
+      # Plain depends_on only waits for the container to start, not for Flask to
+      # bind :5000 behind supervisord — that gap raced the reloader into a
+      # startup connection-refused on every boot. No curl/wget in the image, so
+      # probe with python.
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:5000/api').status==200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
     networks:
       - app-tier
 
@@ -61,12 +84,20 @@ services:
     profiles: ["reload"]
     restart: unless-stopped
     depends_on:
-      - ssm
+      ssm:
+        condition: service_healthy
     environment:
       SSM_BASE_URL: http://ssm:5000/api
       SSM_TOKEN: ${SSM_RELOAD_TOKEN:-}
+      # Configs to render even before any container is bound to them: an
+      # `env_file` must EXIST before the first `compose up` that names it.
+      # e.g. "vpn/zurich,web/prod"
+      SSM_RELOAD_PROJECTION_CONFIGS: ${SSM_RELOAD_PROJECTION_CONFIGS:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # The reloader WRITES the projected dotenv files here; consumers mount
+      # the same volume read-only and point `env_file:` at it.
+      - ssm-env:/run/ssm
     networks:
       - app-tier
 

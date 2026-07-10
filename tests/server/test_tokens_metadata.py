@@ -5,78 +5,7 @@ from bson import ObjectId
 from ssm_server.access.scopes import global_scopes
 from ssm_server.access.tokens import Tokens
 
-
-class FakeCursor:
-    def __init__(self, docs):
-        self.docs = docs
-
-    def sort(self, key, direction):
-        reverse = direction == -1
-        self.docs.sort(key=lambda item: item.get(key), reverse=reverse)
-        return self
-
-    def __iter__(self):
-        return iter(self.docs)
-
-
-class FakeCollection:
-    def __init__(self, docs):
-        self.docs = docs
-
-    def create_index(self, *_args, **_kwargs):
-        return None
-
-    @staticmethod
-    def _is_gt(current, target):
-        if current is None:
-            return False
-        try:
-            return current > target
-        except TypeError:
-            return current.timestamp() > target.timestamp()
-
-    def _match_value(self, doc, key, value):
-        current = doc.get(key)
-        if isinstance(value, dict):
-            if "$gt" in value:
-                return self._is_gt(current, value["$gt"])
-            if "$exists" in value:
-                return (key in doc) == bool(value["$exists"])
-        return current == value
-
-    def _match(self, doc, query):
-        for key, value in query.items():
-            if key == "$or":
-                if not any(self._match(doc, clause) for clause in value):
-                    return False
-                continue
-            if not self._match_value(doc, key, value):
-                return False
-        return True
-
-    def find(self, query):
-        return FakeCursor(
-            [doc for doc in self.docs if self._match(doc, query)]
-        )
-
-    def find_one(self, query):
-        for doc in self.docs:
-            if self._match(doc, query):
-                return doc
-        return None
-
-    def update_one(self, query, update):
-        target = self.find_one(query)
-        if target and "$set" in update:
-            target.update(update["$set"])
-
-    def update_many(self, query, update):
-        for doc in self.docs:
-            if self._match(doc, query) and "$set" in update:
-                doc.update(update["$set"])
-
-    def insert_one(self, doc):
-        self.docs.append(doc)
+from tests.server.fakes import FakeCollection
 
 
 def test_list_tokens_serializes_metadata():
@@ -105,6 +34,12 @@ def test_list_tokens_serializes_metadata():
     assert result[0]["token_id"] == str(token_id)
     assert result[0]["created_at"].endswith("Z")
     assert isinstance(result[0]["scopes"][0]["project_id"], str)
+    # Dual-emit: camelCase (canonical) alongside the deprecated snake_case
+    # twins, both carrying the same ISO value.
+    meta = result[0]
+    assert meta["createdAt"] == meta["created_at"]
+    assert meta["expiresAt"] == meta["expires_at"] == "2030-01-01T00:00:00Z"
+    assert meta["lastUsedAt"] == meta["last_used_at"] is None
 
 
 def test_list_tokens_hides_revoked_and_expired_by_default():
@@ -215,7 +150,9 @@ def test_generate_rotates_session_tokens_and_caps_ttl():
 
     expires_at = newest["expires_at"]
     assert expires_at is not None
-    remaining_seconds = (expires_at - datetime.utcnow()).total_seconds()
+    remaining_seconds = (
+        expires_at - datetime.now(timezone.utc)
+    ).total_seconds()
     assert 0 < remaining_seconds <= Tokens.SESSION_TOKEN_TTL_SECONDS + 2
 
 

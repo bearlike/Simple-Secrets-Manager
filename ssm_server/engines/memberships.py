@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 
 from bson import ObjectId
+from bson.errors import InvalidId
 
 WORKSPACE_ROLES = ("owner", "admin", "collaborator", "viewer")
 PROJECT_ROLES = ("admin", "collaborator", "viewer", "none")
@@ -146,8 +147,8 @@ class Memberships:
             }
         )
         if res.deleted_count == 0:
-            return "Membership not found", 404
-        return "OK", 200
+            return None, "Membership not found", 404
+        return None, "OK", 200
 
     def list_project_memberships(self, workspace_id, project_id):
         return list(
@@ -166,7 +167,7 @@ class Memberships:
             if isinstance(group_id, str):
                 try:
                     normalized_group_ids.add(ObjectId(group_id))
-                except Exception:
+                except (InvalidId, TypeError, ValueError):
                     pass
 
         clauses = [{"subject_type": "user", "subject_id": username}]
@@ -205,7 +206,7 @@ class Memberships:
         else:
             try:
                 candidates.append(ObjectId(project_id))
-            except Exception:
+            except (InvalidId, TypeError, ValueError):
                 pass
         self._project_memberships.delete_many(
             {

@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { XIcon, ScrollTextIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,7 @@ import { getProjects } from '../lib/api/projects';
 import { getConfigs } from '../lib/api/configs';
 import { queryKeys } from '../lib/api/queryKeys';
 import { EmptyState } from '../components/common/EmptyState';
+import { outcomeBadgeClass } from '../lib/badgeStyles';
 
 const AUDIT_PAGE_SIZE = 50;
 
@@ -32,10 +34,24 @@ function formatTimestamp(value: string): string {
 }
 
 export function AuditPage() {
-  const [projectFilter, setProjectFilter] = useState<string>('');
-  const [configFilter, setConfigFilter] = useState<string>('');
+  // project/config live in the URL so /audit?project=&config= is a
+  // deterministic, bookmarkable view ConfigUsageDialog can deep-link into;
+  // since/page stay local, as ephemeral refinements of that scope.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const projectFilter = searchParams.get('project') ?? '';
+  const configFilter = searchParams.get('config') ?? '';
   const [sinceDate, setSinceDate] = useState('');
   const [page, setPage] = useState(1);
+
+  // A config slug is only meaningful under its project, so setting the project
+  // always clears the config; any scope change resets pagination.
+  const applyScope = (project: string, config: string) => {
+    const next: Record<string, string> = {};
+    if (project) next.project = project;
+    if (project && config) next.config = config;
+    setSearchParams(next, { replace: true });
+    setPage(1);
+  };
 
   const { data: projects = [] } = useQuery({
     queryKey: queryKeys.projects(),
@@ -74,10 +90,8 @@ export function AuditPage() {
   const hasFilters = Boolean(projectFilter || configFilter || sinceDate);
 
   const clearFilters = () => {
-    setProjectFilter('');
-    setConfigFilter('');
     setSinceDate('');
-    setPage(1);
+    applyScope('', '');
   };
 
   return (
@@ -92,11 +106,7 @@ export function AuditPage() {
       <div className="flex flex-wrap items-center gap-2 mb-4">
         <Select
           value={projectFilter || 'all'}
-          onValueChange={(value) => {
-            setProjectFilter(value === 'all' ? '' : value);
-            setConfigFilter('');
-            setPage(1);
-          }}
+          onValueChange={(value) => applyScope(value === 'all' ? '' : value, '')}
         >
           <SelectTrigger className="h-8 w-40 text-xs">
             <SelectValue placeholder="All projects" />
@@ -114,10 +124,9 @@ export function AuditPage() {
         {projectFilter && (
           <Select
             value={configFilter || 'all'}
-            onValueChange={(value) => {
-              setConfigFilter(value === 'all' ? '' : value);
-              setPage(1);
-            }}
+            onValueChange={(value) =>
+              applyScope(projectFilter, value === 'all' ? '' : value)
+            }
           >
             <SelectTrigger className="h-8 w-36 text-xs">
               <SelectValue placeholder="All configs" />
@@ -208,9 +217,14 @@ export function AuditPage() {
                 )}
 
               {!isLoading &&
-                events.map((event) => (
+                events.map((event, rowIndex) => (
+                  // Backend audit events carry no id, so mapAuditEventDto
+                  // synthesizes one from their content — which collides for two
+                  // same-millisecond keyless events (e.g. secrets.export). The
+                  // row index disambiguates; the list is append-only and never
+                  // reordered within a page, so it is a safe key here.
                   <tr
-                    key={event.id}
+                    key={`${event.id}:${rowIndex}`}
                     className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
                   >
                     <td className="px-4 py-2">
@@ -234,11 +248,7 @@ export function AuditPage() {
                     <td className="px-4 py-2">
                       <Badge
                         variant="outline"
-                        className={
-                          event.status === 'success'
-                            ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-950 dark:text-green-300 dark:border-green-800 text-xs'
-                            : 'bg-red-50 text-red-700 border-red-200 dark:bg-red-950 dark:text-red-300 dark:border-red-800 text-xs'
-                        }
+                        className={`${outcomeBadgeClass(event.status === 'success' ? 'success' : 'error')} text-xs`}
                       >
                         {event.status}
                       </Badge>

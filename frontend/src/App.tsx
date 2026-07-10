@@ -9,6 +9,7 @@ import { SecretsPage } from './pages/SecretsPage';
 import { ConfigSettingsPage } from './pages/ConfigSettingsPage';
 import { TokensPage } from './pages/TokensPage';
 import { AuditPage } from './pages/AuditPage';
+import { ReloadStatusPage } from './pages/ReloadStatusPage';
 import { CompareBySecretPage } from './pages/CompareBySecretPage';
 import { AccountPage } from './pages/AccountPage';
 import { TeamPage } from './pages/TeamPage';
@@ -61,6 +62,7 @@ export function App() {
 
               <Route path="/tokens" element={<TokensPage />} />
               <Route path="/audit" element={<AuditPage />} />
+              <Route path="/reload" element={<ReloadStatusPage />} />
               <Route path="/account" element={<AccountPage />} />
               <Route path="/team" element={<TeamPage />} />
               <Route path="/groups" element={<GroupsPage />} />

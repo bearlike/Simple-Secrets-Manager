@@ -12,7 +12,6 @@ class AuditEvents:
         # Keep legacy indexes for existing deployments.
         self._events.create_index([("project_id", 1), ("ts", -1)])
         self._events.create_index([("config_id", 1), ("ts", -1)])
-        self._events.create_index([("token_id", 1), ("ts", -1)])
 
     def write_event(self, event: dict):
         payload = {
@@ -62,27 +61,6 @@ class AuditEvents:
         if since is not None:
             query["ts"] = {"$gte": since}
         return query
-
-    def query_events(
-        self,
-        project_slug=None,
-        config_slug=None,
-        since=None,
-        limit=100,
-        project_id=None,
-        config_id=None,
-    ):
-        query = self._build_query(
-            project_slug=project_slug,
-            config_slug=config_slug,
-            since=since,
-            project_id=project_id,
-            config_id=config_id,
-        )
-        events = list(
-            self._events.find(query, {"_id": 0}).sort("ts", -1).limit(limit)
-        )
-        return [sanitize_doc(event) for event in events]
 
     def query_events_page(
         self,

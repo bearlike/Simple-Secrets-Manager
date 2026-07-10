@@ -2,7 +2,7 @@
 
 Mirrors ``ssm_cli/api.py`` conventions (Bearer token, ``requests``
 session, small retry loop, ``{"message": ...}`` error extraction) but is
-deliberately tiny: the service only needs two calls. It intentionally
+deliberately tiny: the service only needs three calls. It intentionally
 does NOT import ``ssm_cli`` (that pulls ``click``/``keyring``, unwanted in
 a daemon).
 
@@ -15,12 +15,32 @@ root that serves those paths (e.g. ``http://ssm:5000/api``).
 from __future__ import annotations
 
 import time
-from typing import Any
+from typing import Any, Protocol
 from urllib.parse import urljoin, urlparse
 
-import requests  # type: ignore[import-untyped]
+import requests
 
 from ssm_reload.errors import SsmClientError
+
+
+class RequestSession(Protocol):
+    """The one-method seam ``SsmClient`` needs from a session.
+
+    Structural, like the ``ReloadDriver`` seam: ``requests.Session``
+    satisfies it in production and tests substitute an in-memory fake
+    without subclassing.
+    """
+
+    def request(
+        self,
+        *,
+        method: str,
+        url: str,
+        params: dict[str, Any] | None,
+        json: dict[str, Any] | None,
+        headers: dict[str, str],
+        timeout: int,
+    ) -> requests.Response: ...
 
 
 def normalize_base_url(value: str) -> str:
@@ -36,7 +56,7 @@ def normalize_base_url(value: str) -> str:
 
 
 class SsmClient:
-    """Two-call SSM API client used by the reconcile loop."""
+    """Three-call SSM API client used by the reconcile loop."""
 
     def __init__(
         self,
@@ -45,13 +65,13 @@ class SsmClient:
         *,
         timeout: int = 10,
         retries: int = 2,
-        session: requests.Session | None = None,
+        session: RequestSession | None = None,
     ) -> None:
         self.base_url = normalize_base_url(base_url)
         self.token = token
         self.timeout = timeout
         self.retries = retries
-        self.session = session or requests.Session()
+        self.session: RequestSession = session or requests.Session()
 
     def _url(self, path: str) -> str:
         clean = path if path.startswith("/") else f"/{path}"
@@ -118,6 +138,14 @@ class SsmClient:
                 "format": "json",
                 "include_parent": "true",
                 "resolve_references": "true",
+                # Explicitly request the VALUE-ONLY representation. The
+                # server's include_meta defaults to true, and the export ETag
+                # covers everything the body carries -- with meta included,
+                # the tag would flip on icon/description/sensitivity edits
+                # and every such edit would recreate containers. Value-only
+                # keeps the revision reacting to value changes alone (and
+                # byte-identical to previously stamped revisions).
+                "include_meta": "false",
             },
             headers=headers,
         )
@@ -135,6 +163,17 @@ class SsmClient:
         response = self._send("POST", "/reload/events", json_body=payload)
         _raise_for_status(response)
 
+    def report_status(self, payload: dict[str, Any]) -> None:
+        """Report one per-(project, config) cycle status to the fleet view.
+
+        Posts an ``ssm_contracts.ReloadReport`` (already serialized to its
+        camelCase wire form) to ``/reload/report``. One call per config group
+        per cycle keeps the server's per-config scope check simple. Callers
+        treat any failure as best-effort and never let it break a pass.
+        """
+        response = self._send("POST", "/reload/report", json_body=payload)
+        _raise_for_status(response)
+
 
 def _raise_for_status(response: requests.Response) -> None:
     if response.status_code < 400:
@@ -145,6 +184,17 @@ def _raise_for_status(response: requests.Response) -> None:
 
 
 def _parse_secret_map(response: requests.Response) -> dict[str, str]:
+    """Extract the ``{key: value}`` secret map from an export response.
+
+    The export envelope is ``{"data": {...}, "meta": {...}, "status":
+    "OK"}`` -- the secrets live under ``data`` (same parsing as
+    ``ssm_cli/api.py``). A malformed envelope RAISES rather than degrading:
+    this map is what gets rendered into every consumer's ``env_file`` and
+    overlaid onto a recreated container's environment, so returning something
+    empty/garbage here once shipped ``{"status": "OK"}`` as a production
+    container's env. Raising routes reconcile onto its fail-safe skip path
+    instead.
+    """
     try:
         body = response.json()
     except ValueError as exc:
@@ -155,9 +205,14 @@ def _parse_secret_map(response: requests.Response) -> dict[str, str]:
         raise SsmClientError(
             "Secrets response is not a JSON object", status_code=None
         )
+    data = body.get("data")
+    if not isinstance(data, dict):
+        raise SsmClientError(
+            "Secrets response is missing the data map", status_code=None
+        )
     return {
         key: value
-        for key, value in body.items()
+        for key, value in data.items()
         if isinstance(key, str) and isinstance(value, str)
     }
 

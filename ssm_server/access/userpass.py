@@ -4,25 +4,22 @@
 from werkzeug.security import generate_password_hash, check_password_hash
 from bson.timestamp import Timestamp
 from textwrap import dedent
-import datetime as dt
+from datetime import datetime, timezone
 import re
-import os
 
 
 class _password_policy:
-    def __init__(self):
-        # Username policy: regex pattern
-        self.uname_pat = "[a-zA-Z0-9_]+"
-        # min length (default: 6)
-        self.length = os.environ.get("PASSWORD_POLICY_LENGTH", 6)
-        # need min. (default: 1) uppercase letters
-        self.uppercase = os.environ.get("PASSWORD_POLICY_UPPERCASE", 1)
-        # need min. (default: 1) uppercase letters
-        self.lowercase = os.environ.get("PASSWORD_POLICY_LOWERCASE", 1)
-        # need min. (default: 1) digits
-        self.numbers = os.environ.get("PASSWORD_POLICY_NUMBERS", 1)
-        # need min. (default: 1) special characters
-        self.special = os.environ.get("PASSWORD_POLICY_SPECIAL", 1)
+    # Fixed policy constants. These were previously PASSWORD_POLICY_* env
+    # overrides, but that path was undocumented, unused, and buggy — the
+    # values arrived as `str`, so the numeric comparisons in `check()` would
+    # have raised a TypeError the moment anyone set one. The current defaults
+    # are hardcoded here as ints instead of being made configurable.
+    uname_pat = "[a-zA-Z0-9_]+"  # username policy: regex pattern
+    length = 6  # min length
+    uppercase = 1  # need min. uppercase letters
+    lowercase = 1  # need min. lowercase letters
+    numbers = 1  # need min. digits
+    special = 1  # need min. special characters
 
     def __repr__(self):
         policy_str = f"""
@@ -84,7 +81,9 @@ class User_Pass:
             data = {
                 "username": username,
                 "password": password,
-                "added_on": Timestamp(int(dt.datetime.today().timestamp()), 1),
+                "added_on": Timestamp(
+                    int(datetime.now(timezone.utc).timestamp()), 1
+                ),
             }
             _ = self._userpass.insert_one(data)
             status = {"status": "OK"}

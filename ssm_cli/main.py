@@ -31,8 +31,14 @@ from ssm_cli.config import (
     save_local_config,
 )
 from ssm_cli.exceptions import CliError
-from ssm_cli.resolve import Resolution, resolve_context
+from ssm_cli.resolve import Resolution, profile_from_env, resolve_context
 from ssm_cli.run_utils import render_env_lines, run_with_env
+from ssm_projection import (
+    PROJECTION_FILE_MODE,
+    DirectorySink,
+    atomic_write_text,
+    render_dotenv,
+)
 
 console = Console()
 err_console = Console(stderr=True)
@@ -67,9 +73,8 @@ def _handle_errors(fn: Callable[..., Any]) -> Callable[..., Any]:
 
 
 def _profile_name(override: str | None, cfg: GlobalConfig) -> str:
-    env = os.getenv("SSM_PROFILE")
     return (
-        override or env or cfg.active_profile or DEFAULT_PROFILE
+        override or profile_from_env() or cfg.active_profile or DEFAULT_PROFILE
     ).strip() or DEFAULT_PROFILE
 
 
@@ -165,6 +170,25 @@ def _resolve_secret_context(
         require_project_config=True,
         require_token=True,
     )
+
+
+def _dotenv_target(
+    directory: Path | None,
+    file_path: Path | None,
+    project: str,
+    config: str,
+) -> Path:
+    """The file `secrets materialize` writes; exactly one flag may pick it.
+
+    A directory yields the same `<project>-<config>.env` name the reloader
+    projects, so both can keep one file fresh; `--path` names an exact file
+    for systemd's `EnvironmentFile=`, which takes no directory.
+    """
+    if directory is not None and file_path is None:
+        return DirectorySink(directory).path_for(project, config)
+    if file_path is not None and directory is None:
+        return file_path
+    raise CliError("Provide exactly one of --dir or --path", exit_code=2)
 
 
 def _upsert_secret(resolution: Resolution, *, key: str, value: str) -> None:
@@ -271,6 +295,19 @@ def _strip_single_trailing_newline(value: str) -> str:
     return value
 
 
+# Repeated verbatim across ~30 commands each; kept as individual reusable
+# decorators (not a single stacked ``common_options``) because --project /
+# --config often sit between them and the interspersed order differs per
+# command -- bundling would force a restructure of every call site for no
+# behavior change. `configure`'s required --base-url and `profile set`'s
+# field-setting --base-url are deliberately distinct (different semantics
+# and help text), so they keep their own inline `click.option(...)`.
+profile_option = click.option("--profile", default=None, help="Profile name")
+base_url_option = click.option(
+    "--base-url", default=None, help="Base URL override"
+)
+
+
 @click.group(help="Simple Secrets Manager CLI")
 def cli() -> None:
     pass
@@ -282,7 +319,7 @@ def cli() -> None:
     required=True,
     help="Base URL (for example http://localhost:8080/api)",
 )
-@click.option("--profile", default=None, help="Profile name")
+@profile_option
 @click.option(
     "--activate/--no-activate", default=True, help="Set profile as active"
 )
@@ -309,8 +346,8 @@ def auth_cmd() -> None:
     "set-token", help="Store a token for the current base URL/profile"
 )
 @click.option("--token", prompt=True, hide_input=True, help="Token value")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def auth_set_token(
     token: str, base_url: str | None, profile: str | None
@@ -330,8 +367,8 @@ def auth_set_token(
 @cli.command(help="Login with username/password and store returned token")
 @click.option("--username", prompt=True, help="Username")
 @click.option("--password", prompt=True, hide_input=True, help="Password")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def login(
     username: str, password: str, base_url: str | None, profile: str | None
@@ -367,8 +404,8 @@ def login(
 
 
 @cli.command(help="Remove locally stored token")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @click.option(
     "--all-profiles",
     is_flag=True,
@@ -396,7 +433,7 @@ def logout(
 @cli.command(help="Set project/config defaults for current directory")
 @click.option("--project", prompt=True, help="Project slug")
 @click.option("--config", "config_name", prompt=True, help="Config slug")
-@click.option("--profile", default=None, help="Profile name")
+@profile_option
 @click.option(
     "--sync-profile/--local-only",
     default=True,
@@ -434,12 +471,12 @@ def setup(
     },
     help="Run command with secrets injected into child process environment",
 )
-@click.option("--base-url", default=None, help="Base URL override")
+@base_url_option
 @click.option("--project", default=None, help="Project slug override")
 @click.option(
     "--config", "config_name", default=None, help="Config slug override"
 )
-@click.option("--profile", default=None, help="Profile name")
+@profile_option
 @click.option(
     "--offline", is_flag=True, default=False, help="Use cached secrets only"
 )
@@ -517,12 +554,12 @@ def secrets_cmd() -> None:
     default="json",
     show_default=True,
 )
-@click.option("--base-url", default=None, help="Base URL override")
+@base_url_option
 @click.option("--project", default=None, help="Project slug override")
 @click.option(
     "--config", "config_name", default=None, help="Config slug override"
 )
-@click.option("--profile", default=None, help="Profile name")
+@profile_option
 @click.option(
     "--offline", is_flag=True, default=False, help="Use cached secrets only"
 )
@@ -576,12 +613,12 @@ def secrets_download(
 
 
 @secrets_cmd.command("keys", help="List secret KEY NAMES only (never values)")
-@click.option("--base-url", default=None, help="Base URL override")
+@base_url_option
 @click.option("--project", default=None, help="Project slug override")
 @click.option(
     "--config", "config_name", default=None, help="Config slug override"
 )
-@click.option("--profile", default=None, help="Profile name")
+@profile_option
 @click.option(
     "--offline", is_flag=True, default=False, help="Use cached secrets only"
 )
@@ -644,12 +681,12 @@ def secrets_keys(
     default=False,
     help="Read secret value from stdin",
 )
-@click.option("--base-url", default=None, help="Base URL override")
+@base_url_option
 @click.option("--project", default=None, help="Project slug override")
 @click.option(
     "--config", "config_name", default=None, help="Config slug override"
 )
-@click.option("--profile", default=None, help="Profile name")
+@profile_option
 @_handle_errors
 def secrets_set(
     key: str,
@@ -718,12 +755,12 @@ def secrets_set(
     show_default=True,
     help="Input format when using --stdin",
 )
-@click.option("--base-url", default=None, help="Base URL override")
+@base_url_option
 @click.option("--project", default=None, help="Project slug override")
 @click.option(
     "--config", "config_name", default=None, help="Config slug override"
 )
-@click.option("--profile", default=None, help="Profile name")
+@profile_option
 @_handle_errors
 def secrets_upload(
     env_file: Path | None,
@@ -778,6 +815,104 @@ def secrets_upload(
     raise click.exceptions.Exit(1)
 
 
+@secrets_cmd.command(
+    "materialize",
+    help="Render secrets to a dotenv file for env_file/EnvironmentFile",
+)
+@click.option(
+    "--dir",
+    "directory",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Directory to write <project>-<config>.env into",
+)
+@click.option(
+    "--path",
+    "file_path",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="Exact file to write (for systemd's EnvironmentFile=)",
+)
+@base_url_option
+@click.option("--project", default=None, help="Project slug override")
+@click.option(
+    "--config", "config_name", default=None, help="Config slug override"
+)
+@profile_option
+@click.option(
+    "--offline", is_flag=True, default=False, help="Use cached secrets only"
+)
+@click.option(
+    "--cache-ttl",
+    default=3600,
+    show_default=True,
+    type=int,
+    help="Cache max age in seconds",
+)
+@click.option(
+    "--raw",
+    is_flag=True,
+    default=False,
+    help="Fetch raw values without resolving references",
+)
+@_handle_errors
+def secrets_materialize(
+    directory: Path | None,
+    file_path: Path | None,
+    base_url: str | None,
+    project: str | None,
+    config_name: str | None,
+    profile: str | None,
+    offline: bool,
+    cache_ttl: int,
+    raw: bool,
+) -> None:
+    """Write a config's secrets where a container's CREATOR will read them.
+
+    A container's environment is frozen at create time, so secrets have to be
+    in place BEFORE `docker compose up` — compose refuses to start a service
+    whose `env_file` does not exist. This is the bootstrap for that (and the
+    entry point for a systemd unit's `EnvironmentFile=`); `ssm-reload` keeps
+    the same file fresh afterwards, rendering byte-identical contents.
+    """
+    resolution = _resolve_secret_context(
+        base_url=base_url,
+        project=project,
+        config_name=config_name,
+        profile=profile,
+    )
+    target = _dotenv_target(
+        directory,
+        file_path,
+        resolution.project or "",
+        resolution.config or "",
+    )
+    secrets_data, source = _fetch_secrets(
+        resolution,
+        offline=offline,
+        cache_ttl=cache_ttl,
+        resolve_references=not raw,
+        raw=raw,
+    )
+    if source != "remote":
+        console.print(
+            f"Using secrets from [bold]{source}[/bold].", style="yellow"
+        )
+
+    try:
+        atomic_write_text(
+            target, render_dotenv(secrets_data), mode=PROJECTION_FILE_MODE
+        )
+    except ValueError as exc:  # a key name no dotenv parser can read
+        raise CliError(str(exc), exit_code=3) from exc
+    except OSError as exc:
+        raise CliError(f"Unable to write {target}: {exc}", exit_code=3)
+
+    # The PATH is the output, never a VALUE: this command is routinely run
+    # from a shell whose history and logs are not a secret store.
+    console.print(f"Wrote {len(secrets_data)} secrets to {target}")
+
+
 @secrets_cmd.command("mount", help="Write secrets to a named pipe (FIFO)")
 @click.option(
     "--path",
@@ -793,12 +928,12 @@ def secrets_upload(
     default="env",
     show_default=True,
 )
-@click.option("--base-url", default=None, help="Base URL override")
+@base_url_option
 @click.option("--project", default=None, help="Project slug override")
 @click.option(
     "--config", "config_name", default=None, help="Config slug override"
 )
-@click.option("--profile", default=None, help="Profile name")
+@profile_option
 @click.option(
     "--offline", is_flag=True, default=False, help="Use cached secrets only"
 )
@@ -877,8 +1012,8 @@ def secrets_mount(
 
 
 @cli.command(help="Validate the active token and print context")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def whoami(base_url: str | None, profile: str | None) -> None:
     resolution = resolve_context(
@@ -924,8 +1059,8 @@ def projects_cmd() -> None:
 
 
 @projects_cmd.command("list", help="List projects you can access")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def projects_list(base_url: str | None, profile: str | None) -> None:
     resolution = resolve_context(
@@ -955,8 +1090,8 @@ def configs_cmd() -> None:
 
 @configs_cmd.command("list", help="List configs in a project")
 @click.option("--project", default=None, help="Project slug override")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def configs_list(
     project: str | None, base_url: str | None, profile: str | None
@@ -1003,8 +1138,8 @@ def workspace() -> None:
 
 
 @workspace.command("settings", help="Show workspace settings")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_settings(base_url: str | None, profile: str | None) -> None:
     client = _workspace_client(base_url, profile)
@@ -1035,8 +1170,8 @@ def workspace_settings(base_url: str | None, profile: str | None) -> None:
     default=None,
     help="Enable or disable secret reference resolution",
 )
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_settings_set(
     default_workspace_role: str | None,
@@ -1063,8 +1198,8 @@ def workspace_settings_set(
 
 
 @workspace.command("members", help="List workspace members")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_members(base_url: str | None, profile: str | None) -> None:
     client = _workspace_client(base_url, profile)
@@ -1102,8 +1237,8 @@ def workspace_members(base_url: str | None, profile: str | None) -> None:
     default=None,
     help="Role: owner|admin|collaborator|viewer",
 )
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_member_add(
     username: str,
@@ -1137,8 +1272,8 @@ def workspace_member_add(
 @click.option(
     "--disable/--enable", default=None, help="Disable or enable user"
 )
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_member_update(
     username: str,
@@ -1170,8 +1305,8 @@ def workspace_member_update(
 
 @workspace.command("member-disable", help="Disable a workspace member")
 @click.argument("username")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_member_disable(
     username: str, base_url: str | None, profile: str | None
@@ -1182,8 +1317,8 @@ def workspace_member_disable(
 
 
 @workspace.command("groups", help="List workspace groups")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_groups(base_url: str | None, profile: str | None) -> None:
     client = _workspace_client(base_url, profile)
@@ -1205,8 +1340,8 @@ def workspace_groups(base_url: str | None, profile: str | None) -> None:
 @click.option("--slug", prompt=True, help="Group slug")
 @click.option("--name", default=None, help="Group name")
 @click.option("--description", default=None, help="Description")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_group_add(
     slug: str,
@@ -1226,8 +1361,8 @@ def workspace_group_add(
 @click.argument("group_slug")
 @click.option("--name", default=None, help="Group name")
 @click.option("--description", default=None, help="Description")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_group_update(
     group_slug: str,
@@ -1245,8 +1380,8 @@ def workspace_group_update(
 
 @workspace.command("group-delete", help="Delete a workspace group")
 @click.argument("group_slug")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_group_delete(
     group_slug: str, base_url: str | None, profile: str | None
@@ -1258,8 +1393,8 @@ def workspace_group_delete(
 
 @workspace.command("group-members", help="List members in a group")
 @click.argument("group_slug")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_group_members(
     group_slug: str, base_url: str | None, profile: str | None
@@ -1284,8 +1419,8 @@ def workspace_group_members(
     multiple=True,
     help="Username to remove (repeatable)",
 )
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_group_members_set(
     group_slug: str,
@@ -1308,8 +1443,8 @@ def workspace_group_members_set(
 
 
 @workspace.command("mappings", help="List workspace group mappings")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_mappings(base_url: str | None, profile: str | None) -> None:
     client = _workspace_client(base_url, profile)
@@ -1335,8 +1470,8 @@ def workspace_mappings(base_url: str | None, profile: str | None) -> None:
 )
 @click.option("--external-group-key", prompt=True, help="External group key")
 @click.option("--group-slug", prompt=True, help="Target group slug")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_mapping_add(
     provider: str,
@@ -1356,8 +1491,8 @@ def workspace_mapping_add(
 
 @workspace.command("mapping-delete", help="Delete a workspace group mapping")
 @click.argument("mapping_id")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_mapping_delete(
     mapping_id: str, base_url: str | None, profile: str | None
@@ -1369,8 +1504,8 @@ def workspace_mapping_delete(
 
 @workspace.command("project-members", help="List project members")
 @click.option("--project", "project_slug", required=True, help="Project slug")
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_project_members(
     project_slug: str, base_url: str | None, profile: str | None
@@ -1409,8 +1544,8 @@ def workspace_project_members(
     type=click.Choice(["admin", "collaborator", "viewer", "none"]),
     help="Role",
 )
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_project_member_set(
     project_slug: str,
@@ -1443,8 +1578,8 @@ def workspace_project_member_set(
 @click.option(
     "--subject-id", required=True, help="Username (user) or group slug (group)"
 )
-@click.option("--base-url", default=None, help="Base URL override")
-@click.option("--profile", default=None, help="Profile name")
+@base_url_option
+@profile_option
 @_handle_errors
 def workspace_project_member_remove(
     project_slug: str,

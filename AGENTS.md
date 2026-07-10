@@ -17,7 +17,11 @@ Maintain context across sessions. Whenever you hit a non-trivial lesson during
 implementation, write it down in the **Session Lessons (Non-Trivial)** section of
 the nearest `AGENTS.md` (this file for cross-cutting lessons, the scoped file for
 scoped ones). Doing this builds working memory so future sessions run faster and
-smoother.
+smoother. Keep those notes **evergreen and dateless**: never stamp a lesson with a
+calendar date, and every time you touch an `AGENTS.md` revisit its lessons —
+tighten the ones worth keeping and delete the trivial or stale ones. The list is
+curated, not append-only; a growing pile of dated one-offs is the failure mode we
+avoid.
 
 ## Core operating rules
 
@@ -25,7 +29,8 @@ smoother.
 - Separate facts from assumptions, and keep updating both while investigating.
 - Prefer direct evidence (run the code, read the real output) over inferring from a
   description.
-- Use absolute dates and timestamps in findings (example: `2026-07-09 14:30 PT`).
+- Keep `AGENTS.md` notes evergreen and **dateless** — write a lesson as a standing
+  fact, never a timestamped log entry (see the working-memory protocol below).
 - Do not push to a remote unless explicitly asked.
 - Always scan related components before editing so a change stays consistent with
   the surrounding code (KISS/DRY — this is what keeps the codebase from bloating).
@@ -61,14 +66,17 @@ inside it.
 | `ssm_server/access/` | Authentication + RBAC/authorization boundary. See [`ssm_server/access/AGENTS.md`](./ssm_server/access/AGENTS.md). |
 | `ssm_cli/` | The `ssm` CLI client. See [`ssm_cli/AGENTS.md`](./ssm_cli/AGENTS.md). |
 | `ssm_reload/` | The `ssm-reload` container reloader service. See [`ssm_reload/AGENTS.md`](./ssm_reload/AGENTS.md). |
+| `ssm_contracts/` | Typed cross-service **leaf**: Pydantic v2 models for the reload report/status wire format, imported by BOTH `ssm_server` and `ssm_reload`. Imports no app package. See [`ssm_contracts/AGENTS.md`](./ssm_contracts/AGENTS.md). |
+| `ssm_projection/` | Secret-delivery **leaf**: renders a `project/config` to a dotenv file in a pluggable sink (`render_dotenv`, `DirectorySink`, `atomic_write_text`), imported by BOTH `ssm_cli` and `ssm_reload` so the two emit byte-identical `env_file`s. Imports no app package. See [`ssm_projection/AGENTS.md`](./ssm_projection/AGENTS.md). |
+| `ssm_telemetry/` | OpenTelemetry event-emission **leaf**: no-op unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set, imported by BOTH the server and reloader. Imports no app package. See [`ssm_telemetry/AGENTS.md`](./ssm_telemetry/AGENTS.md). |
 | `frontend/` | React + Vite admin console. See [`frontend/AGENTS.md`](./frontend/AGENTS.md). |
-| `tests/` | pytest suite (`tests/{server,cli,reload}`); stub only I/O boundaries. See [`tests/AGENTS.md`](./tests/AGENTS.md). |
+| `tests/` | pytest suite (`tests/{server,cli,reload,contracts,telemetry,projection}`); stub only I/O boundaries. See [`tests/AGENTS.md`](./tests/AGENTS.md). |
 | `scripts/` | Quality gate, version sync, icon index, hook installer. See [`scripts/AGENTS.md`](./scripts/AGENTS.md). |
 | `docs/` | Human-facing docs and the deprecation ledger. See [`docs/AGENTS.md`](./docs/AGENTS.md). |
 | `deploy/` | Deployment-time config consumed by the unified Docker image (`nginx.unified.conf`, `supervisord.conf`). |
 | `ssm_server/connection.py` | `Connection()` — Mongo client wiring shared by the API. |
 | `ssm_server/main.py` | API entry point (`python -m ssm_server.main`). |
-| `pyproject.toml` | Project + deps, managed with `uv`; base install is CLI-only, `server`/`reload`/`all` extras layer on the rest; Ruff/MyPy config; `line-length = 79`. |
+| `pyproject.toml` | Project + deps, managed with `uv`; base install is CLI-only, `server`/`reload`/`otel`/`all` extras layer on the rest (`server`/`reload` pull `pydantic` + `otel`); Ruff/MyPy config; `line-length = 79`. |
 | `.agents/skills/` | Project-local agent skills (`SKILL.md` + `metadata.json` per skill). Not module docs. |
 
 ## Single source of truth: `AGENTS.md`, with `CLAUDE.md` as a symlink
@@ -101,7 +109,8 @@ These apply across every module. Some areas already follow them tightly; others 
 - **Dependencies flow inward.** Orchestration layers import from utility layers; the reverse is a smell. When a low-level helper has to know about a high-level caller, the boundary is wrong — most circular-import pain traces back to this.
 - **Boring code beats clever code.** Reuse the pattern already established in the project. Local cleverness has a price every reader pays; if you must deviate, name the reason inline. Predictability across modules is what keeps onboarding cheap as the team grows.
 - **Add structure only when there's a real concern to separate — You Aren't Gonna Need It (YAGNI).** YAGNI, from Extreme Programming, says: build only what the current requirement demands; do not add abstraction on speculation. Three similar lines is fine. A new helper, class, or subpackage costs review surface for years — pay only when one engineer can plausibly own the new boundary, not for hypothetical future scaling. Applies to abstraction layers as much as to features.
-- **Strong types where they catch bugs.** Narrow literal types for string sets that drive branching, structured types for conditional payload schemas, class-level constants marked as such, explicit return types everywhere. Escape-hatch types (the language's `Any` equivalent) only for genuinely heterogeneous external data, narrowed at the boundary. Introduce protocols / interfaces only when more than one real implementation exists.
+- **No feature flags, and no knobs that keep superseded behavior alive (hard rule).** When a behavior is replaced, **delete the old one** — do not add a setting, env var, strategy literal, or `if legacy:` branch that lets an operator (or a future reader) opt back into it. Such a flag is not a safety net; it is a second code path that must be reasoned about, tested, and documented forever, and it quietly doubles the surface of every later change. The same applies to a knob nobody asked for: a value that has exactly one correct setting is a **constant**, not configuration (`LABEL_PREFIX`, `PROJECTION_DIR`, `Reconciler.SETTLE_SECONDS` are the precedents — see [`ssm_reload/AGENTS.md`](./ssm_reload/AGENTS.md)). A setting earns its existence only when it is genuine **input** that differs per deployment (a URL, a token, which configs to bootstrap), never when it is a switch between an old way and a new way. If a replaced behavior was load-bearing for someone, that is a migration note in the README and the PR body — not a flag.
+- **Strong types where they catch bugs.** Narrow literal types for string sets that drive branching, structured types for conditional payload schemas, class-level constants marked as such, explicit return types everywhere. Escape-hatch types (the language's `Any` equivalent) only for genuinely heterogeneous external data, narrowed at the boundary. Introduce protocols / interfaces only when more than one real implementation exists. New cross-service/wire contracts are expressed as Pydantic v2 models in a shared leaf package rather than hand-validated dicts — `ssm_contracts` is the precedent.
 - **Side effects at the edges, pure logic in the middle.** Input/output, network, database sessions, and time-of-day belong at the module boundary — request handlers, fetchers, drivers. The decision logic in between should be testable without those. Best-effort side effects must isolate their failures: bounded timeout, structured log per outcome, never re-raise into the caller's retry path.
 - **Tests pin contracts, not implementation.** When a test patches a private symbol, that path becomes an implicit contract — moving it silently no-ops the patch and the test still passes. Either surface the seam publicly or update the test in the same commit. Hidden coupling between test and implementation is the most common cause of refactor friction.
 - **Comments and docstrings explain WHY, not WHAT.** Names and types document the what; comments and docstrings carry the constraint, the trade-off, the past incident, the surprising invariant. Docstrings render in Integrated Development Environment (IDE) hover — write the first line for the engineer deciding whether to call this, then add Args / Returns / Raises only for things the type signature doesn't already convey.
@@ -123,6 +132,7 @@ This is the default paradigm for new code, and the one to protect. Follow a clas
 ### Other rules
 
 - Code validates itself at the point of definition (schema validators, strict configs that forbid unknown fields).
+- **One validated settings file per deployable service is the only place environment variables are read.** Each service (`ssm_server`, `ssm_reload`) has a single `pydantic-settings` class holding every env var as a declared, validated field, built once at start-up and constructor-injected (no global accessor); a raw `os.environ`/`os.getenv` anywhere else in that service is a defect. See [`ssm_server/AGENTS.md`](./ssm_server/AGENTS.md) and [`ssm_reload/AGENTS.md`](./ssm_reload/AGENTS.md). The CLI is the deliberate exception (see [`ssm_cli/AGENTS.md`](./ssm_cli/AGENTS.md)).
 - Define logic once; call everywhere — when a rule is reused by more than one caller, it lives in one place.
 - Smallest diff that solves the problem. No speculative abstractions.
 - Keep published contracts stable: interface names, method signatures, and field names don't move under consumers without coordination. **In this repo that specifically means API response contracts stay stable unless an explicit versioned change is requested, and legacy `/api/secrets/kv` endpoints are not removed** — deprecate in layers instead (see [`ssm_server/engines/AGENTS.md`](./ssm_server/engines/AGENTS.md)).
@@ -136,7 +146,8 @@ This is the default paradigm for new code, and the one to protect. Follow a clas
 
 `make check` is the front door; it wraps `./scripts/quality.sh check`, which
 runs, in order: Ruff (lint + format check), targeted Pylint anti-pattern
-checks, MyPy, and pytest. `line-length = 79`. Fix formatting with
+checks, MyPy, import-linter, the generated env-var-reference drift check, and
+pytest. `line-length = 79`. Fix formatting with
 `make fix` / `./scripts/quality.sh fix`. `make precommit-install` wires the
 fast pre-commit gate via `.githooks`. CI (`.github/workflows/quality.yml`)
 fails if the formatter would change anything. See
@@ -183,12 +194,18 @@ Treat it as a first-class deliverable.
   scoped lesson into a stable section once it becomes a standing rule, then trim the log.
 - Non-trivial, reusable takeaways only. Not a play-by-play, nothing already obvious from
   the code.
+- **Never date-stamp a lesson, and keep the list curated, not growing.** Write each
+  lesson as an evergreen standing fact. Every time you edit an `AGENTS.md`, re-read its
+  lessons and prune: tighten what still earns its place, delete anything trivial, stale,
+  or now obvious from the code. A dateless, bounded list beats an append-only log that
+  rots.
 
 ## Session Lessons (Non-Trivial)
 
-> Append-only working memory for **cross-cutting** lessons only. Scoped lessons live
-> in the scoped `AGENTS.md` (linked from the Project structure table). Promote stable
-> rules upward into the sections above, then remove them here. Use absolute dates.
+> Curated working memory for **cross-cutting** lessons only — prune aggressively, never
+> date-stamp. Scoped lessons live in the scoped `AGENTS.md` (linked from the Project
+> structure table). Promote stable rules upward into the sections above, then remove
+> them here; delete anything trivial or stale on sight.
 
 - **`git push` is blocked by the pre-push hook when the working tree is dirty**, even
   if the dirty files are unrelated to the commit being pushed. Practical workflow:
@@ -218,7 +235,7 @@ Treat it as a first-class deliverable.
   DeepSource/Pylint mapping in [`scripts/AGENTS.md`](./scripts/AGENTS.md). Add new lessons to the
   nearest scope, not here, unless they are genuinely cross-cutting.
 - **The `Api/Engines/Access` → `ssm_server/{api,engines,access}` restructure
-  (2026-07, commit `22593a1`) was about giving the server a home, not just
+  (commit `22593a1`) was about giving the server a home, not just
   renaming folders.** Before it, the server's four packages sat loose at the
   repo root next to the CLI and reloader with no shared namespace, and a
   repo-root `docker/` config directory shadowed the `docker` Python SDK that
@@ -233,3 +250,38 @@ Treat it as a first-class deliverable.
   prose (`Api → Engines/Access`, `ssm_reload` never importing the server
   packages) — read the linter config if a legitimate new import gets
   rejected, don't just silence it.
+- **A container's environment is frozen at CREATE time — so "deliver the
+  secrets to whoever creates the container" beats "fix the container
+  afterwards", every time.** This is the constraint behind the split between
+  `ssm_projection` (delivery: render a config to a dotenv file the creator
+  reads) and `ssm_reload`'s convergence loop (recreate only what SSM itself
+  owns). Post-hoc injection cannot satisfy a FIRST boot at all — the container
+  comes up without its secrets, crashes, and only then can anything react — and
+  a tool that recreates containers it did not create will race their real owner
+  (it renamed a compose container aside mid-`compose up` and killed the deploy).
+  If a future feature is tempted to mutate a running workload, ask first
+  whether the same outcome can be reached by putting the right bytes where its
+  creator already looks. Corollary, verified live (Compose v5.3.1 / Docker
+  29.6.1): compose MERGES `env_file` with `environment` (so app-native config
+  stays in git next to injected secrets) and folds the `env_file`'s CONTENTS
+  into its config hash (so rewriting the file makes `docker compose up -d`
+  recreate exactly the affected services, in dependency order).
+- **Shared typed contracts live in a top-level leaf package, not inside a
+  producer or consumer.** The reload-transparency pipeline needs
+  ONE definition of the report/status wire format that both `ssm_server` and
+  `ssm_reload` agree on. Putting it in either side would violate the reloader's
+  hard backend-isolation (if it lived in `ssm_server`) or make the server
+  import the reloader. The fix: a dedicated leaf, `ssm_contracts` (Pydantic v2,
+  camelCase via `alias_generator=to_camel` + `populate_by_name`,
+  `extra="ignore"` so version drift never hard-fails). Both sides import it; it
+  imports no app package (import-linter enforces the leaf rule). The reloader
+  builds `ReloadReport` and `model_dump(by_alias=True)`; the server
+  `model_validate`s the body and dumps the response through the same models —
+  one source of truth, the HTTP boundary the only coupling. The companion leaf
+  `ssm_telemetry` follows the identical pattern for OTel events (Logs API +
+  `event_name`, no-op unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set), and
+  `ssm_projection` for the dotenv renderer the CLI and the reloader must emit
+  BYTE-IDENTICALLY (compose hashes the file's contents; two renderers that
+  disagreed on key order would fight each other forever). When you need a shape
+  — or an output format — shared across the import boundary, add a leaf; don't
+  reach across it, and don't duplicate it.

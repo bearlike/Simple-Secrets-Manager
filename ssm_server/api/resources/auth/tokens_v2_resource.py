@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import g
 from flask_restx import Resource, inputs
@@ -79,7 +79,9 @@ class ServiceTokenResource(Resource):
         scopes = _scope_from_request(
             args.get("project"), args.get("config"), args["actions"]
         )
-        expires_at = datetime.utcnow() + timedelta(seconds=args["ttl_seconds"])
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            seconds=args["ttl_seconds"]
+        )
         result = conn.tokens.create_token(
             token_type="service",
             created_by=g.actor.get("subject_user")
@@ -105,7 +107,9 @@ class PersonalTokenResource(Resource):
             args.get("project"), args.get("config"), args.get("actions") or []
         )
         ttl_seconds = max(1, min(int(args["ttl_seconds"]), 24 * 60 * 60))
-        expires_at = datetime.utcnow() + timedelta(seconds=ttl_seconds)
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            seconds=ttl_seconds
+        )
         result = conn.tokens.create_token(
             token_type="personal",
             created_by=g.actor.get("subject_user")

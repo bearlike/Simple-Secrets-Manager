@@ -1,16 +1,17 @@
 import { apiClient } from './client';
 import { mapMeResponseDto } from './mappers';
-import type { MeProfile, MeResponseDto } from './types';
+import { meResponseDtoSchema } from './schemas';
+import type { MeProfile } from './types';
 
 export async function getMe(): Promise<MeProfile> {
-  const response = await apiClient<MeResponseDto>('/me');
-  return mapMeResponseDto(response);
+  const response = await apiClient<unknown>('/me');
+  return mapMeResponseDto(meResponseDtoSchema.parse(response));
 }
 
 export async function updateMe(input: { email?: string; fullName?: string }): Promise<MeProfile> {
-  const response = await apiClient<MeResponseDto>('/me', {
+  const response = await apiClient<unknown>('/me', {
     method: 'PATCH',
     body: JSON.stringify(input)
   });
-  return mapMeResponseDto(response);
+  return mapMeResponseDto(meResponseDtoSchema.parse(response));
 }

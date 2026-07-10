@@ -1,6 +1,7 @@
 import { apiClient } from './client';
 import { mapSecretComparisonResponse } from './mappers';
-import type { SecretComparisonResponseDto, SecretComparisonResult } from './types';
+import { secretComparisonResponseDtoSchema } from './schemas';
+import type { SecretComparisonResult } from './types';
 
 export interface SecretCompareOptions {
   includeParent?: boolean;
@@ -24,8 +25,8 @@ export async function getSecretComparison(
     raw: String(options?.raw ?? false),
     limit_configs: String(options?.limitConfigs ?? 200)
   });
-  const response = await apiClient<SecretComparisonResponseDto>(
+  const response = await apiClient<unknown>(
     `/projects/${projectSlug}/compare/secrets/${encodeURIComponent(key)}?${params.toString()}`
   );
-  return mapSecretComparisonResponse(response);
+  return mapSecretComparisonResponse(secretComparisonResponseDtoSchema.parse(response));
 }

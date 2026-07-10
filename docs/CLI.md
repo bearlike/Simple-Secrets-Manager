@@ -103,6 +103,14 @@ ssm-cli secrets download --profile dev --format env
 ssm-cli secrets download --profile dev --format json --raw
 ```
 
+> [!NOTE]
+> JSON export `meta` carries a per-key `sensitive` flag (absent = sensitive),
+> and, when the export is requested with `include_provenance=true`, `source`
+> (the config slug that supplied the effective value) and `isInherited`. With
+> that flag an `env` export also prepends a `# from <config>[: <description>]`
+> comment above each key. Provenance and sensitivity live in metadata only, so
+> they never change the export ETag used for change detection.
+
 Set one secret:
 
 ```bash
@@ -117,6 +125,23 @@ ssm-cli secrets upload --profile dev --env-file .env.production
 ssm-cli secrets upload --profile dev --json-file ./secrets.json
 cat ./secrets.json | ssm-cli secrets upload --profile dev --stdin --format json
 ```
+
+Materialize secrets as a dotenv file (for `env_file:` / `EnvironmentFile=`):
+
+```bash
+# Writes <project>-<config>.env into the directory, mode 0640.
+ssm-cli secrets materialize --profile dev --dir /run/ssm
+# Writes one exact file — what systemd's EnvironmentFile= expects.
+ssm-cli secrets materialize --profile dev --path /etc/gluetun.env
+```
+
+A container's environment is frozen when it is created, so its secrets have to
+be on disk *before* `docker compose up` — compose refuses to start a service
+whose `env_file` is missing. This command is that bootstrap (and the systemd
+entry point); [`ssm-reload`](SECRETS_RELOADER.md) keeps the same file fresh
+afterwards, rendering byte-identical contents so the two never fight. Values
+are double-quoted and escaped (`\`, `"`, `$`, newlines), so a secret containing
+`$` is never interpolated away by the compose client.
 
 Mount secrets to FIFO:
 
@@ -248,7 +273,7 @@ Test overrides via env vars:
 
 - Settings:
   - `workspace settings`
-  - `workspace settings-set --default-workspace-role ... --default-project-role ... --referencing-enabled true|false`
+  - `workspace settings-set --default-workspace-role ... --default-project-role ... --referencing-enabled|--referencing-disabled`
 - Members:
   - `workspace members`
   - `workspace member-add`

@@ -431,7 +431,7 @@ class WorkspaceProjectMemberItemResource(Resource):
             if group:
                 membership_subject_id = str(group.get("_id"))
 
-        msg, code = conn.memberships.remove_project_membership(
+        _, msg, code = conn.memberships.remove_project_membership(
             workspace_id,
             project["_id"],
             subject_type,
@@ -497,7 +497,7 @@ class WorkspaceGroupItemResource(Resource):
     def delete(self, group_slug):
         require_scope("workspace:groups:manage")
         _, workspace_id = _workspace_context()
-        msg, code = conn.groups.delete_group(workspace_id, group_slug)
+        _, msg, code = conn.groups.delete_group(workspace_id, group_slug)
         if code >= 400:
             api.abort(code, msg)
         return {"status": "OK"}, 200
@@ -611,7 +611,9 @@ class WorkspaceGroupMappingItemResource(Resource):
     def delete(self, mapping_id):
         require_scope("workspace:mappings:manage")
         _, workspace_id = _workspace_context()
-        msg, code = conn.groups.delete_group_mapping(workspace_id, mapping_id)
+        _, msg, code = conn.groups.delete_group_mapping(
+            workspace_id, mapping_id
+        )
         if code >= 400:
             api.abort(code, msg)
         return {"status": "OK"}, 200

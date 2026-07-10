@@ -12,8 +12,10 @@ import {
   DialogTitle
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
+import { IconSlugPicker } from './IconSlugPicker';
 import { ApiClientError } from '../../lib/api/client';
 import { updateSecret } from '../../lib/api/secrets';
 import { queryKeys } from '../../lib/api/queryKeys';
@@ -28,13 +30,15 @@ import {
 
 const schema = z.object({
   value: z.string(),
+  sensitive: z.boolean(),
   iconSlug: z
     .string()
     .optional()
     .transform((value) => value?.trim().toLowerCase() ?? '')
     .refine((value) => value.length === 0 || /^[a-z0-9-]+:[a-z0-9][a-z0-9-]*$/.test(value), {
       message: 'Icon slug must match "prefix:name"'
-    })
+    }),
+  description: z.string().optional()
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -59,7 +63,6 @@ export function EditSecretDialog({
   const [pendingSubmit, setPendingSubmit] = useState<FormValues | null>(null);
   const {
     control,
-    register,
     handleSubmit,
     reset,
     formState: { errors }
@@ -67,23 +70,29 @@ export function EditSecretDialog({
     resolver: zodResolver(schema),
     defaultValues: {
       value: secret?.value ?? '',
-      iconSlug: secret?.iconSlug ?? ''
+      sensitive: secret?.sensitive ?? true,
+      iconSlug: secret?.iconSlug ?? '',
+      description: secret?.description ?? ''
     }
   });
 
   useEffect(() => {
     reset({
       value: secret?.value ?? '',
-      iconSlug: secret?.iconSlug ?? ''
+      sensitive: secret?.sensitive ?? true,
+      iconSlug: secret?.iconSlug ?? '',
+      description: secret?.description ?? ''
     });
-  }, [secret?.key, secret?.value, secret?.iconSlug, reset]);
+  }, [secret?.key, secret?.value, secret?.sensitive, secret?.iconSlug, secret?.description, reset]);
 
   const mutation = useMutation({
     mutationFn: (data: FormValues) => {
       if (!secret) throw new Error('No secret selected');
       return updateSecret(projectSlug, configSlug, secret.key, {
         value: data.value,
-        iconSlug: data.iconSlug || null
+        iconSlug: data.iconSlug || null,
+        sensitive: data.sensitive,
+        description: data.description?.trim() || null
       });
     },
     onSuccess: () => {
@@ -145,15 +154,58 @@ export function EditSecretDialog({
 
             <div className="space-y-1.5">
               <Label htmlFor="iconSlug">Icon slug</Label>
-              <Input
-                id="iconSlug"
-                {...register('iconSlug')}
-                placeholder="simple-icons:sqlalchemy"
-                className="font-mono"
-                autoComplete="off"
+              <Controller
+                name="iconSlug"
+                control={control}
+                render={({ field }) => (
+                  <IconSlugPicker
+                    id="iconSlug"
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    placeholder="simple-icons:sqlalchemy"
+                  />
+                )}
               />
               {errors.iconSlug && <p className="text-xs text-destructive">{errors.iconSlug.message}</p>}
               <p className="text-xs text-muted-foreground">Clear this field to reset back to auto-detected icon</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="secret-edit-description">Description (optional)</Label>
+              <Controller
+                name="description"
+                control={control}
+                render={({ field }) => (
+                  <Textarea
+                    id="secret-edit-description"
+                    value={field.value ?? ''}
+                    onChange={field.onChange}
+                    rows={2}
+                    placeholder="What is this secret for?"
+                  />
+                )}
+              />
+              <p className="text-xs text-muted-foreground">Optional. A short note about what this secret is for.</p>
+            </div>
+
+            <div className="flex items-start justify-between gap-4 rounded-md border border-border px-3 py-2.5">
+              <div className="space-y-0.5">
+                <Label htmlFor="secret-edit-sensitive">Sensitive</Label>
+                <p className="text-xs text-muted-foreground">
+                  Masked in tables until revealed. Turn off for non-secret config values.
+                </p>
+              </div>
+              <Controller
+                name="sensitive"
+                control={control}
+                render={({ field }) => (
+                  <Switch
+                    id="secret-edit-sensitive"
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                )}
+              />
             </div>
 
             <div className="space-y-1.5">

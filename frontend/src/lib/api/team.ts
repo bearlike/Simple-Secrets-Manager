@@ -4,18 +4,23 @@ import {
   mapWorkspaceProjectMemberDto,
   mapWorkspaceSettingsResponseDto
 } from './mappers';
+import {
+  parseListSafely,
+  workspaceMemberDtoSchema,
+  workspaceProjectMemberDtoSchema,
+  workspaceSettingsResponseDtoSchema
+} from './schemas';
 import type {
   WorkspaceMember,
   WorkspaceMembersResponseDto,
   WorkspaceProjectMember,
   WorkspaceProjectMembersResponseDto,
-  WorkspaceSettings,
-  WorkspaceSettingsResponseDto
+  WorkspaceSettings
 } from './types';
 
 export async function getWorkspaceSettings(): Promise<WorkspaceSettings> {
-  const response = await apiClient<WorkspaceSettingsResponseDto>('/workspace/settings');
-  return mapWorkspaceSettingsResponseDto(response);
+  const response = await apiClient<unknown>('/workspace/settings');
+  return mapWorkspaceSettingsResponseDto(workspaceSettingsResponseDtoSchema.parse(response));
 }
 
 export async function updateWorkspaceSettings(
@@ -25,16 +30,16 @@ export async function updateWorkspaceSettings(
     referencingEnabled: boolean;
   }>
 ): Promise<WorkspaceSettings> {
-  const response = await apiClient<WorkspaceSettingsResponseDto>('/workspace/settings', {
+  const response = await apiClient<unknown>('/workspace/settings', {
     method: 'PATCH',
     body: JSON.stringify(updates)
   });
-  return mapWorkspaceSettingsResponseDto(response);
+  return mapWorkspaceSettingsResponseDto(workspaceSettingsResponseDtoSchema.parse(response));
 }
 
 export async function getWorkspaceMembers(): Promise<WorkspaceMember[]> {
   const response = await apiClient<WorkspaceMembersResponseDto>('/workspace/members');
-  return (response.members ?? []).map(mapWorkspaceMemberDto);
+  return parseListSafely(workspaceMemberDtoSchema, response.members).map(mapWorkspaceMemberDto);
 }
 
 export async function createWorkspaceMember(input: {
@@ -65,17 +70,11 @@ export async function updateWorkspaceMember(
   });
 }
 
-export async function disableWorkspaceMember(username: string) {
-  await apiClient<WorkspaceMembersResponseDto>(`/workspace/members/${username}`, {
-    method: 'DELETE'
-  });
-}
-
 export async function getProjectMembers(projectSlug: string): Promise<WorkspaceProjectMember[]> {
   const response = await apiClient<WorkspaceProjectMembersResponseDto>(
     `/workspace/projects/${projectSlug}/members`
   );
-  return (response.members ?? []).map(mapWorkspaceProjectMemberDto);
+  return parseListSafely(workspaceProjectMemberDtoSchema, response.members).map(mapWorkspaceProjectMemberDto);
 }
 
 export async function setProjectMember(input: {

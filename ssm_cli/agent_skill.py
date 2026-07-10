@@ -24,7 +24,6 @@ SKILL_NAME = "using-ssm"
 # skills under (``~/.claude`` for user scope, ``.claude`` for project scope).
 AGENT_DIRS: dict[str, str] = {"claude": ".claude", "codex": ".codex"}
 
-Agent = Literal["claude", "codex"]
 Scope = Literal["user", "project"]
 
 # The product itself. Keep it short and rot-proof: point agents at

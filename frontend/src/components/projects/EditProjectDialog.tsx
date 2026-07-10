@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -28,7 +29,8 @@ import type { Project } from '../../lib/api/types';
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
-  archived: z.boolean()
+  archived: z.boolean(),
+  description: z.string().optional()
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -52,12 +54,16 @@ export function EditProjectDialog({
     formState: { errors }
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { name: '', archived: false }
+    defaultValues: { name: '', archived: false, description: '' }
   });
 
   useEffect(() => {
     if (open && project) {
-      reset({ name: project.name, archived: Boolean(project.archived) });
+      reset({
+        name: project.name,
+        archived: Boolean(project.archived),
+        description: project.description ?? ''
+      });
     }
   }, [open, project, reset]);
 
@@ -68,7 +74,8 @@ export function EditProjectDialog({
       }
       return updateProject(project.slug, {
         name: data.name,
-        archived: data.archived
+        archived: data.archived,
+        description: data.description ?? ''
       });
     },
     onSuccess: () => {
@@ -100,6 +107,19 @@ export function EditProjectDialog({
             {errors.name &&
             <p className="text-xs text-destructive">{errors.name.message}</p>
             }
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-project-description">
+              Description{' '}
+              <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Textarea
+              id="edit-project-description"
+              {...register('description')}
+              placeholder="Brief description..."
+              rows={2}
+              className="resize-none" />
+
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="edit-project-status">Status</Label>

@@ -111,6 +111,7 @@ celerybeat.pid
 # Environments
 .env
 *.prod.env
+docker.env
 .venv
 env/
 venv/
@@ -159,3 +160,7 @@ frontend/.env.local
 # Frontend source files under src/lib must be versioned.
 !frontend/src/lib/
 !frontend/src/lib/**
+
+# Agent worktrees (session-local, never committed)
+.claude/worktrees/
+/.playwright-mcp

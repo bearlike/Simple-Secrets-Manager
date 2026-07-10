@@ -4,47 +4,7 @@ from bson import ObjectId
 
 from ssm_server.engines.configs import Configs
 
-
-class FakeCursor:
-    def __init__(self, docs):
-        self.docs = docs
-
-    def sort(self, key, direction):
-        reverse = direction == -1
-        self.docs.sort(key=lambda item: item.get(key), reverse=reverse)
-        return self
-
-    def limit(self, n):
-        self.docs = self.docs[:n]
-        return self
-
-    def __iter__(self):
-        return iter(self.docs)
-
-
-class FakeCollection:
-    def __init__(self, docs):
-        self.docs = docs
-
-    def create_index(self, *_args, **_kwargs):
-        return None
-
-    def find(self, query, projection):
-        _ = projection
-        project_id = query.get("project_id")
-        docs = [
-            doc for doc in self.docs if doc.get("project_id") == project_id
-        ]
-        return FakeCursor(list(docs))
-
-    def find_one(self, query, projection=None):
-        _ = projection
-        for doc in self.docs:
-            if query.get("_id") == doc.get("_id") and query.get(
-                "project_id"
-            ) == doc.get("project_id"):
-                return doc
-        return None
+from tests.server.fakes import FakeCollection
 
 
 def test_configs_list_returns_frontend_shape():
@@ -77,12 +37,14 @@ def test_configs_list_returns_frontend_shape():
             "slug": "base",
             "name": "Base",
             "parentSlug": None,
+            "description": None,
             "createdAt": "2026-01-01T00:00:00Z",
         },
         {
             "slug": "dev",
             "name": "Dev",
             "parentSlug": "base",
+            "description": None,
             "createdAt": "2026-01-02T00:00:00Z",
         },
     ]

@@ -9,7 +9,7 @@
 
 The Flask + flask-restx REST API server package — everything that used to sit
 as loose `Api/`, `Engines/`, `Access/` packages at the repo root before the
-2026-07 restructure (see the root `AGENTS.md` Session Lessons) now lives under
+restructure (see the root `AGENTS.md` Session Lessons) now lives under
 this one namespace.
 
 | Area | Answers | Guide |
@@ -27,6 +27,21 @@ actually editing.
 
 ## Non-obvious decisions
 
+- **One settings file, read once, injected everywhere: `settings.py` →
+  `ServerSettings`.** Every environment variable the server honors
+  (`CONNECTION_STRING`, `TOKEN_SALT`, `CORS_ORIGINS`, `DEBUG`, `BIND_HOST`,
+  `PORT`, `OTEL_EXPORTER_OTLP_ENDPOINT`) is a declared, validated field on this
+  one `pydantic-settings` model — a raw `os.environ`/`os.getenv` anywhere else
+  in `ssm_server/` is a defect (`grep` returns zero). It is a LEAF (imports
+  nothing from `ssm_server`) so the hermetic suite can import and unit-test it
+  without Mongo. `ServerSettings` is built exactly ONCE, at `api/core.py`
+  module scope, and injected: `settings = ServerSettings()` (fail-fast) →
+  `conn = Connection(settings)` → `Tokens(..., token_salt=settings.token_salt)`
+  (which fixed the old DI violation where `Tokens` reached into `os.environ`
+  itself). `api.py` reads `settings.cors_origins_list` from `core`; `main.py`
+  reads host/port/debug and the OTel endpoint from it. There is deliberately
+  NO `get_settings()`/`lru_cache` global accessor — one immutable object,
+  constructor-injected.
 - **Importing `ssm_server.api.core` has side effects.** Its module-level
   `conn = Connection()` eagerly opens Mongo and builds indexes, and
   `ssm_server.api.api` (which every resource module imports to register its
@@ -45,6 +60,38 @@ actually editing.
 
 ## Session Lessons (Non-Trivial)
 
+- **The per-service settings file exists because a scattered config surface
+  let an unwanted knob ship unnoticed.** The fix is one
+  validated `pydantic-settings` class per deployable service (`ServerSettings`
+  here); design decisions were distilled from bearlike/Grove's `config.py`:
+  **pydantic-settings over a hand-rolled env cascade** (two layers only —
+  model defaults, then env/`.env`; Grove's multi-file cascade solves a
+  per-developer-repo problem we don't have); **`frozen=True` +
+  `validate_default=True`**, fields declared with explicit `validation_alias`
+  matching the EXACT existing env var names (the operator contract must not
+  move) and `Field` constraints (`ge`/`le`) over custom validators;
+  **`SecretStr` for secrets** (`TOKEN_SALT`) so no repr/log leaks them, unwrapped
+  with `.get_secret_value()` only at the single point of use (token hashing);
+  **settings-object DI over a global accessor** — no `get_settings()`/`lru_cache`;
+  **direct-construction test seam** — `ServerSettings(_env_file=None, **kwargs)`
+  (needs `populate_by_name=True`) so unit tests bypass the environment.
+  Behavior deltas worth remembering: `PORT`/`DEBUG` are now *validated* (a
+  non-numeric `PORT` fails fast instead of reaching Flask raw), and the
+  undocumented, unused, buggy `PASSWORD_POLICY_*` env overrides were DELETED —
+  their values arrived as `str` and the numeric comparisons in
+  `userpass._password_policy.check()` would have `TypeError`d the moment anyone
+  set one; the defaults `(6,1,1,1,1)` are now hardcoded class constants.
+- **Import-order constraint: settings must be validated before `Connection`,
+  at `core.py` module scope.** `core.py` does
+  `settings = _load_settings()` (which wraps a pydantic `ValidationError` into a
+  clean one-line loguru error and `sys.exit`s non-zero — never a raw traceback)
+  BEFORE `conn = Connection(settings)`, because `Connection.__init__` opens
+  Mongo immediately. `settings.py` is a LEAF (imports nothing from
+  `ssm_server`) precisely so this ordering can't create an import cycle and the
+  hermetic suite can import it without Mongo. `python-dotenv`/`load_dotenv()`
+  and the local `strtobool` were removed: `SettingsConfigDict(env_file=".env")`
+  loads the dotenv (via pydantic-settings' own `python-dotenv` dep) and pydantic
+  parses booleans.
 - See the root [`AGENTS.md`](../AGENTS.md) Session Lessons for the
   `Api/Engines/Access` → `ssm_server/{api,engines,access}` restructure
   rationale (server needed a home, `docker/` shadowed the `docker` SDK,

@@ -1,15 +1,6 @@
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import {
-  DownloadIcon,
-  EllipsisIcon,
-  GithubIcon,
-  GroupIcon,
-  LogOutIcon,
-  SettingsIcon,
-  UserCircle2Icon,
-  UsersIcon
-} from 'lucide-react';
+import { DownloadIcon, EllipsisIcon, SettingsIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Breadcrumb,
@@ -41,13 +32,8 @@ import {
 import { getProjects } from '../../lib/api/projects';
 import { getConfigs } from '../../lib/api/configs';
 import { bulkExport } from '../../lib/api/secrets';
-import { getAppVersion } from '../../lib/api/version';
-import { getMe } from '../../lib/api/me';
 import { queryKeys } from '../../lib/api/queryKeys';
-import { useAuth } from '../../lib/auth';
 import { notifyApiError } from '../../lib/api/errorToast';
-
-const REPOSITORY_URL = 'https://github.com/bearlike/Simple-Secrets-Manager';
 
 function downloadFile(content: string, filename: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -66,7 +52,6 @@ export function TopBar() {
   }>();
   const navigate = useNavigate();
   const location = useLocation();
-  const { logout } = useAuth();
   const isCompareBySecretPage = Boolean(projectSlug) && location.pathname.endsWith('/compare/secret');
 
   const { data: projects = [] } = useQuery({
@@ -79,15 +64,6 @@ export function TopBar() {
     queryKey: queryKeys.configs(projectSlug ?? ''),
     queryFn: () => getConfigs(projectSlug ?? ''),
     enabled: !!projectSlug
-  });
-  const { data: appVersion = 'unknown' } = useQuery({
-    queryKey: queryKeys.appVersion(),
-    queryFn: getAppVersion,
-    staleTime: 5 * 60 * 1000
-  });
-  const { data: me } = useQuery({
-    queryKey: queryKeys.me(),
-    queryFn: getMe
   });
 
   const currentProject = projects.find((project) => project.slug === projectSlug);
@@ -204,19 +180,6 @@ export function TopBar() {
             </div>
           )}
 
-          <Button variant="outline" size="sm" className="hidden h-8 gap-1.5 px-2.5 text-xs lg:inline-flex" asChild>
-            <a
-              href={REPOSITORY_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`Open repository on GitHub (v${appVersion})`}
-            >
-              <GithubIcon className="h-3.5 w-3.5" />
-              <span className="hidden xl:inline">{`GitHub v${appVersion}`}</span>
-              <span className="sr-only xl:hidden">{`GitHub v${appVersion}`}</span>
-            </a>
-          </Button>
-
           {projectSlug && (
             <Button
               variant="ghost"
@@ -253,11 +216,6 @@ export function TopBar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuItem onClick={() => window.open(REPOSITORY_URL, '_blank', 'noopener,noreferrer')}>
-                <GithubIcon className="mr-2 h-3.5 w-3.5" />
-                {`Open GitHub (v${appVersion})`}
-              </DropdownMenuItem>
-
               {projectSlug && (
                 <DropdownMenuItem onClick={() => navigate(`/projects/${projectSlug}/settings`)}>
                   <SettingsIcon className="mr-2 h-3.5 w-3.5" />
@@ -289,38 +247,6 @@ export function TopBar() {
                   </DropdownMenuSub>
                 </>
               )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 gap-1.5 px-2 text-xs">
-                <UserCircle2Icon className="h-4 w-4" />
-                <span className="hidden max-w-28 truncate sm:inline">{me?.username ?? 'Account'}</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => navigate('/account')}>
-                <UserCircle2Icon className="mr-2 h-3.5 w-3.5" />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate('/team')}>
-                <UsersIcon className="mr-2 h-3.5 w-3.5" />
-                Team
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate('/groups')}>
-                <GroupIcon className="mr-2 h-3.5 w-3.5" />
-                Groups
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  logout();
-                  navigate('/login');
-                }}
-              >
-                <LogOutIcon className="mr-2 h-3.5 w-3.5" />
-                Sign Out
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

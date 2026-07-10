@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 from flask_restx import Resource
-from flask import g
 
 from ssm_server.api.core import api, conn
 from ssm_server.api.resources.helpers import resolve_project_config
-from ssm_server.access.is_auth import with_token, require_scope
+from ssm_server.access.is_auth import (
+    with_token,
+    require_scope,
+    audit_event,
+)
 
 configs_ns = api.namespace(
     "projects/<string:project_slug>/configs", description="Config management"
@@ -19,6 +22,9 @@ config_create_parser.add_argument(
 config_create_parser.add_argument(
     "parent", type=str, required=False, location="json"
 )
+config_create_parser.add_argument(
+    "description", type=str, required=False, location="json"
+)
 config_update_parser = api.parser()
 config_update_parser.add_argument(
     "name", type=str, required=False, location="json", store_missing=False
@@ -26,21 +32,41 @@ config_update_parser.add_argument(
 config_update_parser.add_argument(
     "parent", type=str, required=False, location="json", store_missing=False
 )
+config_update_parser.add_argument(
+    "description",
+    type=str,
+    required=False,
+    location="json",
+    store_missing=False,
+)
 
 
-def _config_audit_event(action, project_slug, config_slug, method, path):
-    return {
-        "actor_type": "token",
-        "actor_id": g.actor.get("id"),
-        "token_id": g.actor.get("token_id"),
-        "action": action,
-        "project_slug": project_slug,
-        "config_slug": config_slug,
-        "method": method,
-        "path": path,
-        "status_code": 200,
-        "latency_ms": 0,
-    }
+def _referencing_config_labels(config_ids, project_slug):
+    """Render referencing configs without leaking out-of-scope slugs.
+
+    Same-project references are named ``project/config`` so the 409 is
+    actionable; references from OTHER projects collapse to a count — the
+    deleter's ``configs:write`` on this project proves nothing about
+    visibility over those, so their slugs must not appear in the error.
+    """
+    labels = set()
+    foreign_project_ids = set()
+    for config_id in config_ids:
+        cfg = conn.configs.get_by_id(config_id)
+        if not cfg:
+            continue
+        project = conn.projects.get_by_id(cfg.get("project_id"))
+        slug = project.get("slug") if project else None
+        if slug == project_slug:
+            labels.add(f"{slug}/{cfg.get('slug')}")
+        else:
+            foreign_project_ids.add(str(cfg.get("project_id")))
+    parts = sorted(labels)
+    if foreign_project_ids:
+        count = len(foreign_project_ids)
+        plural = "s" if count != 1 else ""
+        parts.append(f"{count} other project{plural}")
+    return parts
 
 
 @configs_ns.route("")
@@ -65,13 +91,21 @@ class ConfigsResource(Resource):
             )
             parent_id = parent_cfg["_id"]
         result, code = conn.configs.create(
-            project["_id"], args["slug"], args.get("name"), parent_id
+            project["_id"],
+            args["slug"],
+            args.get("name"),
+            parent_id,
+            description=args.get("description"),
         )
         if code >= 400:
             api.abort(code, result)
         return {
             "status": "OK",
-            "config": {"slug": result["slug"], "name": result["name"]},
+            "config": {
+                "slug": result["slug"],
+                "name": result["name"],
+                "description": result.get("description"),
+            },
         }, 201
 
 
@@ -102,23 +136,22 @@ class ConfigItemResource(Resource):
             name=args.get("name"),
             parent_config_id=parent_config_id,
             parent_provided=parent_provided,
+            description=args.get("description"),
         )
         if code >= 400:
             api.abort(code, result)
-        conn.audit.write_event(
-            _config_audit_event(
-                "configs.write",
-                project_slug,
-                config_slug,
-                "PATCH",
-                f"/api/projects/{project_slug}/configs/{config_slug}",
-            )
+        audit_event(
+            "configs.write",
+            project_slug=project_slug,
+            config_slug=config_slug,
+            status_code=200,
         )
         return {
             "status": "OK",
             "config": {
                 "slug": result.get("slug"),
                 "name": result.get("name"),
+                "description": result.get("description"),
             },
         }, 200
 
@@ -127,18 +160,31 @@ class ConfigItemResource(Resource):
     def delete(self, project_slug, config_slug):
         project, config = resolve_project_config(project_slug, config_slug)
         require_scope("configs:write", project_id=project["_id"])
+        # Block deletes that would leave dangling ${...} references: a config
+        # removed while other secrets still point at it only fails later, at
+        # read time. Mirror the child-config 409 and name the offenders.
+        referencing_ids = conn.secrets_v2.find_configs_referencing(
+            config["_id"],
+            project_slug,
+            config_slug,
+            conn.configs.list_ids(project["_id"]),
+        )
+        if referencing_ids:
+            labels = _referencing_config_labels(referencing_ids, project_slug)
+            api.abort(
+                409,
+                "Config is referenced by secrets in "
+                f"{', '.join(labels)}; update them first",
+            )
         result, code = conn.configs.delete(project["_id"], config_slug)
         if code >= 400:
             api.abort(code, result)
         conn.secrets_v2.delete_by_config(config["_id"])
         conn.secrets_v2.recompute_project_icon_slugs(project["_id"])
-        conn.audit.write_event(
-            _config_audit_event(
-                "configs.delete",
-                project_slug,
-                config_slug,
-                "DELETE",
-                f"/api/projects/{project_slug}/configs/{config_slug}",
-            )
+        audit_event(
+            "configs.delete",
+            project_slug=project_slug,
+            config_slug=config_slug,
+            status_code=200,
         )
         return {"status": "OK"}, 200

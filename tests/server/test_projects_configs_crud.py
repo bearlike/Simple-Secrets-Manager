@@ -7,93 +7,15 @@ collection that understands the handful of query operators the engines use.
 from datetime import datetime, timezone
 
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
+from ssm_server.api.serialization import to_iso
 from ssm_server.engines.configs import Configs
 from ssm_server.engines.memberships import Memberships
 from ssm_server.engines.projects import Projects
 from ssm_server.engines.secrets_v2 import SecretsV2
 
-
-class _DeleteResult:
-    def __init__(self, deleted_count):
-        self.deleted_count = deleted_count
-
-
-class _UpdateResult:
-    def __init__(self, matched_count):
-        self.matched_count = matched_count
-        self.modified_count = matched_count
-
-
-def _matches(doc, query):
-    for key, cond in query.items():
-        value = doc.get(key)
-        if isinstance(cond, dict) and "$in" in cond:
-            if value not in cond["$in"]:
-                return False
-        elif value != cond:
-            return False
-    return True
-
-
-class FakeCursor:
-    def __init__(self, docs):
-        self.docs = docs
-
-    def sort(self, key, direction=1):
-        self.docs.sort(key=lambda item: item.get(key), reverse=direction == -1)
-        return self
-
-    def limit(self, n):
-        self.docs = self.docs[:n]
-        return self
-
-    def __iter__(self):
-        return iter(self.docs)
-
-
-class FakeCollection:
-    def __init__(self, docs=None):
-        self.docs = list(docs or [])
-
-    def create_index(self, *_args, **_kwargs):
-        return None
-
-    def insert_one(self, doc):
-        self.docs.append(doc)
-
-    def find(self, query=None, projection=None):
-        _ = projection
-        query = query or {}
-        return FakeCursor([d for d in self.docs if _matches(d, query)])
-
-    def find_one(self, query, projection=None):
-        _ = projection
-        for doc in self.docs:
-            if _matches(doc, query):
-                return doc
-        return None
-
-    def update_one(self, query, update, upsert=False):
-        _ = upsert
-        for doc in self.docs:
-            if _matches(doc, query):
-                doc.update(update.get("$set", {}))
-                return _UpdateResult(1)
-        return _UpdateResult(0)
-
-    def delete_one(self, query):
-        for index, doc in enumerate(self.docs):
-            if _matches(doc, query):
-                del self.docs[index]
-                return _DeleteResult(1)
-        return _DeleteResult(0)
-
-    def delete_many(self, query):
-        keep = [d for d in self.docs if not _matches(d, query)]
-        removed = len(self.docs) - len(keep)
-        self.docs = keep
-        return _DeleteResult(removed)
+from tests.server.fakes import FakeCollection
 
 
 def _now():
@@ -161,6 +83,21 @@ def test_project_create_defaults_archived_false():
     assert payload["archived"] is False
 
 
+class _DuplicateKeyCollection(FakeCollection):
+    def insert_one(self, doc):
+        raise DuplicateKeyError("duplicate slug")
+
+
+def test_project_create_duplicate_key_is_400():
+    # The unique slug index raises DuplicateKeyError; the narrowed guard still
+    # maps that to a clean 400 (while a connection outage now propagates
+    # instead of masquerading as "already exists").
+    projects = Projects(_DuplicateKeyCollection([]))
+    result, code = projects.create("alpha", "Alpha")
+    assert code == 400
+    assert result == "Project already exists"
+
+
 def test_project_update_archives():
     projects = _projects_with("alpha")
     doc, code = projects.update("alpha", archived=True)
@@ -218,6 +155,27 @@ def test_project_list_missing_field_is_active():
     assert [p["slug"] for p in active] == ["legacy"]
     assert active[0]["archived"] is False
     assert projects.list(archived=True) == []
+
+
+def test_project_list_dual_emits_created_at_camel_and_snake():
+    projects = Projects(
+        FakeCollection(
+            [{"_id": ObjectId(), "slug": "alpha", "created_at": _now()}]
+        )
+    )
+    row = projects.list()[0]
+    # camelCase is canonical; snake_case is the deprecated dual-emit twin.
+    assert row["createdAt"] == row["created_at"] == "2026-01-01T00:00:00Z"
+
+
+def test_config_create_dual_emits_created_at_without_storing_camel():
+    collection = FakeCollection([])
+    configs = Configs(collection)
+    payload, code = configs.create("p1", "prod", "Prod")
+    assert code == 201
+    # Response carries camelCase; the persisted doc stays snake_case only.
+    assert payload["createdAt"] == to_iso(payload["created_at"])
+    assert "createdAt" not in collection.docs[0]
 
 
 # --------------------------------------------------------------------------
@@ -445,3 +403,78 @@ def test_membership_remove_all_for_project():
     # the unrelated project's membership survives.
     assert len(project_memberships.docs) == 1
     assert project_memberships.docs[0]["subject_id"] == "bob"
+
+
+# --------------------------------------------------------------------------
+# Descriptions (projects + configs)
+# --------------------------------------------------------------------------
+
+
+def test_project_create_stores_normalized_description():
+    projects = Projects(FakeCollection([]))
+    payload, code = projects.create("alpha", "Alpha", description="  app  ")
+    assert code == 201
+    assert payload["description"] == "app"
+
+
+def test_project_create_blank_description_is_none():
+    projects = Projects(FakeCollection([]))
+    payload, _ = projects.create("alpha", "Alpha", description="   ")
+    assert payload["description"] is None
+
+
+def test_project_update_persists_and_clears_description():
+    projects = _projects_with("alpha")
+    doc, code = projects.update("alpha", description="now stored")
+    assert code == 200
+    assert doc["description"] == "now stored"
+    cleared, _ = projects.update("alpha", description="")
+    assert cleared["description"] is None
+
+
+def test_project_list_includes_description():
+    projects = _projects_with("alpha")
+    projects.update("alpha", description="listed")
+    result = projects.list()
+    assert result[0]["description"] == "listed"
+
+
+def test_config_create_stores_normalized_description():
+    configs = Configs(FakeCollection([]))
+    payload, code = configs.create(
+        "p1", "prod", "Prod", description="  live env  "
+    )
+    assert code == 201
+    assert payload["description"] == "live env"
+
+
+def test_config_create_blank_description_is_none():
+    configs = Configs(FakeCollection([]))
+    payload, _ = configs.create("p1", "prod", "Prod", description="   ")
+    assert payload["description"] is None
+
+
+def test_config_update_sets_and_clears_description():
+    base = _config_doc("prod", "p1")
+    configs = Configs(FakeCollection([base]))
+    updated, code = configs.update("p1", "prod", description="managed")
+    assert code == 200
+    assert updated["description"] == "managed"
+    cleared, _ = configs.update("p1", "prod", description="")
+    assert cleared["description"] is None
+
+
+def test_config_update_none_description_leaves_it_untouched():
+    base = _config_doc("prod", "p1")
+    base["description"] = "keep"
+    configs = Configs(FakeCollection([base]))
+    updated, _ = configs.update("p1", "prod", name="Prod 2")
+    assert updated["description"] == "keep"
+
+
+def test_config_list_includes_description():
+    base = _config_doc("prod", "p1")
+    base["description"] = "listed"
+    configs = Configs(FakeCollection([base]))
+    result = configs.list("p1")
+    assert result[0]["description"] == "listed"

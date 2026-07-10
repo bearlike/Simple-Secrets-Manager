@@ -3,6 +3,7 @@ import {
   mapWorkspaceGroupDto,
   mapWorkspaceGroupMappingDto
 } from './mappers';
+import { parseListSafely, workspaceGroupDtoSchema, workspaceGroupMappingDtoSchema } from './schemas';
 import type {
   WorkspaceGroup,
   WorkspaceGroupMappingsResponseDto,
@@ -13,22 +14,12 @@ import type {
 
 export async function getWorkspaceGroups(): Promise<WorkspaceGroup[]> {
   const response = await apiClient<WorkspaceGroupsResponseDto>('/workspace/groups');
-  return (response.groups ?? []).map(mapWorkspaceGroupDto);
+  return parseListSafely(workspaceGroupDtoSchema, response.groups).map(mapWorkspaceGroupDto);
 }
 
 export async function createWorkspaceGroup(input: { slug: string; name?: string; description?: string }) {
   await apiClient<WorkspaceGroupsResponseDto>('/workspace/groups', {
     method: 'POST',
-    body: JSON.stringify(input)
-  });
-}
-
-export async function updateWorkspaceGroup(
-  groupSlug: string,
-  input: Partial<{ name: string; description: string }>
-) {
-  await apiClient<WorkspaceGroupsResponseDto>(`/workspace/groups/${groupSlug}`, {
-    method: 'PATCH',
     body: JSON.stringify(input)
   });
 }
@@ -63,7 +54,7 @@ export async function setWorkspaceGroupMembers(
 
 export async function getWorkspaceGroupMappings(): Promise<WorkspaceGroupMapping[]> {
   const response = await apiClient<WorkspaceGroupMappingsResponseDto>('/workspace/group-mappings');
-  return (response.mappings ?? []).map(mapWorkspaceGroupMappingDto);
+  return parseListSafely(workspaceGroupMappingDtoSchema, response.mappings).map(mapWorkspaceGroupMappingDto);
 }
 
 export async function createWorkspaceGroupMapping(input: {

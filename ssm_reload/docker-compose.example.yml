@@ -1,13 +1,38 @@
-# Example deployment of the ssm-reload service alongside an opted-in app.
+# Example deployment of ssm-reload alongside an opted-in workload.
 #
 #   docker compose -f ssm_reload/docker-compose.example.yml up -d --build
 #
-# ssm-reload polls the SSM API and watches the local Docker event stream.
-# When a managed config's secrets change it recreates every container
-# bound to that config, injecting the fresh secrets as environment.
+# ssm-reload does two separate jobs, and the difference matters:
 #
-# Run one ssm-reload per Docker host: it is stateless and manages only its
-# LOCAL daemon (all state lives on container labels + the SSM API).
+#   1. DELIVERY. It renders every managed config to `/run/ssm/<project>-<config>.env`
+#      inside the shared `ssm-env` volume. Consumers mount that volume read-only
+#      and name the file with `env_file:`, so a container is BORN with the right
+#      secrets -- which is the only way a container can ever have them, since its
+#      environment is frozen at create time.
+#
+#   2. CONVERGENCE. When a config's secrets change, it recreates the containers
+#      that have no other lifecycle owner. A container created by ANOTHER tool (a
+#      compose project -- including a Portainer stack) is never recreated:
+#      SSM reports the divergence and leaves it alone, and you redeploy
+#      it (`docker compose up -d`), which recreates it with the fresh env_file.
+#      Compose folds an env_file's CONTENTS into its config hash, so the redeploy
+#      picks up exactly the services whose secrets changed, in dependency order.
+#
+# Run one ssm-reload per Docker host: it is stateless and manages only its LOCAL
+# daemon (all state lives on container labels + the SSM API).
+
+volumes:
+  # The projection target. RAM-backed (tmpfs), so projected secrets never touch
+  # the host's disk, and its contents exist only while a container holds it
+  # mounted -- they cannot outlive the fleet. `name:` pins it unprefixed so
+  # stacks in OTHER compose projects can mount it with `external: true`.
+  ssm-env:
+    name: ssm-env
+    driver: local
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=8m,mode=0750
 
 services:
   ssm-reload:
@@ -23,18 +48,77 @@ services:
       # A read-only, scoped token. Provide via your secret store / .env.
       SSM_TOKEN: "${SSM_RELOAD_TOKEN:?set SSM_RELOAD_TOKEN}"
       SSM_RELOAD_POLL_INTERVAL: "30"
-      SSM_RELOAD_LABEL_PREFIX: "ssm"
+      # Configs to project even when no container is bound to them yet. On a
+      # FIRST deploy the env_file must already exist or compose refuses to
+      # start the stack, and no container carries the label yet to be found.
+      SSM_RELOAD_PROJECTION_CONFIGS: "vpn/zurich"
+      # Optional: export OTel events (reports/decisions/recreates) to a
+      # collector. Unset = no telemetry.
+      # OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4318"
     volumes:
       # Read-only socket bind is enough for the Docker API calls used here.
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # ssm-reload WRITES the projected dotenv files here.
+      - ssm-env:/run/ssm
 
-  # An example workload that opts in to ssm-reload management.
-  example-app:
-    image: nginx:1.25-alpine
-    restart: unless-stopped
+  # ---------------------------------------------------------------------------
+  # A worked example: a VPN gateway whose secrets live in SSM, and a workload
+  # that shares its network namespace. This is the shape that broke under the
+  # old label-only pattern, and the shape the projection pattern fixes.
+  # ---------------------------------------------------------------------------
+  gluetun:
+    image: qmcgaw/gluetun
+    container_name: vpn-gluetun-1
+    cap_add: [NET_ADMIN]
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    env_file:
+      # Projected by SSM. The five WIREGUARD_* keys live in the vpn/zurich
+      # config -- and ONLY they do.
+      #
+      # This file must EXIST before you run `docker compose up`, or compose
+      # refuses to start the stack ("env file ... not found"). That is the
+      # bootstrap problem, and it has two answers: list the config in
+      # SSM_RELOAD_PROJECTION_CONFIGS above (so ssm-reload renders it even
+      # though no container is bound to it yet), or render it yourself once:
+      #
+      #   ssm secrets materialize --dir /run/ssm --project vpn --config zurich
+      - /run/ssm/vpn-zurich.env
+    environment:
+      # App-native configuration belongs in git, not in a secret store. Compose
+      # MERGES env_file and environment, so these survive alongside the secrets
+      # instead of being replaced by them.
+      VPN_SERVICE_PROVIDER: protonvpn
+      VPN_TYPE: wireguard
+      TZ: Europe/Zurich
+    volumes:
+      # Read-only: a consumer never writes to the projection volume.
+      - ssm-env:/run/ssm:ro
     labels:
-      # Opt in to management.
-      ssm.enable: "true"
-      # Which SSM project/config this container tracks.
-      ssm.config: "demo/production"
-      # ssm.revision is written and updated by ssm-reload; do not set it.
+      com.bearlike.ssm.enable: "true"       # opt in — nothing is touched without it
+      com.bearlike.ssm.config: "vpn/zurich" # which SSM project/config to track
+      # com.bearlike.ssm.revision and .keys are stamped by ssm-reload — do not set them.
+    restart: unless-stopped
+
+  stremio:
+    image: tsaridas/stremio-docker:latest
+    container_name: t-stremio-server
+    # Lives INSIDE gluetun's network namespace. Recreating gluetun mints a new
+    # container id, so this one would be left attached to a dead namespace --
+    # ssm-reload detects that and refuses to orphan it. Redeploying the stack
+    # (`docker compose up -d`) recreates both, in the right order.
+    network_mode: "service:gluetun"
+    depends_on: [gluetun]
+    restart: unless-stopped
+
+# Consuming from ANOTHER compose project (e.g. a Portainer stack)? Declare the
+# volume as external and mount it exactly the same way:
+#
+#   volumes:
+#     ssm-env:
+#       external: true      # created and owned by ssm-reload
+#
+# One caveat, and it bites: `env_file` is resolved by the compose CLIENT, not by
+# the Docker daemon. A containerized compose client (Portainer, a CI runner) must
+# therefore mount `ssm-env` into ITSELF as well, or it cannot read the file it is
+# being asked to pass to the daemon.

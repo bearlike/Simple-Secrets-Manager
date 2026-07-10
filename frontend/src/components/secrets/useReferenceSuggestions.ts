@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getConfigs } from '../../lib/api/configs';
 import { getProjects } from '../../lib/api/projects';
 import { getSecretsKeyMap } from '../../lib/api/secrets';
+import { queryKeys } from '../../lib/api/queryKeys';
 
 interface UseReferenceSuggestionsInput {
   projectSlug: string;
@@ -11,7 +12,7 @@ interface UseReferenceSuggestionsInput {
 
 export function useReferenceSuggestions({ projectSlug, configSlug }: UseReferenceSuggestionsInput): string[] {
   const { data: keyMap = {} } = useQuery({
-    queryKey: ['reference-suggestions', 'keys', projectSlug, configSlug],
+    queryKey: queryKeys.referenceSuggestionKeys(projectSlug, configSlug),
     queryFn: () =>
       getSecretsKeyMap(projectSlug, configSlug, true, {
         raw: true,
@@ -22,14 +23,14 @@ export function useReferenceSuggestions({ projectSlug, configSlug }: UseReferenc
   });
 
   const { data: configs = [] } = useQuery({
-    queryKey: ['reference-suggestions', 'configs', projectSlug],
+    queryKey: queryKeys.referenceSuggestionConfigs(projectSlug),
     queryFn: () => getConfigs(projectSlug),
     enabled: !!projectSlug,
     staleTime: 60 * 1000
   });
 
   const { data: projects = [] } = useQuery({
-    queryKey: ['reference-suggestions', 'projects'],
+    queryKey: queryKeys.referenceSuggestionProjects(),
     queryFn: getProjects,
     staleTime: 60 * 1000
   });

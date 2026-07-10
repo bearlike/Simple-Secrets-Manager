@@ -30,5 +30,8 @@ uv run mypy .
 echo "Running import-linter contracts..."
 uv run lint-imports
 
+echo "Checking generated env var reference is up to date..."
+uv run python3 scripts/generate_env_reference.py --check
+
 echo "Running tests..."
 uv run pytest -q

@@ -1,5 +1,6 @@
 import { apiClient } from './client';
 import { mapConfigDto } from './mappers';
+import { configDtoSchema, parseListSafely } from './schemas';
 import type {
   Config,
   ConfigsResponseDto,
@@ -10,6 +11,7 @@ interface CreateConfigInput {
   name: string;
   slug: string;
   parentSlug?: string;
+  description?: string;
 }
 
 interface UpdateConfigInput {
@@ -17,11 +19,13 @@ interface UpdateConfigInput {
   // undefined: leave the parent unchanged; null or '': clear it;
   // a slug: set that config as the parent.
   parentSlug?: string | null;
+  // undefined: leave the description unchanged; '' clears it.
+  description?: string;
 }
 
 export async function getConfigs(projectSlug: string): Promise<Config[]> {
   const response = await apiClient<ConfigsResponseDto>(`/projects/${projectSlug}/configs`);
-  return (response.configs ?? []).map(mapConfigDto);
+  return parseListSafely(configDtoSchema, response.configs).map(mapConfigDto);
 }
 
 export async function createConfig(projectSlug: string, data: CreateConfigInput): Promise<Config> {
@@ -30,11 +34,12 @@ export async function createConfig(projectSlug: string, data: CreateConfigInput)
     body: JSON.stringify({
       name: data.name,
       slug: data.slug,
-      parent: data.parentSlug
+      parent: data.parentSlug,
+      description: data.description
     })
   });
 
-  return mapConfigDto(response.config);
+  return mapConfigDto(configDtoSchema.parse(response.config));
 }
 
 export async function updateConfig(
@@ -49,6 +54,9 @@ export async function updateConfig(
   if (data.parentSlug !== undefined) {
     body.parent = data.parentSlug ?? '';
   }
+  if (data.description !== undefined) {
+    body.description = data.description;
+  }
 
   const response = await apiClient<CreateConfigResponseDto>(
     `/projects/${projectSlug}/configs/${configSlug}`,
@@ -58,7 +66,7 @@ export async function updateConfig(
     }
   );
 
-  return mapConfigDto(response.config);
+  return mapConfigDto(configDtoSchema.parse(response.config));
 }
 
 export async function deleteConfig(

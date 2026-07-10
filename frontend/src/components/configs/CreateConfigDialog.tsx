@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -34,7 +35,8 @@ const schema = z.object({
     /^[a-z0-9-]+$/,
     'Slug must be lowercase letters, numbers, and hyphens only'
   ),
-  parentSlug: z.string().optional()
+  parentSlug: z.string().optional(),
+  description: z.string().optional()
 });
 type FormValues = z.infer<typeof schema>;
 interface CreateConfigDialogProps {
@@ -66,7 +68,8 @@ export function CreateConfigDialog({
     createConfig(projectSlug, {
       name: data.name,
       slug: data.slug,
-      parentSlug: data.parentSlug || undefined
+      parentSlug: data.parentSlug || undefined,
+      description: data.description || undefined
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({
@@ -116,6 +119,19 @@ export function CreateConfigDialog({
             {errors.slug &&
             <p className="text-xs text-destructive">{errors.slug.message}</p>
             }
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="cfg-description">
+              Description{' '}
+              <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Textarea
+              id="cfg-description"
+              {...register('description')}
+              placeholder="What this config is for..."
+              rows={2}
+              className="resize-none" />
+
           </div>
           {existingConfigs.length > 0 &&
           <div className="space-y-1.5">

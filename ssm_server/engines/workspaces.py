@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from datetime import datetime, timezone
 
+from pymongo.errors import DuplicateKeyError
+
 from ssm_server.engines.common import is_valid_slug
 from ssm_server.engines.rbac import (
     WORKSPACE_ROLES,
@@ -38,12 +40,11 @@ class Workspaces:
         }
         try:
             self._workspaces.insert_one(payload)
-        except Exception:
+        except DuplicateKeyError:
+            # A concurrent ensure_default() lost the unique-slug race; the
+            # winner's doc is already there, so fall through to re-read it.
             pass
         return self._workspaces.find_one({"slug": DEFAULT_WORKSPACE_SLUG})
-
-    def get_default(self):
-        return self.ensure_default()
 
     def get_by_id(self, workspace_id):
         return self._workspaces.find_one({"_id": workspace_id})
@@ -104,6 +105,6 @@ class Workspaces:
         }
         try:
             self._workspaces.insert_one(payload)
-        except Exception:
+        except DuplicateKeyError:
             return None, "Workspace already exists", 400
         return payload, "OK", 201

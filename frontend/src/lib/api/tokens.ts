@@ -1,12 +1,11 @@
 import { ApiClientError, apiClient } from './client';
 import { mapAccessToActions, mapTokenDto } from './mappers';
+import { parseListSafely, tokenDtoSchema } from './schemas';
 import type {
   CreateTokenInput,
   CreateTokenResponse,
   CreateTokenResponseDto,
-  Token,
-  TokenDto,
-  TokenListResponseDto
+  Token
 } from './types';
 
 const TOKEN_LIST_UNAVAILABLE_STATUSES = new Set([404, 405, 501]);
@@ -18,17 +17,18 @@ export class TokenListUnavailableError extends Error {
   }
 }
 
-function extractTokenDtos(response: TokenListResponseDto | TokenDto[]): TokenDto[] {
+// The token list endpoint has shipped a few different envelope shapes over
+// time (a bare array, `{tokens: [...]}`, `{data: [...]}`) -- unwrap
+// whichever one showed up before handing rows to the schema.
+function extractTokenDtos(response: unknown): unknown[] {
   if (Array.isArray(response)) {
     return response;
   }
 
-  if (Array.isArray(response.tokens)) {
-    return response.tokens;
-  }
-
-  if (Array.isArray(response.data)) {
-    return response.data;
+  if (response && typeof response === 'object') {
+    const envelope = response as { tokens?: unknown; data?: unknown };
+    if (Array.isArray(envelope.tokens)) return envelope.tokens;
+    if (Array.isArray(envelope.data)) return envelope.data;
   }
 
   return [];
@@ -52,10 +52,8 @@ function extractPlaintext(response: CreateTokenResponseDto): string {
 
 export async function getTokens(): Promise<Token[]> {
   try {
-    const response = await apiClient<TokenListResponseDto | TokenDto[]>(
-      '/auth/tokens/v2?include_revoked=false'
-    );
-    return extractTokenDtos(response).map(mapTokenDto);
+    const response = await apiClient<unknown>('/auth/tokens/v2?include_revoked=false');
+    return parseListSafely(tokenDtoSchema, extractTokenDtos(response)).map(mapTokenDto);
   } catch (error) {
     if (
       error instanceof ApiClientError &&
@@ -97,7 +95,7 @@ export async function createToken(data: CreateTokenInput): Promise<CreateTokenRe
         };
 
   return {
-    token: mapTokenDto(tokenDto),
+    token: mapTokenDto(tokenDtoSchema.parse(tokenDto)),
     plaintext: extractPlaintext(response)
   };
 }

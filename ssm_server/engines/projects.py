@@ -2,6 +2,8 @@
 from datetime import datetime, timezone
 
 from bson import ObjectId
+from bson.errors import InvalidId
+from pymongo.errors import DuplicateKeyError
 
 from ssm_server.api.serialization import to_iso
 from ssm_server.engines.common import is_valid_slug
@@ -20,7 +22,7 @@ class Projects:
         workspace = self._workspaces.ensure_default()
         return workspace.get("_id") if workspace else None
 
-    def create(self, slug, name):
+    def create(self, slug, name, description=None):
         if not is_valid_slug(slug):
             return "Invalid project slug", 400
         workspace_id = self._default_workspace_id()
@@ -29,15 +31,18 @@ class Projects:
             "name": name or slug,
             "workspace_id": workspace_id,
             "archived": False,
+            "description": (str(description).strip() or None)
+            if description is not None
+            else None,
             "created_at": datetime.now(timezone.utc),
         }
         try:
             self._projects.insert_one(payload)
-        except Exception:
+        except DuplicateKeyError:
             return "Project already exists", 400
         return payload, 201
 
-    def update(self, slug, name=None, archived=None):
+    def update(self, slug, name=None, archived=None, description=None):
         set_dict = {}
         if name is not None:
             if not str(name).strip():
@@ -47,6 +52,9 @@ class Projects:
             if not isinstance(archived, bool):
                 return "archived must be boolean", 400
             set_dict["archived"] = archived
+        # None leaves the description untouched; "" clears it.
+        if description is not None:
+            set_dict["description"] = str(description).strip() or None
         if not set_dict:
             return "No fields to update", 400
         result = self._projects.update_one({"slug": slug}, {"$set": set_dict})
@@ -64,7 +72,7 @@ class Projects:
     def get_by_id(self, project_id):
         try:
             lookup_id = ObjectId(project_id)
-        except Exception:
+        except (InvalidId, TypeError, ValueError):
             lookup_id = project_id
         return self._projects.find_one({"_id": lookup_id})
 
@@ -87,7 +95,7 @@ class Projects:
         for value in project_ids:
             try:
                 normalized_ids.append(ObjectId(value))
-            except Exception:
+            except (InvalidId, TypeError, ValueError):
                 normalized_ids.append(value)
         return list(
             self._projects.find({"_id": {"$in": normalized_ids}}).sort(
@@ -122,6 +130,11 @@ class Projects:
             {
                 "slug": doc.get("slug"),
                 "name": doc.get("name") or doc.get("slug"),
+                "description": doc.get("description"),
+                # camelCase `createdAt` is the canonical API form; snake_case
+                # `created_at` is dual-emitted for back-compat and deprecated
+                # for removal in the next major.
+                "createdAt": doc.get("created_at"),
                 "created_at": doc.get("created_at"),
                 "archived": bool(doc.get("archived", False)),
             }

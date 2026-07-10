@@ -55,7 +55,11 @@ identically — no business logic here (that lives in `ssm_server/engines/`).
   (`created_at`), the API's JSON is camelCase (`createdAt`) — see
   [`../engines/AGENTS.md`](../engines/AGENTS.md) for where that mapping
   happens. A single-word field like `archived` sidesteps the split entirely,
-  which is why it can look inconsistent at a glance.
+  which is why it can look inconsistent at a glance. **camelCase is the
+  canonical, documented JSON form**; a few timestamp fields (`createdAt`,
+  `expiresAt`, `lastUsedAt`) are emitted in BOTH cases (dual-emit) because the
+  snake_case twins were already published — those snake_case keys are
+  deprecated for removal in the next major (see the session lesson below).
 - **Dependency direction is `ssm_server.api` → `ssm_server.engines`/`ssm_server.access`,
   with one exception.** `ssm_server/access/is_auth.py` imports `conn` and
   `api` back from `ssm_server.api.core` (`from ssm_server.api.core import
@@ -64,6 +68,34 @@ identically — no business logic here (that lives in `ssm_server/engines/`).
 
 ## Session Lessons (Non-Trivial)
 
+- **Timestamp casing is dual-emit, camelCase canonical, snake deprecated.**
+  Three payload builders emitted snake_case timestamps against
+  the camelCase convention: `engines/projects.py::list()` (`created_at`),
+  `engines/configs.py::create()` (`created_at`, while its own `list()` already
+  emits `createdAt`), and `access/tokens.py::_serialize_token_metadata`
+  (`created_at`/`expires_at`/`last_used_at`). Renaming would break the published
+  contract, so each now emits the camelCase key ALONGSIDE the existing
+  snake_case one (same value). camelCase is canonical (the frontend already
+  reads it first, snake_case as fallback); the snake_case twins are deprecated
+  for removal in the next major. Note the storage rule still holds: for
+  `configs.create()` the camelCase key is added to the RETURNED dict AFTER the
+  insert, so the persisted Mongo doc stays snake_case-only. New timestamp
+  fields should emit camelCase only — this dual-emit is legacy debt, not a
+  pattern to extend.
+- **One audit-event builder, `access/is_auth.py::audit_event(action, **kwargs)`.**
+  Resources must write audit events through this helper, never
+  hand-roll a dict for `conn.audit.write_event`. `audit_event` →
+  `_audit_request` enriches every event from the live request/`flask.g`:
+  method, path, client IP, user-agent, the real `status_code`, the *measured*
+  `latency_ms`, and the correct `actor_type` (`token` vs `user`) plus the
+  `subject_user`/`subject_service_name`/`id` fallback for `actor_id`.
+  `projects_resource.py`/`configs_resource.py` previously built the dict inline
+  and dropped IP + user-agent, hardcoded `latency_ms=0`, and mislabelled every
+  actor as `"token"` (wrong for userpass actors) — a security-relevant fidelity
+  loss in the audit trail. Pass only the event-specific keys
+  (`project_slug=`, `config_slug=`, `status_code=`); the request context fills
+  the rest. `audit_event` reads `g.request_started` for latency, so it only
+  works inside a `@with_token`-wrapped handler (which sets it).
 - The error envelope used to be inconsistent: some fallback paths returned
   `{"error": ...}` while flask-restx's own `abort()` returns
   `{"message": ...}`. Consumers (CLI, frontend) only checked one key each,

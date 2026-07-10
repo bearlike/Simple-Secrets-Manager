@@ -19,6 +19,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# OpenTelemetry event emission (the `ssm_telemetry` leaf). Pinned to one
+# verified line (opentelemetry-python 1.43.0). We take the OTLP *HTTP*
+# exporter on purpose — the umbrella `opentelemetry-exporter-otlp` drags in
+# grpcio. `server` and `reload` layer these in via
+# `simple-secrets-manager[otel]`; the CLI base stays otel-free (and
+# `ssm_telemetry` degrades to a no-op when the extra is absent).
+otel = [
+    "opentelemetry-api==1.43.0",
+    "opentelemetry-sdk==1.43.0",
+    "opentelemetry-semantic-conventions==0.64b0",
+    "opentelemetry-exporter-otlp-proto-http==1.43.0",
+]
 # The Flask + flask-restx REST API server (`ssm_server`, `python -m ssm_server.main`).
 server = [
     "flask-httpauth>4,<5",
@@ -26,10 +38,22 @@ server = [
     "flask-restx>=0.5.1",
     "pymongo>4,<5",
     "loguru>=0.7.3,<0.8.0",
-    "python-dotenv>=1.1.0,<2.0.0",
+    # Typed cross-service reload contract (`ssm_contracts`) + OTel events, plus
+    # the validated ServerSettings config (`pydantic-settings` also reads the
+    # optional `.env`, replacing python-dotenv).
+    "pydantic>=2.5,<3.0",
+    "pydantic-settings>=2.0,<3.0",
+    "simple-secrets-manager[otel]",
 ]
 # The `ssm-reload` container reloader sidecar (needs the Docker SDK).
-reload = ["docker>=7.0.0,<8.0.0"]
+reload = [
+    "docker>=7.0.0,<8.0.0",
+    # Typed cross-service reload contract (`ssm_contracts`) + OTel events, plus
+    # the validated ReloadSettings config (`pydantic-settings`).
+    "pydantic>=2.5,<3.0",
+    "pydantic-settings>=2.0,<3.0",
+    "simple-secrets-manager[otel]",
+]
 # Everything, for a full local/dev checkout.
 all = ["simple-secrets-manager[server,reload]"]
 
@@ -57,7 +81,14 @@ ssm-reload = "ssm_reload.runner:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["ssm_server*", "ssm_cli*", "ssm_reload*"]
+include = [
+    "ssm_server*",
+    "ssm_cli*",
+    "ssm_reload*",
+    "ssm_telemetry*",
+    "ssm_contracts*",
+    "ssm_projection*",
+]
 exclude = ["tests*"]
 
 [tool.setuptools.dynamic]
@@ -113,7 +144,58 @@ extra_checks = true
 # inward). Run via `uv run lint-imports` / `make lint-imports`; wired into
 # scripts/quality.sh after MyPy. ---
 [tool.importlinter]
-root_packages = ["ssm_server", "ssm_cli", "ssm_reload"]
+root_packages = [
+    "ssm_server",
+    "ssm_cli",
+    "ssm_reload",
+    "ssm_telemetry",
+    "ssm_contracts",
+    "ssm_projection",
+]
+
+# `ssm_telemetry` (OTel events), `ssm_contracts` (the typed reload contract)
+# and `ssm_projection` (the dotenv renderer + sinks) are LEAVES: the server,
+# the CLI and the reloader import them across the HTTP boundary, so they must
+# never import back into any app package or the reloader's hard isolation (and
+# the inward dependency rule) would break.
+[[tool.importlinter.contracts]]
+name = "ssm_telemetry is a leaf (imports no app package)"
+type = "forbidden"
+source_modules = ["ssm_telemetry"]
+forbidden_modules = [
+    "ssm_server",
+    "ssm_cli",
+    "ssm_reload",
+    "ssm_contracts",
+    "ssm_projection",
+]
+
+[[tool.importlinter.contracts]]
+name = "ssm_contracts is a leaf (imports no app package)"
+type = "forbidden"
+source_modules = ["ssm_contracts"]
+forbidden_modules = [
+    "ssm_server",
+    "ssm_cli",
+    "ssm_reload",
+    "ssm_telemetry",
+    "ssm_projection",
+]
+
+# The CLI and the reloader must render byte-identical env_file contents (compose
+# hashes the file's CONTENTS), so the renderer is a leaf both import rather than
+# a helper either one owns.
+[[tool.importlinter.contracts]]
+name = "ssm_projection is a leaf (imports no app package)"
+type = "forbidden"
+source_modules = ["ssm_projection"]
+forbidden_modules = [
+    "ssm_server",
+    "ssm_cli",
+    "ssm_reload",
+    "ssm_telemetry",
+    "ssm_contracts",
+]
 
 # The reload sidecar talks only to the API over HTTP + the Docker socket; it
 # must never import the server or CLI Python packages.

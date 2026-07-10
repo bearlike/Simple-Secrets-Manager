@@ -4,23 +4,44 @@ import json
 from datetime import datetime, timezone
 
 from ssm_server.api.serialization import to_iso
-from ssm_server.engines.common import is_valid_env_key
+from ssm_server.engines.common import (
+    REFERENCE_TOKEN_PATTERN,
+    is_valid_env_key,
+)
 from ssm_server.engines.secret_icons import (
     normalize_icon_slug,
     is_valid_icon_slug,
     resolve_icon_slug,
 )
 
+# Per-key env annotation: ``{secret_key: comment_line}``. The comment line
+# already carries its leading ``#`` so ``to_env`` emits it verbatim.
+EnvAnnotationMap = dict[str, str]
 
-def config_export_etag(resolved: dict[str, str]) -> str:
-    """Strong ETag for a fully-resolved config value-set.
 
-    ``resolved`` is the merged ``{key: value}`` mapping after inheritance
-    and reference resolution. The tag hashes only that mapping (keys
-    sorted, stable JSON), so it is identical across export
-    representations (``format``/``include_meta``/``raw``) and flips
-    whenever any resolved value changes -- including values inherited
-    from a parent config. Pure and Mongo-free by design.
+def config_export_etag(
+    resolved: dict[str, str], meta: dict | None = None
+) -> str:
+    """Strong ETag for one export representation.
+
+    Without ``meta`` the tag hashes ONLY the resolved ``{key: value}``
+    mapping (keys sorted, stable JSON) -- the value-only representation
+    the reloader polls (``include_meta`` off). It is byte-identical
+    across ``format``/``raw`` and flips only when a resolved value
+    changes, including a value inherited from a parent. WHY value-only
+    there: the reloader's ``If-None-Match``/304 divergence check must
+    react to VALUE changes alone, so a manual icon / sensitivity /
+    description edit must never churn its containers.
+
+    The console requests ``include_meta``/``include_provenance``, so its
+    body ALSO carries per-key metadata (icon slug, sensitivity,
+    description, ``updatedAt``...). That is a DIFFERENT representation:
+    passing ``meta`` folds it into the tag so a metadata-only edit flips
+    the tag and the console's conditional refetch is served fresh (200)
+    instead of a stale 304 that keeps rendering the old icon. Passing
+    ``meta=None`` reproduces the value-only tag byte-for-byte, so the
+    reloader path (and the revisions it stores) is unaffected. Pure and
+    Mongo-free by design.
     """
     canonical = json.dumps(
         resolved,
@@ -28,6 +49,13 @@ def config_export_etag(resolved: dict[str, str]) -> str:
         separators=(",", ":"),
         ensure_ascii=False,
     )
+    if meta is not None:
+        canonical += "\n" + json.dumps(
+            meta,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
     digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return f'"{digest[:16]}"'
 
@@ -118,11 +146,14 @@ class _ConfigKeyComparisonService:
         if effective_doc is None and not self._include_empty:
             return None, None, None
 
+        effective_sensitive = self._effective_sensitive(
+            config, config_by_id, direct_by_config_id
+        )
         row = {
             "configId": str(config["_id"]),
             "configSlug": config["slug"],
             "effective": self._effective_payload(
-                effective_doc, source_config, is_inherited
+                effective_doc, source_config, is_inherited, effective_sensitive
             ),
             "direct": self._direct_payload(direct_doc),
         }
@@ -166,13 +197,57 @@ class _ConfigKeyComparisonService:
         return None, None, None, None
 
     @staticmethod
-    def _effective_payload(effective_doc, source_config, is_inherited):
+    def _effective_sensitive(config, config_by_id, direct_by_config_id):
+        """Most-restrictive-wins sensitivity for a config's effective value.
+
+        Walks config -> parents and returns ``True`` as soon as any doc that
+        supplies this key in the chain is sensitive (explicit ``True`` or a
+        missing flag, since absence means sensitive). A child can never
+        un-hide a key an ancestor marks sensitive. Default ``True`` when no
+        doc in the chain holds the key.
+        """
+        visited = set()
+        current = config
+        found = False
+        while current is not None:
+            key_id = str(current["_id"])
+            if key_id in visited:
+                break
+            visited.add(key_id)
+            doc = direct_by_config_id.get(current["_id"])
+            if doc is not None:
+                found = True
+                if bool(doc.get("sensitive", True)):
+                    return True
+            parent_id = current.get("parent_config_id")
+            if parent_id is not None and parent_id not in config_by_id:
+                # The chain extends beyond the config set we were handed
+                # (comparison sets are authorization-filtered and
+                # truncated). Fail CLOSED: an unseen ancestor may mark
+                # the key sensitive, and a child must never widen
+                # exposure just because the ancestor is out of view.
+                return True
+            current = (
+                config_by_id.get(parent_id) if parent_id is not None else None
+            )
+        return False if found else True
+
+    @staticmethod
+    def _effective_payload(
+        effective_doc, source_config, is_inherited, sensitive
+    ):
         if effective_doc is None:
-            return {"value": None, "source": None, "isInherited": False}
+            return {
+                "value": None,
+                "source": None,
+                "isInherited": False,
+                "sensitive": sensitive,
+            }
         return {
             "value": SecretCodec.decrypt(effective_doc["value_enc"]),
             "source": source_config["slug"],
             "isInherited": is_inherited,
+            "sensitive": sensitive,
         }
 
     @staticmethod
@@ -182,17 +257,69 @@ class _ConfigKeyComparisonService:
         return {
             "exists": True,
             "value": SecretCodec.decrypt(direct_doc["value_enc"]),
+            "sensitive": bool(direct_doc.get("sensitive", True)),
         }
 
     @staticmethod
     def _meta_payload(effective_doc):
         if effective_doc is None:
-            return {"updatedAt": None, "updatedBy": None, "iconSlug": ""}
+            return {
+                "updatedAt": None,
+                "updatedBy": None,
+                "iconSlug": "",
+                "description": "",
+            }
         return {
             "updatedAt": to_iso(effective_doc.get("updated_at")),
             "updatedBy": effective_doc.get("updated_by"),
             "iconSlug": normalize_icon_slug(effective_doc.get("icon_slug")),
+            "description": effective_doc.get("description") or "",
         }
+
+
+class _ExportAccumulator:
+    """Merge state folded down an inheritance chain (root -> leaf).
+
+    Later configs in the chain override earlier ones, so a single left-to-right
+    pass yields child-wins values while accumulating most-restrictive
+    sensitivity and last-writer provenance/icon per key.
+    """
+
+    def __init__(self, build_meta):
+        self._build_meta = build_meta
+        self.merged: dict[str, str] = {}
+        self.meta: dict[str, dict] = {}
+        self.project_icon_by_key: dict[str, str] = {}
+        self.keys_needing_sync: set[str] = set()
+        self.sensitive_by_key: dict[str, bool] = {}
+        self.source_cfg_by_key: dict[str, dict] = {}
+
+    def add(self, cfg, item):
+        key = item["key"]
+        self.merged[key] = SecretCodec.decrypt(item["value_enc"])
+        self.source_cfg_by_key[key] = cfg
+        self.sensitive_by_key[key] = self.sensitive_by_key.get(
+            key, False
+        ) or bool(item.get("sensitive", True))
+        icon_slug = self._resolve_icon(key, item)
+        if self._build_meta:
+            self.meta[key] = {
+                "updatedAt": to_iso(item.get("updated_at")),
+                "updatedBy": item.get("updated_by"),
+                "iconSlug": icon_slug,
+                "description": item.get("description") or "",
+            }
+
+    def _resolve_icon(self, key, item):
+        icon_slug = normalize_icon_slug(item.get("icon_slug"))
+        if not is_valid_icon_slug(icon_slug):
+            icon_slug = resolve_icon_slug(key, None)
+            self.keys_needing_sync.add(key)
+        previous_icon_slug = self.project_icon_by_key.get(key)
+        if previous_icon_slug and previous_icon_slug != icon_slug:
+            self.keys_needing_sync.add(key)
+        self.project_icon_by_key[key] = icon_slug
+        return icon_slug
 
 
 class SecretsV2:
@@ -392,6 +519,49 @@ class SecretsV2:
 
         return summary, "OK", 200
 
+    def _resolve_sensitive_for_put(
+        self, config_id, key, sensitive, sensitive_provided
+    ):
+        """Resolve the ``sensitive`` flag a put should persist.
+
+        Explicit value wins. When omitted, an existing doc's flag is
+        preserved (never reset) and a fresh key defaults to sensitive --
+        absence of the field always reads as sensitive elsewhere.
+        """
+        if sensitive_provided:
+            if not isinstance(sensitive, bool):
+                return None, "sensitive must be a boolean", 400
+            return sensitive, None, None
+        existing = self._secrets.find_one(
+            {"config_id": config_id, "key": key}, {"sensitive": 1}
+        )
+        if existing is None:
+            return True, None, None
+        return bool(existing.get("sensitive", True)), None, None
+
+    def _resolve_description_for_put(
+        self, config_id, key, description, description_provided
+    ):
+        """Resolve the free-text ``description`` a put should persist.
+
+        Explicit value wins (an empty string clears it). When omitted, an
+        existing doc's description is preserved -- so an icon/value/
+        sensitivity edit never wipes the annotation -- and a fresh key
+        defaults to no description. Description is metadata: it lives only
+        in ``meta`` and never enters the value map, so it can't flip the
+        value-only export ETag the reloader polls.
+        """
+        if description_provided:
+            if description is not None and not isinstance(description, str):
+                return None, "description must be a string", 400
+            return (description or ""), None, None
+        existing = self._secrets.find_one(
+            {"config_id": config_id, "key": key}, {"description": 1}
+        )
+        if existing is None:
+            return "", None, None
+        return (existing.get("description") or ""), None, None
+
     def put(
         self,
         config_id,
@@ -400,6 +570,10 @@ class SecretsV2:
         actor,
         icon_slug=None,
         icon_slug_provided=False,
+        sensitive=None,
+        sensitive_provided=False,
+        description=None,
+        description_provided=False,
     ):
         if not is_valid_env_key(key):
             return "Invalid secret key", 400
@@ -415,6 +589,16 @@ class SecretsV2:
         )
         if err:
             return err, code
+        resolved_sensitive, err, code = self._resolve_sensitive_for_put(
+            config_id, key, sensitive, sensitive_provided
+        )
+        if err:
+            return err, code
+        resolved_description, err, code = self._resolve_description_for_put(
+            config_id, key, description, description_provided
+        )
+        if err:
+            return err, code
 
         update_doc = {
             "$set": {
@@ -423,6 +607,8 @@ class SecretsV2:
                 "updated_by": actor,
                 "icon_slug": resolved_icon_slug,
                 "icon_source": resolved_icon_source,
+                "sensitive": resolved_sensitive,
+                "description": resolved_description,
             }
         }
 
@@ -432,7 +618,33 @@ class SecretsV2:
         self._sync_project_icon_slug(
             config_id, key, resolved_icon_slug, resolved_icon_source
         )
-        return {"status": "OK", "key": key}, 200
+        return {
+            "status": "OK",
+            "key": key,
+            "sensitive": resolved_sensitive,
+        }, 200
+
+    def _chain_effective_sensitive(self, config_id, key: str) -> bool:
+        """Most-restrictive-wins sensitivity over the FULL DB chain.
+
+        Unlike the comparison service (which only sees an
+        authorization-filtered config set), this walks the real parent
+        chain, so every read surface reports the same effective flag as
+        the export meta. Fail-closed: chain-resolution errors read as
+        sensitive.
+        """
+        chain, err, _code = self._resolve_chain(config_id)
+        if err or not chain:
+            return True
+        docs = self._secrets.find(
+            {"config_id": {"$in": [c["_id"] for c in chain]}, "key": key}
+        )
+        found = False
+        for doc in docs:
+            found = True
+            if bool(doc.get("sensitive", True)):
+                return True
+        return False if found else True
 
     def get(self, config_id, key):
         if not is_valid_env_key(key):
@@ -443,6 +655,7 @@ class SecretsV2:
         return {
             "key": key,
             "value": SecretCodec.decrypt(doc["value_enc"]),
+            "sensitive": self._chain_effective_sensitive(config_id, key),
             "status": "OK",
         }, 200
 
@@ -502,8 +715,21 @@ class SecretsV2:
         return chain, None, None
 
     def export_config(
-        self, config_id, include_parent=True, include_metadata=False
+        self,
+        config_id,
+        include_parent=True,
+        include_metadata=False,
+        include_provenance=False,
     ):
+        """Merge a config's secrets down its inheritance chain.
+
+        ``include_metadata`` adds per-key ``updatedAt``/``updatedBy``/
+        ``iconSlug``/``sensitive``. ``include_provenance`` additionally tags
+        each key with ``source`` (the config slug that supplied the effective
+        value) and ``isInherited``. Provenance and sensitivity live only in
+        ``meta`` -- the merged value map (which feeds ``config_export_etag``)
+        never carries them, so opting in never flips the ETag.
+        """
         chain = [self._configs.get_by_id(config_id)]
         if chain[0] is None:
             return None, None, "Config not found", 404
@@ -511,43 +737,112 @@ class SecretsV2:
             chain, err, code = self._resolve_chain(config_id)
             if err:
                 return None, None, err, code
-        merged = {}
-        meta = {}
-        project_icon_by_key = {}
-        keys_needing_sync = set()
+        build_meta = include_metadata or include_provenance
+        acc = _ExportAccumulator(build_meta)
         for cfg in chain:
-            cursor = self._secrets.find({"config_id": cfg["_id"]})
-            for item in cursor:
-                merged[item["key"]] = SecretCodec.decrypt(item["value_enc"])
-                key = item["key"]
-                icon_slug = normalize_icon_slug(item.get("icon_slug"))
-                if not is_valid_icon_slug(icon_slug):
-                    icon_slug = resolve_icon_slug(key, None)
-                    keys_needing_sync.add(key)
+            for item in self._secrets.find({"config_id": cfg["_id"]}):
+                acc.add(cfg, item)
 
-                previous_icon_slug = project_icon_by_key.get(key)
-                if previous_icon_slug and previous_icon_slug != icon_slug:
-                    keys_needing_sync.add(key)
-                project_icon_by_key[key] = icon_slug
+        if build_meta:
+            self._enrich_meta(
+                acc.meta,
+                config_id=config_id,
+                include_metadata=include_metadata,
+                include_provenance=include_provenance,
+                sensitive_by_key=acc.sensitive_by_key,
+                source_cfg_by_key=acc.source_cfg_by_key,
+            )
 
-                if include_metadata:
-                    meta[key] = {
-                        "updatedAt": to_iso(item.get("updated_at")),
-                        "updatedBy": item.get("updated_by"),
-                        "iconSlug": icon_slug,
-                    }
-
-        for key in keys_needing_sync:
+        for key in acc.keys_needing_sync:
             self._sync_project_icon_slug(
                 config_id,
                 key,
-                project_icon_by_key[key],
+                acc.project_icon_by_key[key],
                 self.ICON_SOURCE_AUTO,
             )
-        return merged, meta if include_metadata else None, "OK", 200
+        return acc.merged, acc.meta if build_meta else None, "OK", 200
 
     @staticmethod
-    def to_env(data):
+    def _enrich_meta(
+        meta,
+        *,
+        config_id,
+        include_metadata,
+        include_provenance,
+        sensitive_by_key,
+        source_cfg_by_key,
+    ):
+        for key, entry in meta.items():
+            if include_metadata:
+                entry["sensitive"] = sensitive_by_key.get(key, True)
+            if include_provenance:
+                source_cfg = source_cfg_by_key.get(key)
+                entry["source"] = (
+                    source_cfg.get("slug") if source_cfg else None
+                )
+                entry["isInherited"] = bool(
+                    source_cfg is not None
+                    and source_cfg.get("_id") != config_id
+                )
+
+    def find_configs_referencing(
+        self,
+        deleted_config_id,
+        project_slug,
+        config_slug,
+        same_project_config_ids,
+    ):
+        """Config ids whose values reference ``project_slug/config_slug``.
+
+        Reference forms (see ``references.py``): a same-project ``${cfg.KEY}``
+        counts only for secrets inside the deleted config's project; a
+        fully-qualified ``${proj.cfg.KEY}`` counts from anywhere. The deleted
+        config's own secrets are ignored (they vanish with it). Used by the
+        delete path to block dangling references before removal.
+        """
+        same_project = set(same_project_config_ids or [])
+        referencing: set = set()
+        for doc in self._secrets.find({}):
+            source_config_id = doc.get("config_id")
+            if source_config_id == deleted_config_id:
+                continue
+            value = SecretCodec.decrypt(doc.get("value_enc", ""))
+            if "${" not in value:
+                continue
+            if self._value_references_config(
+                value,
+                project_slug,
+                config_slug,
+                source_config_id in same_project,
+            ):
+                referencing.add(source_config_id)
+        return referencing
+
+    @staticmethod
+    def _value_references_config(
+        value, project_slug, config_slug, source_in_project
+    ):
+        for match in REFERENCE_TOKEN_PATTERN.finditer(value):
+            parts = match.group(1).strip().split(".")
+            if len(parts) == 3:
+                ref_project, ref_config, _key = parts
+                if ref_project == project_slug and ref_config == config_slug:
+                    return True
+            elif len(parts) == 2 and source_in_project:
+                ref_config, _key = parts
+                if ref_config == config_slug:
+                    return True
+        return False
+
+    @staticmethod
+    def to_env(data, annotations: EnvAnnotationMap | None = None):
+        """Render ``{key: value}`` as ``KEY=value`` lines.
+
+        ``annotations`` optionally maps a key to a comment line emitted above
+        it (used for ``# from <config>`` provenance). Omitting it keeps the
+        output byte-identical to the annotation-free form.
+        """
+        annotations = annotations or {}
         lines = []
         for key, value in data.items():
             if "\n" in value:
@@ -557,5 +852,13 @@ class SecretsV2:
                     "env format does not support it",
                     400,
                 )
+            comment = annotations.get(key)
+            if comment:
+                # Annotations embed operator-editable text (config
+                # descriptions); flatten CR and LF so a crafted
+                # description can never smuggle a non-comment line into
+                # the rendered .env (mirrors the value newline guard).
+                flat = comment.replace("\r", " ").replace("\n", " ")
+                lines.append(flat)
             lines.append(f"{key}={value}")
         return "\n".join(lines), "OK", 200

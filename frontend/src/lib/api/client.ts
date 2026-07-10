@@ -112,5 +112,3 @@ export function apiClientText(endpoint: string, options: Omit<ApiClientOptions, 
     parseAs: 'text'
   });
 }
-
-export const apiFetch = apiClient;

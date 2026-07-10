@@ -25,7 +25,7 @@ My homelab grew past the point where I could keep secrets straight by hand. I ru
 | 🖥️ **Admin Console** | Create, search, and reveal secrets in the browser. Import `.env` files with preview and conflict detection. Export any config as JSON or `.env`. Compare a key across environments to spot drift. | 📖 [Server installation](docs/SERVER_INSTALLATION.md) |
 | 🔐 **Tokens, RBAC & audit** | Issue personal and service tokens with TTL and project scoping. Manage workspace roles and groups for least-privilege access. Review every access in a filterable audit trail. | 📖 [First-time setup](docs/FIRST_TIME_SETUP.md) |
 | ⚡ **CLI runtime injection** | Run any command through `ssm-cli run` and your secrets arrive as environment variables. Download, upload, and mount secret payloads for local use and CI/CD. | 📖 [CLI guide](docs/CLI.md) |
-| 🔄 **Auto-sync to containers** | Label a Docker container once. The `ssm-reload` service recreates it with fresh environment whenever its secrets change. No manual redeploys. | 📖 [Secrets reloader](docs/SECRETS_RELOADER.md) |
+| 🔄 **Auto-sync to containers** | Label a Docker container once. The `ssm-reload` service recreates it with fresh environment whenever its secrets change. No manual redeploys. Watch every instance and its last outcome from the Admin Console's Reloader Fleet view. | 📖 [Secrets reloader](docs/SECRETS_RELOADER.md) |
 
 Also in the box: automatic secret icons for large catalogs, cross-config drift detection, FIFO secret mounts, and a deprecation-stable API.
 
@@ -61,8 +61,8 @@ services:
   web:
     image: myorg/web-api:latest
     labels:
-      ssm.enable: "true"       # opt in
-      ssm.config: "web/prod"   # project/config to track
+      com.bearlike.ssm.enable: "true"       # opt in
+      com.bearlike.ssm.config: "web/prod"   # project/config to track
 ```
 
 Already running the stack from step 1? `docker compose --profile reload up -d` is the quickest way to bring `ssm-reload` up. Otherwise, run the service next to your workloads; any labeled container is recreated with fresh secrets when they change.

@@ -3,14 +3,16 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 import json
 from pathlib import Path
 import re
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Dict, Iterable, Mapping, Optional, Tuple, TypedDict
 
 DEFAULT_ICON_SLUG = "lucide:key-round"
 ICON_SLUG_PATTERN = re.compile(r"^[a-z0-9-]+:[a-z0-9][a-z0-9-]*$")
+ICON_PREFIX_PATTERN = re.compile(r"^[a-z0-9-]+$")
 TOKEN_SPLIT_PATTERN = re.compile(r"[^a-z0-9]+")
 STOP_TOKENS = {
     "key",
@@ -40,6 +42,15 @@ def normalize_icon_slug(value: Optional[str]) -> str:
 
 def is_valid_icon_slug(value: str) -> bool:
     return bool(value and ICON_SLUG_PATTERN.fullmatch(value))
+
+
+def is_valid_icon_prefix(value: str) -> bool:
+    """True if ``value`` is a syntactically valid icon-pack prefix.
+
+    Guards the catalog lookup against arbitrary path input before it is used
+    as a dict key — same charset as the prefix half of ``ICON_SLUG_PATTERN``.
+    """
+    return bool(value and ICON_PREFIX_PATTERN.fullmatch(value))
 
 
 @lru_cache(maxsize=1)
@@ -216,3 +227,68 @@ def resolve_icon_slug(key: str, icon_slug_override: Optional[str]) -> str:
     if is_valid_icon_slug(normalized_override):
         return normalized_override
     return guess_icon_slug(key)
+
+
+class IconPrefix(TypedDict):
+    """One icon pack summarized for the picker's first stage.
+
+    ``count`` is the number of distinct icon names the pack contributes to the
+    index; ``sample`` is one full ``prefix:name`` slug for a live preview.
+    """
+
+    prefix: str
+    count: int
+    sample: str
+
+
+@dataclass(frozen=True)
+class _IconPackCatalog:
+    """Immutable per-pack grouping derived once from the term index."""
+
+    prefixes: Tuple[IconPrefix, ...]
+    names_by_prefix: Mapping[str, Tuple[str, ...]]
+
+
+@lru_cache(maxsize=1)
+def _icon_pack_catalog() -> _IconPackCatalog:
+    """Group the term index's distinct slugs into per-pack name lists.
+
+    Derived purely from ``icon_index.json`` — every distinct ``prefix:name``
+    slug is bucketed by its prefix. Built once per process (the source index is
+    ~15 MB and the grouping is stable for the file's lifetime); this is the
+    single source for both catalog endpoints, never a hand-maintained list.
+    """
+    buckets: Dict[str, set[str]] = {}
+    for entry in _load_index().values():
+        slug = entry.get("slug")
+        if not isinstance(slug, str) or ":" not in slug:
+            continue
+        prefix, name = slug.split(":", 1)
+        buckets.setdefault(prefix, set()).add(name)
+
+    names_by_prefix: Dict[str, Tuple[str, ...]] = {
+        prefix: tuple(sorted(names)) for prefix, names in buckets.items()
+    }
+    prefixes: list[IconPrefix] = [
+        {
+            "prefix": prefix,
+            "count": len(names),
+            "sample": f"{prefix}:{names[0]}",
+        }
+        for prefix, names in names_by_prefix.items()
+    ]
+    prefixes.sort(key=lambda item: (-item["count"], item["prefix"]))
+    return _IconPackCatalog(
+        prefixes=tuple(prefixes),
+        names_by_prefix=names_by_prefix,
+    )
+
+
+def list_icon_prefixes() -> list[IconPrefix]:
+    """Installed icon packs sorted by breadth (distinct icon count desc)."""
+    return list(_icon_pack_catalog().prefixes)
+
+
+def list_icon_names(prefix: str) -> list[str]:
+    """Sorted icon names within ``prefix``; empty list for an unknown pack."""
+    return list(_icon_pack_catalog().names_by_prefix.get(prefix, ()))

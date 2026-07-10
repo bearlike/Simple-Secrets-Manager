@@ -14,6 +14,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -31,7 +32,8 @@ const NO_PARENT = 'none';
 
 const schema = z.object({
   name: z.string().min(1, 'Name is required'),
-  parentSlug: z.string().optional()
+  parentSlug: z.string().optional(),
+  description: z.string().optional()
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -66,7 +68,8 @@ export function EditConfigDialog({
     if (open && config) {
       reset({
         name: config.name,
-        parentSlug: config.parentSlug ?? undefined
+        parentSlug: config.parentSlug ?? undefined,
+        description: config.description ?? ''
       });
     }
   }, [open, config, reset]);
@@ -84,7 +87,8 @@ export function EditConfigDialog({
       }
       return updateConfig(projectSlug, config.slug, {
         name: data.name,
-        parentSlug: data.parentSlug ?? null
+        parentSlug: data.parentSlug ?? null,
+        description: data.description ?? ''
       });
     },
     onSuccess: () => {
@@ -131,6 +135,19 @@ export function EditConfigDialog({
             <p className="text-xs text-muted-foreground">
               The slug is the config's identifier and can't be changed.
             </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-cfg-description">
+              Description{' '}
+              <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Textarea
+              id="edit-cfg-description"
+              {...register('description')}
+              placeholder="What this config is for..."
+              rows={2}
+              className="resize-none" />
+
           </div>
           {parentOptions.length > 0 &&
           <div className="space-y-1.5">

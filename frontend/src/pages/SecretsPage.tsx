@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { GitBranchIcon } from 'lucide-react';
+import { GitBranchIcon, TerminalIcon } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SecretsTable, type ForkSecretsSummary } from '../components/secrets/SecretsTable';
+import { ConfigUsageDialog } from '../components/configs/ConfigUsageDialog';
 import { EmptyState } from '../components/common/EmptyState';
 import { getConfigs } from '../lib/api/configs';
 import { getProjects } from '../lib/api/projects';
@@ -17,6 +18,7 @@ export function SecretsPage() {
     configSlug: string;
   }>();
   const [forkSummary, setForkSummary] = useState<ForkSecretsSummary | null>(null);
+  const [usageOpen, setUsageOpen] = useState(false);
   const { data: projects = [] } = useQuery({
     queryKey: queryKeys.projects(),
     queryFn: getProjects
@@ -91,6 +93,15 @@ export function SecretsPage() {
             Manage secrets for this environment
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setUsageOpen(true)}>
+
+          <TerminalIcon className="h-3.5 w-3.5" />
+          Use this config
+        </Button>
       </div>
 
       <SecretsTable
@@ -98,6 +109,13 @@ export function SecretsPage() {
         configSlug={configSlug}
         parentSlug={currentConfig?.parentSlug}
         onForkSummaryChange={setForkSummary}
+      />
+
+      <ConfigUsageDialog
+        projectSlug={projectSlug}
+        configSlug={configSlug}
+        open={usageOpen}
+        onOpenChange={setUsageOpen}
       />
     </div>);
 

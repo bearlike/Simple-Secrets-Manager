@@ -1,5 +1,6 @@
 import { ApiClientError, apiClient, apiClientText } from './client';
 import { mapSecretsData } from './mappers';
+import { parseRecordSafely, secretMetaDtoSchema } from './schemas';
 import type {
   BulkExportResult,
   RecomputeProjectIconsResponseDto,
@@ -11,17 +12,22 @@ import type {
 interface SecretValueInput {
   value: string;
   iconSlug?: string | null;
+  sensitive?: boolean;
+  description?: string | null;
 }
 
 export interface SecretUpsertInput {
   key: string;
   value: string;
   iconSlug?: string | null;
+  sensitive?: boolean;
+  description?: string | null;
 }
 
 export interface SecretExportOptions {
   includeParent?: boolean;
   includeMeta?: boolean;
+  includeProvenance?: boolean;
   resolveReferences?: boolean;
   raw?: boolean;
 }
@@ -49,12 +55,13 @@ export async function getSecrets(
       format: 'json',
       include_parent: options?.includeParent ?? true,
       include_meta: options?.includeMeta ?? true,
+      include_provenance: options?.includeProvenance ?? false,
       resolve_references: options?.resolveReferences ?? false,
       raw: options?.raw ?? false
     })
   );
 
-  return mapSecretsData(response.data ?? {}, response.meta);
+  return mapSecretsData(response.data ?? {}, parseRecordSafely(secretMetaDtoSchema, response.meta));
 }
 
 export async function getSecretsKeyMap(
@@ -81,11 +88,22 @@ export async function createSecret(
   configSlug: string,
   data: SecretUpsertInput
 ): Promise<Secret> {
-  const payload: { value: string; icon_slug?: string | null } = {
+  const payload: {
+    value: string;
+    icon_slug?: string | null;
+    sensitive?: boolean;
+    description?: string | null;
+  } = {
     value: data.value
   };
   if (data.iconSlug !== undefined) {
     payload.icon_slug = data.iconSlug;
+  }
+  if (data.sensitive !== undefined) {
+    payload.sensitive = data.sensitive;
+  }
+  if (data.description !== undefined) {
+    payload.description = data.description;
   }
 
   await apiClient<void>(
@@ -100,7 +118,9 @@ export async function createSecret(
     key: data.key,
     value: data.value,
     updatedAt: undefined,
-    iconSlug: data.iconSlug ?? undefined
+    iconSlug: data.iconSlug ?? undefined,
+    sensitive: data.sensitive ?? true,
+    description: data.description ?? undefined
   };
 }
 
@@ -110,11 +130,22 @@ export async function updateSecret(
   key: string,
   data: SecretValueInput
 ): Promise<Secret> {
-  const payload: { value: string; icon_slug?: string | null } = {
+  const payload: {
+    value: string;
+    icon_slug?: string | null;
+    sensitive?: boolean;
+    description?: string | null;
+  } = {
     value: data.value
   };
   if (data.iconSlug !== undefined) {
     payload.icon_slug = data.iconSlug;
+  }
+  if (data.sensitive !== undefined) {
+    payload.sensitive = data.sensitive;
+  }
+  if (data.description !== undefined) {
+    payload.description = data.description;
   }
 
   await apiClient<void>(
@@ -129,7 +160,9 @@ export async function updateSecret(
     key,
     value: data.value,
     updatedAt: undefined,
-    iconSlug: data.iconSlug ?? undefined
+    iconSlug: data.iconSlug ?? undefined,
+    sensitive: data.sensitive ?? true,
+    description: data.description ?? undefined
   };
 }
 

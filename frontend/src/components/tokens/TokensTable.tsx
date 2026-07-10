@@ -12,30 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { EmptyState } from '../common/EmptyState';
 import type { Token } from '../../lib/api/types';
-
-function formatDate(dateStr?: string): string {
-  if (!dateStr) return '-';
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return '-';
-  return date.toLocaleDateString();
-}
-
-function formatRelativeTime(dateStr?: string): string {
-  if (!dateStr) return '-';
-  const date = new Date(dateStr);
-  if (Number.isNaN(date.getTime())) return '-';
-
-  const diff = Date.now() - date.getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
-}
+import { formatAbsolute, formatRelativeTime } from '../../lib/time';
 
 function formatDuration(milliseconds: number): string {
   if (milliseconds <= 0) return 'expired';
@@ -104,7 +81,9 @@ export function TokensTable({ tokens, onRevoke, revoking, isLoading }: TokensTab
     {
       accessorKey: 'expiresAt',
       header: 'EXPIRES',
-      cell: ({ row }) => <span className="text-xs text-muted-foreground">{formatDate(row.original.expiresAt)}</span>
+      cell: ({ row }) => (
+        <span className="text-xs text-muted-foreground">{formatAbsolute(row.original.expiresAt, 'date')}</span>
+      )
     },
     {
       id: 'ttl',

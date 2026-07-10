@@ -125,6 +125,38 @@ class ApiClient:
                     return value.strip()
         return f"API request failed ({status_code})"
 
+    @staticmethod
+    def _expect_dict(payload: Any, what: str) -> dict[str, Any]:
+        """Validate a parsed response is a dict, or raise ``ApiError``.
+
+        Shared by ~15 methods that just hand back the raw response dict;
+        ``what`` supplies the per-method noun for the error message (for
+        example "Profile", producing "Profile response is invalid").
+        """
+        if not isinstance(payload, dict):
+            raise ApiError(
+                f"{what} response is invalid", status_code=1, body=payload
+            )
+        return payload
+
+    @staticmethod
+    def _expect_list(
+        payload: Any, key: str, what: str
+    ) -> list[dict[str, Any]]:
+        """Validate ``payload[key]`` is a list of dicts, or raise.
+
+        Shared by the list-endpoint methods that unwrap one envelope key
+        (``"projects"``, ``"members"``, ...) and filter out any non-dict
+        item defensively. ``what`` supplies the per-method noun, same as
+        ``_expect_dict``.
+        """
+        items = payload.get(key) if isinstance(payload, dict) else None
+        if not isinstance(items, list):
+            raise ApiError(
+                f"{what} response is invalid", status_code=1, body=payload
+            )
+        return [item for item in items if isinstance(item, dict)]
+
     def login_userpass(self, username: str, password: str) -> dict[str, Any]:
         payload = self.request(
             "GET", "/auth/tokens/", basic_auth=(username, password)
@@ -183,14 +215,7 @@ class ApiClient:
 
     def list_projects(self) -> list[dict[str, Any]]:
         payload = self.request("GET", "/projects", accept="application/json")
-        projects = (
-            payload.get("projects") if isinstance(payload, dict) else None
-        )
-        if not isinstance(projects, list):
-            raise ApiError(
-                "Projects response is invalid", status_code=1, body=payload
-            )
-        return [item for item in projects if isinstance(item, dict)]
+        return self._expect_list(payload, "projects", "Projects")
 
     def list_configs(self, project: str) -> list[dict[str, Any]]:
         payload = self.request(
@@ -198,51 +223,17 @@ class ApiClient:
             f"/projects/{project}/configs",
             accept="application/json",
         )
-        configs = payload.get("configs") if isinstance(payload, dict) else None
-        if not isinstance(configs, list):
-            raise ApiError(
-                "Configs response is invalid", status_code=1, body=payload
-            )
-        return [item for item in configs if isinstance(item, dict)]
+        return self._expect_list(payload, "configs", "Configs")
 
     def get_me(self) -> dict[str, Any]:
         payload = self.request("GET", "/me", accept="application/json")
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Profile response is invalid", status_code=1, body=payload
-            )
-        return payload
-
-    def update_me(
-        self, *, email: str | None = None, full_name: str | None = None
-    ) -> dict[str, Any]:
-        body: dict[str, Any] = {}
-        if email is not None:
-            body["email"] = email
-        if full_name is not None:
-            body["fullName"] = full_name
-        payload = self.request(
-            "PATCH", "/me", json_body=body, accept="application/json"
-        )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Profile update response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Profile")
 
     def get_workspace_settings(self) -> dict[str, Any]:
         payload = self.request(
             "GET", "/workspace/settings", accept="application/json"
         )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Workspace settings response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Workspace settings")
 
     def update_workspace_settings(
         self, updates: dict[str, Any]
@@ -253,26 +244,13 @@ class ApiClient:
             json_body=updates,
             accept="application/json",
         )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Workspace settings update response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Workspace settings update")
 
     def list_workspace_members(self) -> list[dict[str, Any]]:
         payload = self.request(
             "GET", "/workspace/members", accept="application/json"
         )
-        members = payload.get("members") if isinstance(payload, dict) else None
-        if not isinstance(members, list):
-            raise ApiError(
-                "Workspace members response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return [item for item in members if isinstance(item, dict)]
+        return self._expect_list(payload, "members", "Workspace members")
 
     def create_workspace_member(
         self,
@@ -295,13 +273,7 @@ class ApiClient:
             },
             accept="application/json",
         )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Workspace member create response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Workspace member create")
 
     def update_workspace_member(
         self, username: str, updates: dict[str, Any]
@@ -312,13 +284,7 @@ class ApiClient:
             json_body=updates,
             accept="application/json",
         )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Workspace member update response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Workspace member update")
 
     def disable_workspace_member(self, username: str) -> dict[str, Any]:
         payload = self.request(
@@ -326,26 +292,13 @@ class ApiClient:
             f"/workspace/members/{username}",
             accept="application/json",
         )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Workspace member disable response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Workspace member disable")
 
     def list_workspace_groups(self) -> list[dict[str, Any]]:
         payload = self.request(
             "GET", "/workspace/groups", accept="application/json"
         )
-        groups = payload.get("groups") if isinstance(payload, dict) else None
-        if not isinstance(groups, list):
-            raise ApiError(
-                "Workspace groups response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return [item for item in groups if isinstance(item, dict)]
+        return self._expect_list(payload, "groups", "Workspace groups")
 
     def create_workspace_group(
         self,
@@ -359,13 +312,7 @@ class ApiClient:
             json_body={"slug": slug, "name": name, "description": description},
             accept="application/json",
         )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Workspace group create response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Workspace group create")
 
     def update_workspace_group(
         self,
@@ -380,13 +327,7 @@ class ApiClient:
             json_body={"name": name, "description": description},
             accept="application/json",
         )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Workspace group update response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Workspace group update")
 
     def delete_workspace_group(self, group_slug: str) -> dict[str, Any]:
         payload = self.request(
@@ -394,13 +335,7 @@ class ApiClient:
             f"/workspace/groups/{group_slug}",
             accept="application/json",
         )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Workspace group delete response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Workspace group delete")
 
     def list_workspace_group_members(self, group_slug: str) -> list[str]:
         payload = self.request(
@@ -430,28 +365,13 @@ class ApiClient:
             json_body={"add": add or [], "remove": remove or []},
             accept="application/json",
         )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Workspace group members update response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Workspace group members update")
 
     def list_workspace_group_mappings(self) -> list[dict[str, Any]]:
         payload = self.request(
             "GET", "/workspace/group-mappings", accept="application/json"
         )
-        mappings = (
-            payload.get("mappings") if isinstance(payload, dict) else None
-        )
-        if not isinstance(mappings, list):
-            raise ApiError(
-                "Workspace mappings response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return [item for item in mappings if isinstance(item, dict)]
+        return self._expect_list(payload, "mappings", "Workspace mappings")
 
     def create_workspace_group_mapping(
         self,
@@ -470,13 +390,7 @@ class ApiClient:
             },
             accept="application/json",
         )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Workspace mapping create response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Workspace mapping create")
 
     def delete_workspace_group_mapping(
         self, mapping_id: str
@@ -486,13 +400,7 @@ class ApiClient:
             f"/workspace/group-mappings/{mapping_id}",
             accept="application/json",
         )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Workspace mapping delete response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Workspace mapping delete")
 
     def list_workspace_project_members(
         self, project_slug: str
@@ -502,14 +410,7 @@ class ApiClient:
             f"/workspace/projects/{project_slug}/members",
             accept="application/json",
         )
-        members = payload.get("members") if isinstance(payload, dict) else None
-        if not isinstance(members, list):
-            raise ApiError(
-                "Project members response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return [item for item in members if isinstance(item, dict)]
+        return self._expect_list(payload, "members", "Project members")
 
     def set_workspace_project_member(
         self,
@@ -529,13 +430,7 @@ class ApiClient:
             },
             accept="application/json",
         )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Project member update response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Project member update")
 
     def remove_workspace_project_member(
         self,
@@ -549,10 +444,4 @@ class ApiClient:
             f"/workspace/projects/{project_slug}/members/{subject_type}/{subject_id}",
             accept="application/json",
         )
-        if not isinstance(payload, dict):
-            raise ApiError(
-                "Project member delete response is invalid",
-                status_code=1,
-                body=payload,
-            )
-        return payload
+        return self._expect_dict(payload, "Project member delete")

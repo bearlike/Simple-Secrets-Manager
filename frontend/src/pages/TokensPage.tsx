@@ -16,6 +16,7 @@ import type { Token } from '../lib/api/types';
 import { TokensTable } from '../components/tokens/TokensTable';
 import { CreateTokenDialog } from '../components/tokens/CreateTokenDialog';
 import { getApiErrorMessage, notifyApiError } from '../lib/api/errorToast';
+import { outcomeAlertClass, outcomeTextClass } from '../lib/badgeStyles';
 
 export function TokensPage() {
   const [createOpen, setCreateOpen] = useState(false);
@@ -90,8 +91,8 @@ export function TokensPage() {
       )}
 
       {hasListError && (
-        <Alert className="mb-4 border-red-200 bg-red-50 dark:bg-red-950 dark:border-red-800">
-          <AlertDescription className="text-red-700 dark:text-red-300">
+        <Alert className={`mb-4 ${outcomeAlertClass('error')}`}>
+          <AlertDescription className={outcomeTextClass('error')}>
             {getApiErrorMessage(tokensQuery.error, 'Failed to load tokens. You can still create a new token.')}
           </AlertDescription>
         </Alert>

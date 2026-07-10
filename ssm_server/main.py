@@ -1,10 +1,6 @@
 #!/usr/bin/env python3
 
-import os
 from loguru import logger
-from dotenv import load_dotenv
-
-load_dotenv()
 
 logger.add(
     "secrets_manager.log",
@@ -16,32 +12,26 @@ logger.add(
 )
 
 
-def strtobool(val: str) -> bool:
-    """Convert a string representation of truth to True or False.
-
-    True values are 'y', 'yes', 't', 'true', 'on', and '1';
-    False values are 'n', 'no', 'f', 'false', 'off', and '0'.
-    Raises ValueError if 'val' is anything else.
-    """
-    val = val.lower().strip()
-    if val in ("y", "yes", "t", "true", "on", "1"):
-        return True
-    elif val in ("n", "no", "f", "false", "off", "0"):
-        return False
-    else:
-        logger.warning(f"invalid truth value {val!r}")
-        return False
-
-
 def init_app():
+    import ssm_telemetry
     from ssm_server.api.api import app
+    from ssm_server.api.core import settings
+    from ssm_server.engines.versioning import get_application_version
 
-    debug_enabled = strtobool(os.getenv("DEBUG", "False"))
+    # Wire OTel event emission once, in the worker process. No-op unless the
+    # OTLP endpoint is configured (and the `otel` extra is installed); the
+    # endpoint is injected from settings, never read from the environment here.
+    ssm_telemetry.configure(
+        "ssm-server",
+        get_application_version(),
+        endpoint=settings.otel_exporter_otlp_endpoint,
+    )
+
     app.run(
-        debug=debug_enabled,
-        host=os.environ.get("BIND_HOST", "0.0.0.0"),
-        port=os.environ.get("PORT", 5000),
-        use_reloader=debug_enabled,
+        debug=settings.debug,
+        host=settings.bind_host,
+        port=settings.port,
+        use_reloader=settings.debug,
     )
 
 

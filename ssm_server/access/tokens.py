@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Token authentication for Secrets Manager."""
 
-import datetime as dt
 import hashlib
-import os
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from bson import ObjectId
+from bson.errors import InvalidId
+from pydantic import SecretStr
 
 from ssm_server.api.serialization import oid_to_str, sanitize_doc, to_iso
 from ssm_server.access.scopes import global_scopes
@@ -15,21 +16,29 @@ from ssm_server.access.scopes import global_scopes
 class Tokens:
     SESSION_TOKEN_TTL_SECONDS = 24 * 60 * 60
 
-    def __init__(self, token_auth_col, personal_actor_resolver=None):
+    def __init__(
+        self,
+        token_auth_col,
+        personal_actor_resolver=None,
+        token_salt=SecretStr(""),
+    ):
         self._tokens = token_auth_col
         self._tokens.create_index("token_hash", unique=True)
         self._tokens.create_index("expires_at")
         self._tokens.create_index("revoked_at")
-        self._salt = os.getenv("TOKEN_SALT", "")
+        # The salt is injected (from ServerSettings) as a SecretStr so it can't
+        # leak via a repr/log; unwrap it only here, at the hashing point.
+        self._salt = token_salt
         self._personal_actor_resolver = personal_actor_resolver
 
     def _hash_token(self, token):
-        return hashlib.sha256(f"{self._salt}{token}".encode()).hexdigest()
+        salt = self._salt.get_secret_value()
+        return hashlib.sha256(f"{salt}{token}".encode()).hexdigest()
 
     def _bounded_session_ttl(self, max_ttl):
         try:
             ttl_seconds = int(max_ttl)
-        except Exception:
+        except (TypeError, ValueError):
             ttl_seconds = self.SESSION_TOKEN_TTL_SECONDS
         if ttl_seconds <= 0:
             ttl_seconds = self.SESSION_TOKEN_TTL_SECONDS
@@ -65,10 +74,10 @@ class Tokens:
         )
 
     def generate(self, username, max_ttl=SESSION_TOKEN_TTL_SECONDS):
-        now = dt.datetime.utcnow()
+        now = datetime.now(timezone.utc)
         self._rotate_session_tokens(username, now)
         ttl_seconds = self._bounded_session_ttl(max_ttl)
-        expires_at = now + dt.timedelta(seconds=ttl_seconds)
+        expires_at = now + timedelta(seconds=ttl_seconds)
         return self.create_token(
             token_type="personal",
             created_by=username,
@@ -89,7 +98,7 @@ class Tokens:
         purpose="api",
     ):
         plain = secrets.token_hex(32)
-        now = dt.datetime.utcnow()
+        now = datetime.now(timezone.utc)
         doc = {
             "token_hash": self._hash_token(plain),
             "type": token_type,
@@ -115,7 +124,7 @@ class Tokens:
         if token_id:
             try:
                 finder = self._tokens.find_one({"_id": ObjectId(token_id)})
-            except Exception:
+            except (InvalidId, TypeError, ValueError):
                 finder = self._tokens.find_one({"_id": token_id})
             return finder
         if token:
@@ -135,12 +144,15 @@ class Tokens:
             return {"status": "Not allowed"}, 403
         self._tokens.update_one(
             {"_id": finder["_id"]},
-            {"$set": {"revoked_at": dt.datetime.utcnow()}},
+            {"$set": {"revoked_at": datetime.now(timezone.utc)}},
         )
         return {"status": "OK"}, 200
 
     @staticmethod
     def _serialize_token_metadata(doc):
+        expires_at = to_iso(doc.get("expires_at"))
+        last_used_at = to_iso(doc.get("last_used_at"))
+        created_at = to_iso(doc.get("created_at"))
         return {
             "token_id": oid_to_str(doc.get("_id")),
             "type": doc.get("type"),
@@ -148,10 +160,16 @@ class Tokens:
             "subject_user": doc.get("subject_user"),
             "subject_service_name": doc.get("subject_service_name"),
             "scopes": sanitize_doc(doc.get("scopes", [])),
-            "expires_at": to_iso(doc.get("expires_at")),
-            "last_used_at": to_iso(doc.get("last_used_at")),
+            # camelCase is the canonical API form (the frontend reads it
+            # first); the snake_case twins are dual-emitted for back-compat and
+            # deprecated for removal in the next major.
+            "expiresAt": expires_at,
+            "lastUsedAt": last_used_at,
+            "createdAt": created_at,
+            "expires_at": expires_at,
+            "last_used_at": last_used_at,
             "revoked_at": to_iso(doc.get("revoked_at")),
-            "created_at": to_iso(doc.get("created_at")),
+            "created_at": created_at,
             "created_by": doc.get("created_by"),
         }
 
@@ -162,7 +180,7 @@ class Tokens:
                 "revoked_at": None,
                 "$or": [
                     {"expires_at": None},
-                    {"expires_at": {"$gt": dt.datetime.utcnow()}},
+                    {"expires_at": {"$gt": datetime.now(timezone.utc)}},
                 ],
             }
         cursor = self._tokens.find(query).sort("created_at", -1)
@@ -176,11 +194,11 @@ class Tokens:
         if doc.get("revoked_at") is not None:
             return None, "revoked"
         expires_at = doc.get("expires_at")
-        if expires_at is not None and expires_at < dt.datetime.utcnow():
+        if expires_at is not None and expires_at < datetime.now(timezone.utc):
             return None, "expired"
         self._tokens.update_one(
             {"_id": doc["_id"]},
-            {"$set": {"last_used_at": dt.datetime.utcnow()}},
+            {"$set": {"last_used_at": datetime.now(timezone.utc)}},
         )
         token_scopes = doc.get("scopes", [])
         effective_scopes = token_scopes

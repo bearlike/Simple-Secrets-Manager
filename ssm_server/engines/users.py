@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 from datetime import datetime, timezone
 
+from pymongo.errors import DuplicateKeyError
+
 
 class Users:
     def __init__(self, users_col):
@@ -39,7 +41,7 @@ class Users:
         }
         try:
             self._users.insert_one(payload)
-        except Exception:
+        except DuplicateKeyError:
             return None, "User already exists", 400
         return payload, "OK", 201
 
@@ -88,7 +90,3 @@ class Users:
         if res.deleted_count == 0:
             return "User not found", 404
         return "OK", 200
-
-    def is_disabled(self, username):
-        user = self.get(username)
-        return bool(user and user.get("disabled_at") is not None)

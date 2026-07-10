@@ -1,0 +1,24 @@
+# Local deployment override (Hurricane host) — restores the `mongoku` Mongo
+# admin UI that the ORIGINAL running stack included but the tracked
+# docker-compose.yml does not. `docker compose up` auto-merges this file, so
+# `mongo` + `ssm` (from docker-compose.yml) + `mongoku` (here) come up together,
+# reusing the existing `simple-secrets-manager_mongo_data` volume.
+#
+# NOTE: MONGOKU_SERVER_ORIGIN is host-specific (the LAN IP:port the UI is
+# reached at) — update it if this host's address changes.
+services:
+  mongoku:
+    image: huggingface/mongoku:latest
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    ports:
+      - "3100:3100"
+    environment:
+      MONGOKU_DEFAULT_HOST: mongodb://root:password@mongo:27017
+      MONGOKU_EXCLUDE_DATABASES: admin,config,local
+      MONGOKU_SERVER_PORT: "3100"
+      MONGOKU_SERVER_ORIGIN: http://192.168.1.206:3100
+      MONGOKU_SERVER_BODY_SIZE_LIMIT: Infinity
+    networks:
+      - app-tier

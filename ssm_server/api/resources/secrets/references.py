@@ -5,9 +5,11 @@ import re
 from dataclasses import dataclass
 from typing import Callable
 
-from ssm_server.engines.common import is_valid_env_key, is_valid_slug
-
-PLACEHOLDER_PATTERN = re.compile(r"\$\{([^{}]+)\}")
+from ssm_server.engines.common import (
+    REFERENCE_TOKEN_PATTERN,
+    is_valid_env_key,
+    is_valid_slug,
+)
 
 
 class SecretReferenceError(Exception):
@@ -90,7 +92,7 @@ class SecretReferenceResolver:
             resolved = self._resolve_key(parsed, stack=stack, depth=depth)
             return "" if resolved is None else resolved
 
-        return PLACEHOLDER_PATTERN.sub(replace, value)
+        return REFERENCE_TOKEN_PATTERN.sub(replace, value)
 
     def validate_value_references(self, *, key: str, value: str) -> list[str]:
         if "${" not in value:
@@ -98,7 +100,7 @@ class SecretReferenceResolver:
         current = self._root
         source = _Node(current.project_slug, current.config_slug, key)
         errors: list[str] = []
-        for match in PLACEHOLDER_PATTERN.finditer(value):
+        for match in REFERENCE_TOKEN_PATTERN.finditer(value):
             token = match.group(1).strip()
             parsed = self._parse_reference(token, current)
             if parsed is None:
@@ -139,7 +141,7 @@ class SecretReferenceResolver:
                 f"${{{node.project_slug}.{node.config_slug}.{node.key}}}"
             )
 
-        for match in PLACEHOLDER_PATTERN.finditer(raw_value):
+        for match in REFERENCE_TOKEN_PATTERN.finditer(raw_value):
             token = match.group(1).strip()
             parsed = self._parse_reference(token, context)
             if parsed is None:

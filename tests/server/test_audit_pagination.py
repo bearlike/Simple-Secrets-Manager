@@ -2,60 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from ssm_server.engines.audit import AuditEvents
 
-
-class FakeCursor:
-    def __init__(self, docs):
-        self.docs = docs
-
-    def sort(self, key, direction):
-        reverse = direction == -1
-        self.docs.sort(key=lambda item: item.get(key), reverse=reverse)
-        return self
-
-    def skip(self, amount):
-        self.docs = self.docs[amount:]
-        return self
-
-    def limit(self, amount):
-        self.docs = self.docs[:amount]
-        return self
-
-    def __iter__(self):
-        return iter(self.docs)
-
-
-class FakeCollection:
-    def __init__(self, docs):
-        self.docs = docs
-
-    def create_index(self, *_args, **_kwargs):
-        return None
-
-    def _match(self, doc, query):
-        for key, value in query.items():
-            if key == "$and":
-                if not all(self._match(doc, clause) for clause in value):
-                    return False
-                continue
-            if key == "$or":
-                if not any(self._match(doc, clause) for clause in value):
-                    return False
-                continue
-
-            current = doc.get(key)
-            if isinstance(value, dict) and "$gte" in value:
-                if current is None or current < value["$gte"]:
-                    return False
-                continue
-            if current != value:
-                return False
-        return True
-
-    def find(self, query, projection=None):
-        _ = projection
-        return FakeCursor(
-            [doc for doc in self.docs if self._match(doc, query)]
-        )
+from tests.server.fakes import FakeCollection
 
 
 def test_query_events_page_returns_ordered_slice_with_has_next():

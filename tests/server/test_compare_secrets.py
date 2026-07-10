@@ -2,34 +2,7 @@ from datetime import datetime, timezone
 
 from ssm_server.engines.secrets_v2 import SecretsV2
 
-
-class FakeSecrets:
-    def __init__(self, docs):
-        self.docs = docs
-
-    def create_index(self, *_args, **_kwargs):
-        return None
-
-    def find(self, query):
-        config_id = query.get("config_id")
-        key = query.get("key")
-        if isinstance(config_id, dict) and "$in" in config_id:
-            config_ids = set(config_id["$in"])
-            return [
-                doc
-                for doc in self.docs
-                if doc.get("config_id") in config_ids and doc.get("key") == key
-            ]
-        return [
-            doc
-            for doc in self.docs
-            if doc.get("config_id") == config_id and doc.get("key") == key
-        ]
-
-
-class FakeConfigs:
-    def get_by_id(self, _config_id):
-        return None
+from tests.server.fakes import FakeConfigs, FakeSecrets
 
 
 def test_compare_key_across_configs_resolves_inherited_and_missing():
@@ -56,7 +29,7 @@ def test_compare_key_across_configs_resolves_inherited_and_missing():
         {"_id": "qa", "slug": "qa", "parent_config_id": None},
     ]
 
-    engine = SecretsV2(FakeSecrets(docs), FakeConfigs())
+    engine = SecretsV2(FakeSecrets(docs), FakeConfigs({}))
     rows, msg, code = engine.compare_key_across_configs(
         configs,
         "API_HOST",
@@ -75,12 +48,18 @@ def test_compare_key_across_configs_resolves_inherited_and_missing():
                 "value": "base.example.com",
                 "source": "base",
                 "isInherited": False,
+                "sensitive": True,
             },
-            "direct": {"exists": True, "value": "base.example.com"},
+            "direct": {
+                "exists": True,
+                "value": "base.example.com",
+                "sensitive": True,
+            },
             "meta": {
                 "updatedAt": "2026-01-01T00:00:00Z",
                 "updatedBy": "system",
                 "iconSlug": "",
+                "description": "",
             },
         },
         {
@@ -90,12 +69,14 @@ def test_compare_key_across_configs_resolves_inherited_and_missing():
                 "value": "base.example.com",
                 "source": "base",
                 "isInherited": True,
+                "sensitive": True,
             },
             "direct": {"exists": False, "value": None},
             "meta": {
                 "updatedAt": "2026-01-01T00:00:00Z",
                 "updatedBy": "system",
                 "iconSlug": "",
+                "description": "",
             },
         },
         {
@@ -105,20 +86,36 @@ def test_compare_key_across_configs_resolves_inherited_and_missing():
                 "value": "prod.example.com",
                 "source": "prod",
                 "isInherited": False,
+                "sensitive": True,
             },
-            "direct": {"exists": True, "value": "prod.example.com"},
+            "direct": {
+                "exists": True,
+                "value": "prod.example.com",
+                "sensitive": True,
+            },
             "meta": {
                 "updatedAt": "2026-01-02T00:00:00Z",
                 "updatedBy": "alice",
                 "iconSlug": "",
+                "description": "",
             },
         },
         {
             "configId": "qa",
             "configSlug": "qa",
-            "effective": {"value": None, "source": None, "isInherited": False},
+            "effective": {
+                "value": None,
+                "source": None,
+                "isInherited": False,
+                "sensitive": True,
+            },
             "direct": {"exists": False, "value": None},
-            "meta": {"updatedAt": None, "updatedBy": None, "iconSlug": ""},
+            "meta": {
+                "updatedAt": None,
+                "updatedBy": None,
+                "iconSlug": "",
+                "description": "",
+            },
         },
     ]
 
@@ -136,7 +133,7 @@ def test_compare_key_across_configs_skips_missing_when_include_empty_false():
         {"_id": "dev", "slug": "dev", "parent_config_id": "base"},
         {"_id": "qa", "slug": "qa", "parent_config_id": None},
     ]
-    engine = SecretsV2(FakeSecrets(docs), FakeConfigs())
+    engine = SecretsV2(FakeSecrets(docs), FakeConfigs({}))
     rows, msg, code = engine.compare_key_across_configs(
         configs,
         "API_HOST",
@@ -155,8 +152,13 @@ def test_compare_key_across_configs_skips_missing_when_include_empty_false():
                 "value": "base.example.com",
                 "source": "base",
                 "isInherited": False,
+                "sensitive": True,
             },
-            "direct": {"exists": True, "value": "base.example.com"},
+            "direct": {
+                "exists": True,
+                "value": "base.example.com",
+                "sensitive": True,
+            },
         },
         {
             "configId": "dev",
@@ -165,6 +167,7 @@ def test_compare_key_across_configs_skips_missing_when_include_empty_false():
                 "value": "base.example.com",
                 "source": "base",
                 "isInherited": True,
+                "sensitive": True,
             },
             "direct": {"exists": False, "value": None},
         },
@@ -177,7 +180,7 @@ def test_compare_key_across_configs_handles_inheritance_cycle():
         {"_id": "a", "slug": "a", "parent_config_id": "b"},
         {"_id": "b", "slug": "b", "parent_config_id": "a"},
     ]
-    engine = SecretsV2(FakeSecrets(docs), FakeConfigs())
+    engine = SecretsV2(FakeSecrets(docs), FakeConfigs({}))
     rows, msg, code = engine.compare_key_across_configs(
         configs,
         "BROKEN",
@@ -191,7 +194,7 @@ def test_compare_key_across_configs_handles_inheritance_cycle():
 
 
 def test_compare_key_across_configs_rejects_invalid_key():
-    engine = SecretsV2(FakeSecrets([]), FakeConfigs())
+    engine = SecretsV2(FakeSecrets([]), FakeConfigs({}))
     rows, msg, code = engine.compare_key_across_configs(
         [], "not-valid", include_parent=True
     )
@@ -212,7 +215,7 @@ def test_compare_key_across_configs_respects_include_parent_false():
         {"_id": "base", "slug": "base", "parent_config_id": None},
         {"_id": "dev", "slug": "dev", "parent_config_id": "base"},
     ]
-    engine = SecretsV2(FakeSecrets(docs), FakeConfigs())
+    engine = SecretsV2(FakeSecrets(docs), FakeConfigs({}))
 
     rows, msg, code = engine.compare_key_across_configs(
         configs,
@@ -232,8 +235,13 @@ def test_compare_key_across_configs_respects_include_parent_false():
                 "value": "base.example.com",
                 "source": "base",
                 "isInherited": False,
+                "sensitive": True,
             },
-            "direct": {"exists": True, "value": "base.example.com"},
+            "direct": {
+                "exists": True,
+                "value": "base.example.com",
+                "sensitive": True,
+            },
         },
     ]
 
@@ -244,7 +252,7 @@ def test_compare_key_across_configs_ignores_malformed_config_entries():
         {"_id": None, "slug": "bad"},
         {"_id": "bad-slug", "slug": 123},
     ]
-    engine = SecretsV2(FakeSecrets([]), FakeConfigs())
+    engine = SecretsV2(FakeSecrets([]), FakeConfigs({}))
 
     rows, msg, code = engine.compare_key_across_configs(
         configs,
@@ -260,7 +268,12 @@ def test_compare_key_across_configs_ignores_malformed_config_entries():
         {
             "configId": "valid",
             "configSlug": "valid",
-            "effective": {"value": None, "source": None, "isInherited": False},
+            "effective": {
+                "value": None,
+                "source": None,
+                "isInherited": False,
+                "sensitive": True,
+            },
             "direct": {"exists": False, "value": None},
         }
     ]

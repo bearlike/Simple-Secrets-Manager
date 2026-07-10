@@ -55,8 +55,8 @@ export function ConfigSettingsPage() {
   const recomputeIconsMutation = useMutation({
     mutationFn: () => recomputeProjectSecretIcons(projectSlug),
     onSuccess: (summary) => {
-      queryClient.invalidateQueries({ queryKey: ['secrets', projectSlug] });
-      queryClient.invalidateQueries({ queryKey: ['compare-secret', projectSlug] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.secretsForProject(projectSlug) });
+      queryClient.invalidateQueries({ queryKey: queryKeys.compareSecretForProject(projectSlug) });
       toast.success(
         `Auto icons refreshed: ${summary.keysUpdated}/${summary.keysScanned} keys updated (${summary.secretsUpdated} secrets)`
       );
@@ -171,7 +171,14 @@ export function ConfigSettingsPage() {
                   tabIndex={0}
                   role="button"
                 >
-                  <td className="px-4 py-2.5 font-medium text-sm">{config.name}</td>
+                  <td className="px-4 py-2.5 text-sm">
+                    <div className="font-medium">{config.name}</div>
+                    {config.description && (
+                      <div className="mt-0.5 text-xs font-normal text-muted-foreground">
+                        {config.description}
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-2.5">
                     <code className="font-mono text-xs text-muted-foreground">{config.slug}</code>
                   </td>

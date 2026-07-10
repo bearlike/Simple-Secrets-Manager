@@ -3,6 +3,7 @@ from typing import Optional
 
 from flask import Response, g, request
 from flask_restx import Resource, inputs
+from loguru import logger
 
 from ssm_server.api.core import api, conn
 from ssm_server.api.resources.helpers import resolve_project_config
@@ -39,6 +40,16 @@ secret_parser.add_argument("value", type=str, required=True, location="json")
 secret_parser.add_argument(
     "icon_slug", type=str, required=False, location="json"
 )
+secret_parser.add_argument(
+    "description", type=str, required=False, location="json"
+)
+secret_parser.add_argument(
+    "sensitive",
+    type=inputs.boolean,
+    required=False,
+    location="json",
+    store_missing=False,
+)
 secret_get_parser = api.parser()
 secret_get_parser.add_argument(
     "raw", type=inputs.boolean, default=False, location="args"
@@ -68,6 +79,9 @@ export_parser.add_argument(
 )
 export_parser.add_argument(
     "resolve_references", type=inputs.boolean, default=False, location="args"
+)
+export_parser.add_argument(
+    "include_provenance", type=inputs.boolean, default=False, location="args"
 )
 export_parser.add_argument(
     "placeholder_max_depth", type=int, default=8, location="args"
@@ -116,6 +130,34 @@ def _build_reference_resolver(
     )
 
 
+def _provenance_env_annotations(
+    project: dict, meta: Optional[dict]
+) -> dict[str, str]:
+    """Build ``{key: '# from <config>[: <description>]'}`` from export meta.
+
+    Only keys whose effective value came from a resolvable ``source`` config
+    are annotated; the source config's description (same project) is appended
+    when present.
+    """
+    annotations: dict[str, str] = {}
+    description_by_slug: dict[str, Optional[str]] = {}
+    for key, entry in (meta or {}).items():
+        source = entry.get("source")
+        if not source:
+            continue
+        if source not in description_by_slug:
+            cfg = conn.configs.get_by_slug(project["_id"], source)
+            description_by_slug[source] = (
+                cfg.get("description") if cfg else None
+            )
+        comment = f"# from {source}"
+        description = description_by_slug[source]
+        if description:
+            comment += f": {description}"
+        annotations[key] = comment
+    return annotations
+
+
 @secrets_ns.route("/<string:key>")
 class SecretItemResource(Resource):
     @api.doc(security=["Bearer", "Token"], parser=secret_parser)
@@ -135,6 +177,14 @@ class SecretItemResource(Resource):
         icon_slug = payload.get("icon_slug") if icon_slug_provided else None
         if icon_slug is not None and not isinstance(icon_slug, str):
             api.abort(400, "icon_slug must be a string or null")
+        sensitive_provided = "sensitive" in payload
+        sensitive = args.get("sensitive") if sensitive_provided else None
+        description_provided = "description" in payload
+        description = (
+            payload.get("description") if description_provided else None
+        )
+        if description is not None and not isinstance(description, str):
+            api.abort(400, "description must be a string or null")
 
         if "${" in value:
             exported, _, msg, code = conn.secrets_v2.export_config(
@@ -161,6 +211,21 @@ class SecretItemResource(Resource):
             if errors:
                 api.abort(400, "; ".join(errors))
 
+        # Trace which fields the client actually sent -- "saved but looks
+        # unchanged" reports hinge on exactly this (provided vs omitted).
+        # LOG HYGIENE: metadata only. Never log `value` (or any secret
+        # payload) here -- key names/slugs/flags are the allowed set.
+        logger.debug(
+            "secrets.put {}/{} key={} icon_provided={} icon={} "
+            "sensitive_provided={} description_provided={}",
+            project_slug,
+            config_slug,
+            key,
+            icon_slug_provided,
+            icon_slug,
+            sensitive_provided,
+            description_provided,
+        )
         result, code = conn.secrets_v2.put(
             config["_id"],
             key,
@@ -168,6 +233,10 @@ class SecretItemResource(Resource):
             g.actor.get("id"),
             icon_slug=icon_slug,
             icon_slug_provided=icon_slug_provided,
+            sensitive=sensitive,
+            sensitive_provided=sensitive_provided,
+            description=description,
+            description_provided=description_provided,
         )
         audit_event(
             "secrets.write",
@@ -281,10 +350,12 @@ class SecretExportResource(Resource):
         args = export_parser.parse_args()
         raw = bool(args["raw"])
         resolve_arg = bool(args["resolve_references"])
+        include_provenance = bool(args["include_provenance"])
         data, meta, msg, code = conn.secrets_v2.export_config(
             config["_id"],
             include_parent=args["include_parent"],
             include_metadata=args["include_meta"],
+            include_provenance=include_provenance,
         )
         if code >= 400:
             api.abort(code, msg)
@@ -305,7 +376,32 @@ class SecretExportResource(Resource):
                 if not raw:
                     api.abort(exc.status_code, exc.message)
                 resolved = data
-        etag = config_export_etag(resolved)
+        # The ETag identifies the REPRESENTATION: when the response carries
+        # per-key metadata (include_meta -- default true -- or provenance),
+        # `meta` is non-None and folds into the tag, so a metadata-only edit
+        # (icon slug, sensitivity, description) flips it and the console's
+        # conditional refetch is served fresh instead of a stale 304 that
+        # keeps rendering the pre-edit icon. Callers that want the value-only
+        # tag (the reloader: its 304 divergence check must react to VALUE
+        # changes alone, or icon edits would recreate containers) explicitly
+        # request include_meta=false, which keeps their tag byte-identical to
+        # previously stamped revisions.
+        etag = config_export_etag(resolved, meta)
+        # LOG HYGIENE: metadata only -- key COUNT, never key names or values.
+        # The etag is safe to log: it is already exposed as a response header
+        # and stored in world-readable container labels by the reloader.
+        logger.debug(
+            "secrets.export {}/{} etag={} include_meta={} provenance={} "
+            "raw={} resolve={} keys={}",
+            project_slug,
+            config_slug,
+            etag,
+            bool(args["include_meta"]),
+            include_provenance,
+            raw,
+            resolve_arg,
+            len(resolved),
+        )
         if _if_none_match_matches(request.headers.get("If-None-Match"), etag):
             # A 304 is still a scoped read of the export data; audit it too,
             # otherwise the reloader's steady-state polling (which is almost
@@ -328,7 +424,14 @@ class SecretExportResource(Resource):
             status_code=200,
         )
         if args["format"] == "env":
-            env_blob, env_msg, env_code = conn.secrets_v2.to_env(body_data)
+            annotations = (
+                _provenance_env_annotations(project, meta)
+                if include_provenance
+                else None
+            )
+            env_blob, env_msg, env_code = conn.secrets_v2.to_env(
+                body_data, annotations
+            )
             if env_code >= 400:
                 api.abort(env_code, env_msg)
             response = Response(

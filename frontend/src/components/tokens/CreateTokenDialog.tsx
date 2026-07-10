@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { CheckIcon, ClipboardIcon, AlertTriangleIcon } from 'lucide-react';
+import { AlertTriangleIcon } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -28,6 +28,8 @@ import { getConfigs } from '../../lib/api/configs';
 import { queryKeys } from '../../lib/api/queryKeys';
 import type { Project } from '../../lib/api/types';
 import { notifyApiError } from '../../lib/api/errorToast';
+import { outcomeAlertClass } from '../../lib/badgeStyles';
+import { CopyButton } from '../common/CopyButton';
 
 const schema = z
   .object({
@@ -35,7 +37,7 @@ const schema = z
     serviceName: z.string().optional(),
     projectSlug: z.string().optional(),
     configSlug: z.string().optional(),
-    access: z.enum(['read', 'read_write']),
+    access: z.enum(['read', 'read_write', 'reload']),
     ttlHours: z.preprocess(
       (value) => {
         if (value === '' || value === undefined || value === null) return undefined;
@@ -72,7 +74,6 @@ interface CreateTokenDialogProps {
 export function CreateTokenDialog({ open, onOpenChange, projects }: CreateTokenDialogProps) {
   const queryClient = useQueryClient();
   const [plaintext, setPlaintext] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const {
     handleSubmit,
@@ -91,6 +92,7 @@ export function CreateTokenDialog({ open, onOpenChange, projects }: CreateTokenD
 
   const selectedType = watch('type');
   const selectedProject = watch('projectSlug');
+  const selectedAccess = watch('access');
 
   const { data: configs = [] } = useQuery({
     queryKey: queryKeys.configs(selectedProject ?? ''),
@@ -125,21 +127,11 @@ export function CreateTokenDialog({ open, onOpenChange, projects }: CreateTokenD
     });
   };
 
-  const handleCopy = () => {
-    if (!plaintext) return;
-
-    navigator.clipboard.writeText(plaintext).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
   const handleClose = () => {
     onOpenChange(false);
     setTimeout(() => {
       reset();
       setPlaintext(null);
-      setCopied(false);
     }, 200);
   };
 
@@ -152,7 +144,10 @@ export function CreateTokenDialog({ open, onOpenChange, projects }: CreateTokenD
 
         {plaintext ? (
           <div className="space-y-4 pt-2">
-            <Alert className="border-yellow-200 bg-yellow-50 dark:bg-yellow-950 dark:border-yellow-800">
+            <Alert className={outcomeAlertClass('warning')}>
+              {/* Icon/description use their own emphasis shades (600/300,
+                  800/200), distinct from the shared badge text shade -- not
+                  part of the verified duplicate, so left as-is. */}
               <AlertTriangleIcon className="h-4 w-4 text-yellow-600 dark:text-yellow-300" />
               <AlertDescription className="text-yellow-800 dark:text-yellow-200 text-sm">
                 This token will only be shown once. Copy it now.
@@ -163,14 +158,7 @@ export function CreateTokenDialog({ open, onOpenChange, projects }: CreateTokenD
               <Label className="text-xs text-muted-foreground">Your Token</Label>
               <div className="flex items-center gap-2 p-3 rounded-md bg-muted border border-border">
                 <code className="flex-1 font-mono text-xs break-all text-foreground">{plaintext}</code>
-                <Button variant="outline" size="sm" className="shrink-0 h-7 gap-1.5" onClick={handleCopy}>
-                  {copied ? (
-                    <CheckIcon className="h-3.5 w-3.5 text-green-600 dark:text-green-400" />
-                  ) : (
-                    <ClipboardIcon className="h-3.5 w-3.5" />
-                  )}
-                  {copied ? 'Copied' : 'Copy'}
-                </Button>
+                <CopyButton value={plaintext} />
               </div>
             </div>
 
@@ -189,6 +177,11 @@ export function CreateTokenDialog({ open, onOpenChange, projects }: CreateTokenD
                     setValue('type', value as 'service' | 'personal');
                     if (value === 'personal') {
                       setValue('serviceName', undefined);
+                      // The Reloader preset carries reload:report, which is
+                      // service-token-only; drop it if the type flips to personal.
+                      if (selectedAccess === 'reload') {
+                        setValue('access', 'read');
+                      }
                     }
                   }}
                 >
@@ -205,8 +198,10 @@ export function CreateTokenDialog({ open, onOpenChange, projects }: CreateTokenD
               <div className="space-y-1.5">
                 <Label>Access</Label>
                 <Select
-                  defaultValue="read"
-                  onValueChange={(value) => setValue('access', value as 'read' | 'read_write')}
+                  value={selectedAccess}
+                  onValueChange={(value) =>
+                    setValue('access', value as 'read' | 'read_write' | 'reload')
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -214,6 +209,9 @@ export function CreateTokenDialog({ open, onOpenChange, projects }: CreateTokenD
                   <SelectContent>
                     <SelectItem value="read">Read Only</SelectItem>
                     <SelectItem value="read_write">Read &amp; Write</SelectItem>
+                    {selectedType === 'service' && (
+                      <SelectItem value="reload">Reloader (read + report)</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

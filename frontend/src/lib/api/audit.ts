@@ -1,5 +1,6 @@
 import { apiClient } from './client';
 import { mapAuditEventDto } from './mappers';
+import { auditEventDtoSchema, parseListSafely } from './schemas';
 import type { AuditEventsPage, AuditEventsResponseDto } from './types';
 
 interface AuditFilters {
@@ -21,7 +22,7 @@ export async function getAuditEvents(filters: AuditFilters = {}): Promise<AuditE
 
   const response = await apiClient<AuditEventsResponseDto>(`/audit/events?${params.toString()}`);
   return {
-    events: (response.events ?? []).map(mapAuditEventDto),
+    events: parseListSafely(auditEventDtoSchema, response.events).map(mapAuditEventDto),
     page: response.page ?? filters.page ?? 1,
     limit: response.limit ?? filters.limit ?? 50,
     hasNext: Boolean(response.hasNext ?? response.has_next)

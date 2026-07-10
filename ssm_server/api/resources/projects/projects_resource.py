@@ -3,7 +3,12 @@ from flask_restx import Resource, fields, inputs
 from flask import g
 
 from ssm_server.api.core import api, conn
-from ssm_server.access.is_auth import with_token, require_scope
+from ssm_server.api.resources.helpers import resolve_project_config
+from ssm_server.access.is_auth import (
+    with_token,
+    require_scope,
+    audit_event,
+)
 from ssm_server.access.policy import authorize
 
 projects_ns = api.namespace("projects", description="Project management")
@@ -12,6 +17,7 @@ project_model = api.model(
     {
         "slug": fields.String(required=True),
         "name": fields.String(required=True),
+        "description": fields.String(),
         "archived": fields.Boolean(),
     },
 )
@@ -26,12 +32,22 @@ project_create_parser.add_argument(
 project_create_parser.add_argument(
     "name", type=str, required=False, location="json"
 )
+project_create_parser.add_argument(
+    "description", type=str, required=False, location="json"
+)
 project_update_parser = api.parser()
 project_update_parser.add_argument(
     "name", type=str, required=False, location="json"
 )
 project_update_parser.add_argument(
     "archived", type=inputs.boolean, required=False, location="json"
+)
+project_update_parser.add_argument(
+    "description",
+    type=str,
+    required=False,
+    location="json",
+    store_missing=False,
 )
 
 
@@ -116,27 +132,22 @@ class ProjectsResource(Resource):
     def post(self):
         require_scope("projects:write")
         args = project_create_parser.parse_args()
-        result, code = conn.projects.create(args["slug"], args.get("name"))
+        result, code = conn.projects.create(
+            args["slug"], args.get("name"), description=args.get("description")
+        )
         if code >= 400:
             api.abort(code, result)
-        conn.audit.write_event(
-            {
-                "actor_type": "token",
-                "actor_id": g.actor.get("id"),
-                "token_id": g.actor.get("token_id"),
-                "action": "projects.write",
-                "project_slug": result.get("slug"),
-                "method": "POST",
-                "path": "/api/projects",
-                "status_code": 201,
-                "latency_ms": 0,
-            }
+        audit_event(
+            "projects.write",
+            project_slug=result.get("slug"),
+            status_code=201,
         )
         return {
             "status": "OK",
             "project": {
                 "slug": result["slug"],
                 "name": result["name"],
+                "description": result.get("description"),
                 "archived": bool(result.get("archived", False)),
             },
         }, 201
@@ -153,27 +164,21 @@ class ProjectItemResource(Resource):
             project_slug,
             name=args.get("name"),
             archived=args.get("archived"),
+            description=args.get("description"),
         )
         if code >= 400:
             api.abort(code, result)
-        conn.audit.write_event(
-            {
-                "actor_type": "token",
-                "actor_id": g.actor.get("id"),
-                "token_id": g.actor.get("token_id"),
-                "action": "projects.write",
-                "project_slug": result.get("slug"),
-                "method": "PATCH",
-                "path": f"/api/projects/{project_slug}",
-                "status_code": 200,
-                "latency_ms": 0,
-            }
+        audit_event(
+            "projects.write",
+            project_slug=result.get("slug"),
+            status_code=200,
         )
         return {
             "status": "OK",
             "project": {
                 "slug": result.get("slug"),
                 "name": result.get("name"),
+                "description": result.get("description"),
                 "archived": bool(result.get("archived", False)),
             },
         }, 200
@@ -182,9 +187,7 @@ class ProjectItemResource(Resource):
     @with_token
     def delete(self, project_slug):
         require_scope("projects:write")
-        project = conn.projects.get_by_slug(project_slug)
-        if not project:
-            api.abort(404, "Project not found")
+        project, _ = resolve_project_config(project_slug)
 
         config_ids = conn.configs.list_ids(project["_id"])
         conn.secrets_v2.delete_by_configs(config_ids)
@@ -198,17 +201,9 @@ class ProjectItemResource(Resource):
                 workspace_id, project["_id"]
             )
         conn.projects.delete(project["slug"])
-        conn.audit.write_event(
-            {
-                "actor_type": "token",
-                "actor_id": g.actor.get("id"),
-                "token_id": g.actor.get("token_id"),
-                "action": "projects.delete",
-                "project_slug": project.get("slug"),
-                "method": "DELETE",
-                "path": f"/api/projects/{project_slug}",
-                "status_code": 200,
-                "latency_ms": 0,
-            }
+        audit_event(
+            "projects.delete",
+            project_slug=project.get("slug"),
+            status_code=200,
         )
         return {"status": "OK"}, 200

@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-import os
-
 from flask_cors import CORS
 
-from ssm_server.api.core import app
+from ssm_server.api.core import app, settings
 from ssm_server.api.resources.secrets.kv_resource import Engine_KV  # noqa: F401
 from ssm_server.api.resources.auth.tokens_resource import Auth_Tokens  # noqa: F401
 from ssm_server.api.resources.auth.tokens_v2_resource import (  # noqa: F401
@@ -35,8 +33,14 @@ from ssm_server.api.resources.compare.compare_secret_resource import (  # noqa: 
     CompareSecretResource,
 )
 from ssm_server.api.resources.audit.audit_resource import AuditEventsResource  # noqa: F401
+from ssm_server.api.resources.icons.icons_resource import (  # noqa: F401
+    IconPackNamesResource,
+    IconPrefixesResource,
+)
 from ssm_server.api.resources.reload.reload_resource import (  # noqa: F401
     ReloadEventsResource,
+    ReloadReportResource,
+    ReloadStatusResource,
 )
 from ssm_server.api.resources.me import MeResource  # noqa: F401
 from ssm_server.api.resources.workspace.workspace_resource import (  # noqa: F401
@@ -58,13 +62,8 @@ from ssm_server.api.resources.auth.userpass_resource import (  # noqa: F401
 from ssm_server.api.resources.meta.version_resource import VersionResource  # noqa: F401
 from ssm_server.api.errors import errors  # noqa: F401
 
-cors_origins = [
-    origin.strip()
-    for origin in os.getenv("CORS_ORIGINS", "").split(",")
-    if origin.strip()
-]
 CORS(
     app,
-    resources={r"/api/*": {"origins": cors_origins or "*"}},
+    resources={r"/api/*": {"origins": settings.cors_origins_list or "*"}},
     allow_headers=["Authorization", "Content-Type", "X-API-KEY"],
 )
