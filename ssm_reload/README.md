@@ -118,6 +118,74 @@ There is no setting to bring the old recreate-on-drift behavior back. It raced
 your deploys and silently dropped compose-file-only variables — the kind of
 failure that only surfaces once, in production, at the worst time.
 
+## Swarm mode
+
+The bind-mounted `ssm-env` volume above only works on a **single Docker
+host**: a Swarm service's tasks can land on any node, and a plain Docker
+volume does not follow them there. Set `SSM_RELOAD_SWARM_MODE=true` to switch
+delivery to **Docker Swarm secrets or configs** instead — cluster-wide
+objects Swarm itself replicates to whichever node a task runs on.
+
+What's different from the default mode:
+
+- **The unit of change is the *service*, not a container.** ssm-reload
+  discovers Swarm services carrying `com.bearlike.ssm.enable=true` on
+  EITHER a service label (`deploy.labels` in a stack file) or a container
+  label (plain `labels:` under the service, without `deploy:`) — Compose
+  puts those two in different places, so ssm-reload checks both rather than
+  making you get the placement right. It mints a new immutable
+  secret/config object per revision and calls `docker service update` to
+  point the service at it. Swarm turns that into a rolling replacement of
+  every task, on every node — **this does reload running workloads
+  automatically**, the same promise as the default mode.
+- **Secrets are delivered as a mounted FILE, never as literal service env.**
+  Docker Swarm has no mechanism to merge secret bytes into a service's `Env`
+  the way a recreated container's environment can be merged. A Swarm
+  **secret**'s mount directory is fixed by Swarm itself — it always lands at
+  `/run/secrets/<project>-<config>.env` — while a Swarm **config** has no such
+  restriction, so it is mounted under `SSM_RELOAD_SWARM_CONFIG_MOUNT_DIR`
+  instead (default `/run/ssm`, matching the non-swarm mode's path).
+  **Your image's entrypoint must read that file itself** — source it
+  (`. /run/secrets/web-prod.env`) before exec'ing the real process, or use
+  an image that already reads `*_FILE`/dotenv-style secrets. An image that
+  hard-requires literal env vars and cannot be given an entrypoint wrapper
+  **cannot pick up a rotated secret automatically** in this mode; stay on the
+  default (non-swarm) mode for it, or restart it by hand after a rotation.
+- **Only a swarm MANAGER can create secrets/configs or update a service.**
+  Point ssm-reload's Docker socket at a manager node, and run **exactly one
+  instance for the whole swarm** — not one per node. Two instances would race
+  each other minting differently-named objects for the same revision.
+  `deploy.placement.constraints: [node.role == manager]` in the stack file is
+  how you pin it there.
+- **Old objects are pruned automatically, once nothing references them.**
+  Docker refuses to delete a secret still bound to a task, so ssm-reload
+  recomputes "is anything still using this?" from live cluster state every
+  pass and removes what it minted once nothing does — it holds no durable
+  bookkeeping of its own, same as everywhere else in this service.
+- **`SSM_RELOAD_SWARM_SECRET_KIND`** picks `secret` (encrypted at rest — the
+  default) or `config` (plain) as the object type.
+- **`SSM_RELOAD_SWARM_CONFIG_MOUNT_DIR`** (default `/run/ssm`) picks where a
+  `config`-kind object is mounted; ignored for the `secret` kind, whose
+  directory Swarm itself fixes.
+- **First boot is a real gap, not a nice-to-have.** A service's very first
+  `docker stack deploy` starts before ssm-reload has ever seen it, so no
+  secret is attached yet — an image that hard-requires the file will
+  crash-loop until the next poll (`SSM_RELOAD_POLL_INTERVAL`) attaches it and
+  rolls the service. Unlike the default mode's `SSM_RELOAD_PROJECTION_CONFIGS`
+  bootstrap list, there is no way to pre-attach a secret to a service that
+  does not exist yet — this is a structural property of Swarm secrets being
+  service-scoped, not a missing feature. You CAN close this gap yourself:
+  pre-create a placeholder secret and reference it statically in the
+  service's own `secrets:` block, at the SAME target ssm-reload will use
+  (`<project>-<config>.env`). ssm-reload's first successful pass replaces
+  that reference with its own live one at the same target — matched by
+  mount path, not by name — so the placeholder is taken over cleanly rather
+  than left attached alongside it. See the bootstrap comment in
+  `docker-stack.swarm.example.yml` for the exact commands.
+
+A complete, runnable stack lives at
+[`docker-stack.swarm.example.yml`](docker-stack.swarm.example.yml).
+
 ## Documentation
 
 Full product guide — quick start, configuration reference, behavior, and

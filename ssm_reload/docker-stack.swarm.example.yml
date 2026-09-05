@@ -1,0 +1,109 @@
+# Example Docker Swarm stack: ssm-reload managing Swarm SECRETS instead of
+# the bind-mounted `ssm-env` volume the single-host example uses.
+#
+#   docker stack deploy -c ssm_reload/docker-stack.swarm.example.yml ssmdemo
+#
+# Why this file looks different from docker-compose.example.yml:
+#
+#   * Swarm secrets/configs are IMMUTABLE cluster objects, delivered to a
+#     task as a FILE at container-create time -- there is no Swarm-native way
+#     to merge them into a service's literal environment the way a plain
+#     container's env can be merged. So the workload's entrypoint must SOURCE
+#     the mounted file itself (see the `web` service below); an image that
+#     only reads literal env vars needs a small wrapper, or must stay on the
+#     non-swarm (bind-mount) delivery mode instead.
+#   * Only a swarm MANAGER can create secrets/update services, so ssm-reload
+#     itself must be constrained to a manager node and run as a SINGLE
+#     replica -- two instances would race each other minting objects for the
+#     same revision. `deploy.placement.constraints` below is what enforces
+#     that; do not scale this service.
+#   * The control-plane labels (`com.bearlike.ssm.*`) are read from EITHER
+#     `deploy.labels` (the service's own labels) OR the plain `labels:` below
+#     it (the task template's container labels) -- Compose puts these two in
+#     different places (see the comment on `web` below), and ssm-reload
+#     checks both so it doesn't matter which one you use.
+#
+# Rollout is still automatic: when a config's secrets change, ssm-reload
+# mints a new Swarm secret and calls `docker service update`, which Swarm
+# itself rolls out to every task of that service, on every node, using the
+# service's own update policy. Nothing needs to be restarted by hand -- AS
+# LONG AS the workload reads its secrets from the mounted file rather than
+# expecting them as literal environment variables.
+
+# OPTIONAL bootstrap secret. ssm-reload attaches its OWN secret to `web`
+# dynamically via the Docker API once it discovers the service -- it does NOT
+# read this block. It exists only so `web` has SOMETHING at
+# /run/secrets/web-prod.env on its very FIRST boot, before ssm-reload's first
+# reconcile pass has run (see "First boot" in ../docs/SECRETS_RELOADER.md).
+# Create the placeholder once, then deploy:
+#
+#   printf 'PLACEHOLDER="set me"\n' | docker secret create test-prod.env -
+#   docker stack deploy -c ssm_reload/docker-stack.swarm.example.yml ssmdemo
+#
+# On ssm-reload's first successful pass it REPLACES this reference with its
+# own live secret at the SAME target (matched by mount path, not by name), so
+# the placeholder is safely taken over rather than left attached alongside
+# it. Skip this block entirely if `web` can tolerate crash-looping for one
+# poll interval on a truly first deploy.
+secrets:
+  test-prod.env:
+    external: true
+
+services:
+  ssm-reload:
+    image: ghcr.io/bearlike/ssm-reload:latest
+    environment:
+      SSM_BASE_URL: "http://ssm:5000/api"
+      SSM_TOKEN: "${SSM_RELOAD_TOKEN:?set SSM_RELOAD_TOKEN}"
+      SSM_RELOAD_POLL_INTERVAL: "30"
+      SSM_RELOAD_SWARM_MODE: "true"
+      # "secret" (encrypted at rest, the default) or "config" (plain).
+      SSM_RELOAD_SWARM_SECRET_KIND: "secret"
+      # Where a "config"-kind object is mounted; ignored for "secret" (Swarm
+      # itself fixes that directory at /run/secrets).
+      SSM_RELOAD_SWARM_CONFIG_MOUNT_DIR: "/run/ssm"
+    volumes:
+      # Must be a swarm MANAGER's socket -- only a manager can create
+      # secrets or update services. On a multi-manager swarm, bind-mount
+      # whichever manager this stack is pinned to.
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+
+  web:
+    image: myorg/web-api:1.4.2
+    # OPTIONAL: the bootstrap placeholder above, mounted at the SAME path
+    # ssm-reload uses (`env_filename(project, config)` = "web-prod.env",
+    # under Swarm's fixed `/run/secrets/` directory for the "secret" kind).
+    # Remove this block entirely if you skipped the top-level `secrets:`
+    # bootstrap section.
+    secrets:
+      - source: test-prod.env
+        target: web-prod.env
+        mode: 0440
+    # Docker secrets are files, not env vars: source the mounted document
+    # before exec'ing the real entrypoint. `set -a` exports every variable
+    # `.` (source) defines, so the app sees them as normal env vars -- this
+    # is how the file's KEY="value" lines become literal env vars inside the
+    # process, exactly like `env_file:` does for the non-swarm mode.
+    entrypoint:
+      - sh
+      - -c
+      - 'set -a; . /run/secrets/web-prod.env; set +a; exec "$0" "$@"'
+    command: ["/app/entrypoint.sh"]
+    environment: # app-native config, stays in git
+      LOG_LEVEL: info
+    deploy:
+      replicas: 3
+      # Service-level labels (`deploy.labels`) -- ssm-reload reads these.
+      # Compose's plain `labels:` directly under a service (NOT under
+      # `deploy:`) sets the task/container labels instead; ssm-reload reads
+      # those too, so either placement works -- use whichever this stack
+      # file already uses for its other labels, for consistency.
+      labels:
+        com.bearlike.ssm.enable: "true" # opt in — required
+        com.bearlike.ssm.config: "web/prod" # which project/config to track
+        # com.bearlike.ssm.revision is stamped by ssm-reload — do not set it.
+
