@@ -6,6 +6,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -14,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import {
   createWorkspaceMember,
+  deleteWorkspaceMember,
   getWorkspaceMembers,
   getWorkspaceSettings,
   updateWorkspaceMember,
@@ -26,6 +36,102 @@ import { notifyApiError } from '../lib/api/errorToast';
 
 const WORKSPACE_ROLES: WorkspaceMember['workspaceRole'][] = ['owner', 'admin', 'collaborator', 'viewer'];
 const PROJECT_ROLES: WorkspaceSettings['defaultProjectRole'][] = ['admin', 'collaborator', 'viewer', 'none'];
+
+function ResetPasswordDialog({
+  username,
+  onSubmit,
+  isPending
+}: {
+  username: string;
+  onSubmit: (password: string) => void;
+  isPending: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen);
+        if (!nextOpen) setPassword('');
+      }}
+    >
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm">
+          Reset Password
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Reset password for {username}</DialogTitle>
+          <DialogDescription>Sets a new password for this member immediately.</DialogDescription>
+        </DialogHeader>
+        <Input
+          type="password"
+          placeholder="New password"
+          value={password}
+          onChange={(event) => setPassword(event.target.value)}
+        />
+        <DialogFooter>
+          <Button
+            disabled={isPending || !password}
+            onClick={() => {
+              onSubmit(password);
+              setOpen(false);
+              setPassword('');
+            }}
+          >
+            Reset Password
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DeleteMemberDialog({
+  username,
+  onConfirm,
+  isPending
+}: {
+  username: string;
+  onConfirm: () => void;
+  isPending: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="destructive" size="sm">
+          Delete
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete {username}?</DialogTitle>
+          <DialogDescription>
+            This permanently removes the user, their credentials, and all workspace/project/group memberships. This
+            cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="destructive"
+            disabled={isPending}
+            onClick={() => {
+              onConfirm();
+              setOpen(false);
+            }}
+          >
+            Delete Member
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export function TeamPage() {
   const queryClient = useQueryClient();
@@ -77,6 +183,24 @@ export function TeamPage() {
       toast.success('Member status updated');
     },
     onError: (error) => notifyApiError(error, 'Failed to update member status')
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ username, password }: { username: string; password: string }) =>
+      updateWorkspaceMember(username, { password }),
+    onSuccess: () => {
+      toast.success('Password reset');
+    },
+    onError: (error) => notifyApiError(error, 'Failed to reset password')
+  });
+
+  const deleteMemberMutation = useMutation({
+    mutationFn: deleteWorkspaceMember,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.workspaceMembers() });
+      toast.success('Member deleted');
+    },
+    onError: (error) => notifyApiError(error, 'Failed to delete member')
   });
 
   const updateSettingsMutation = useMutation({
@@ -194,6 +318,22 @@ export function TeamPage() {
                         >
                           {member.disabled ? 'Disabled (click to enable)' : 'Enabled (click to disable)'}
                         </Button>
+                        {canManageMembers && (
+                          <ResetPasswordDialog
+                            username={member.username}
+                            isPending={resetPasswordMutation.isPending}
+                            onSubmit={(password) =>
+                              resetPasswordMutation.mutate({ username: member.username, password })
+                            }
+                          />
+                        )}
+                        {canManageMembers && member.username !== me?.username && (
+                          <DeleteMemberDialog
+                            username={member.username}
+                            isPending={deleteMemberMutation.isPending}
+                            onConfirm={() => deleteMemberMutation.mutate(member.username)}
+                          />
+                        )}
                       </div>
                     </div>
                   ))}

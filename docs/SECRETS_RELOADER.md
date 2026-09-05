@@ -407,6 +407,97 @@ is a no-op with zero cost. Events carry semantic-convention attributes
 
 ---
 
+## Swarm mode
+
+The quick start above delivers secrets via a bind-mounted volume, which only
+works on a **single Docker host**. Docker Swarm services can run their tasks
+on any node in the cluster, so set `SSM_RELOAD_SWARM_MODE=true` to switch
+delivery to **Docker Swarm secrets or configs** instead — cluster-wide objects
+Swarm itself replicates to whichever node a task lands on.
+
+### What changes
+
+| | Default (non-swarm) mode | Swarm mode |
+| --- | --- | --- |
+| Unit managed | A container | A Swarm **service** |
+| Opt-in label lives on | The container | The service's `deploy.labels` OR its task template's `labels:` — ssm-reload checks both |
+| Delivery mechanism | A dotenv file in a shared bind-mounted volume | A Docker **secret** or **config** object, attached to the service |
+| How secrets reach the process | `env_file:` — literal environment variables | A mounted FILE the process must read itself (there is no Swarm-native way to turn a secret into a literal env var) |
+| Mount path | `/run/ssm/<project>-<config>.env` | `/run/secrets/<project>-<config>.env` for the `secret` kind (fixed by Swarm itself); `SSM_RELOAD_SWARM_CONFIG_MOUNT_DIR` (default `/run/ssm`) for the `config` kind |
+| Rollout mechanism | Recreate the container | `docker service update`, which Swarm rolls out to every task across the cluster using the service's own update policy |
+| Where it must run | One instance per Docker host | Exactly **one instance for the whole swarm**, on a **manager** node |
+
+### Will it reload a running Swarm service when a secret changes?
+
+**Yes, automatically** — `ssm-reload` mints a new secret/config object per
+revision and calls `docker service update`, and Swarm itself rolls that out to
+every task of the service, on every node, following the service's own update
+policy. No manual `docker service update` is required.
+
+The one condition that must hold for this to actually reach the running
+process: **the image must read its secrets from the mounted file**, because
+Swarm has no mechanism to merge a secret's bytes into a service's literal
+environment the way a recreated container's env can be merged. Source the
+file in the entrypoint (`. /run/secrets/web-prod.env`) or use an image that
+already reads a `*_FILE`/dotenv-style secret. **An image that hard-requires
+literal environment variables, and cannot be given an entrypoint wrapper,
+cannot pick up a rotated secret automatically in swarm mode — it must be
+restarted by hand after a rotation**, or kept on the default (non-swarm) mode
+instead.
+
+### Requirements and constraints
+
+- **Manager-only, single instance.** Creating secrets/configs and updating a
+  service both require a swarm manager's Docker API. Point `ssm-reload`'s
+  socket at a manager node and run exactly one replica — two instances would
+  race each other minting differently-named objects for the same revision.
+  Pin it with `deploy.placement.constraints: [node.role == manager]`.
+- **`SSM_RELOAD_SWARM_SECRET_KIND`** selects `secret` (encrypted at rest — the
+  default) or `config` (plain).
+- **`SSM_RELOAD_SWARM_CONFIG_MOUNT_DIR`** (default `/run/ssm`) selects where a
+  `config`-kind object is mounted; ignored for the `secret` kind, whose
+  mount directory Swarm itself fixes at `/run/secrets`.
+- **Old objects are garbage-collected automatically.** Docker refuses to
+  delete a secret still bound to a task, so `ssm-reload` recomputes "is
+  anything still using this?" from live cluster state every pass and removes
+  what it minted once nothing does — no durable bookkeeping of its own.
+- **First boot is a real, structural gap.** A service's very first
+  `docker stack deploy` starts before `ssm-reload` has ever discovered it, so
+  no secret is attached yet; an image that hard-requires the file will
+  crash-loop until the next poll attaches it and rolls the service. Unlike the
+  default mode's `SSM_RELOAD_PROJECTION_CONFIGS` bootstrap list, there is no
+  way to pre-attach a secret to a service that does not exist yet.
+  What you CAN do: pre-create a placeholder secret and reference it
+  statically in the service's own `secrets:` block, at the same target
+  ssm-reload will use. Its first successful pass replaces that reference
+  with its own live one at the SAME target — matched by mount path, not by
+  name — taking it over rather than leaving both attached (which Swarm
+  would reject as a duplicate mount anyway). For example:
+
+  ```yaml
+  secrets:
+    test-prod.env:
+      external: true
+
+  services:
+    web:
+      secrets:
+        - source: test-prod.env
+          target: web-prod.env # matches env_filename(project, config)
+      entrypoint: ["sh", "-c", 'set -a; . /run/secrets/web-prod.env; set +a; exec "$0" "$@"']
+      command: ["/app/entrypoint.sh"]
+  ```
+
+  Create the placeholder once (`printf 'PLACEHOLDER="set me"\n' | docker secret
+  create test-prod.env -`), then `docker stack deploy`. Skip this entirely if
+  the image can tolerate crash-looping for one poll interval on a true first
+  deploy.
+
+A complete, runnable example lives at
+[`../ssm_reload/docker-stack.swarm.example.yml`](../ssm_reload/docker-stack.swarm.example.yml).
+
+---
+
 ## Run it anywhere, at any scale
 
 `ssm-reload` is stateless and isolated — it depends only on the SSM API and
@@ -451,8 +542,9 @@ conflict and need no coordination.
 
 - **Docker only.** Kubernetes support is designed for and can be added
   behind the same interface later; today `ssm-reload` manages Docker
-  containers. The projection sink is a seam too — a Kubernetes Secret slots in
-  behind the same renderer.
+  containers, plus Docker Swarm services in [swarm mode](#swarm-mode). The
+  projection sink is a seam too — a Kubernetes Secret slots in behind the
+  same renderer.
 - **Pull-based.** `ssm-reload` polls and watches Docker events; it does not
   require the SSM server to push to it.
 - **The tmpfs volume is empty after a reboot.** The reloader re-renders every

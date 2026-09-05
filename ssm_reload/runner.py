@@ -3,9 +3,10 @@
 ``reconcile`` is fired on two triggers:
 
 * a periodic poll every ``SSM_RELOAD_POLL_INTERVAL`` seconds, and
-* the Docker event stream (container ``start``/``create`` carrying the
-  fixed ``com.bearlike.ssm.enable=true`` label) for near-instant adoption
-  of new or redeployed containers.
+* the Docker event stream (container ``start``/``create``, or in swarm mode
+  service ``create``/``update``, carrying the fixed
+  ``com.bearlike.ssm.enable=true`` label) for near-instant adoption of new or
+  redeployed units.
 
 Both triggers call the same idempotent :func:`reconcile`; the event
 stream just wakes it up sooner. The runner keeps no DURABLE state -- its
@@ -21,11 +22,11 @@ import signal
 import socket
 import threading
 from types import FrameType
-from typing import Any
+from typing import TYPE_CHECKING, Any, Mapping
 
 import ssm_telemetry
 from ssm_contracts import Trigger
-from ssm_projection import DirectorySink
+from ssm_projection import DirectorySink, ProjectionSink
 from ssm_reload import __version__
 from ssm_reload.client import SsmClient
 from ssm_reload.config import (
@@ -38,6 +39,10 @@ from ssm_reload.docker_driver import DockerDriver, require_docker_sdk
 from ssm_reload.errors import SsmReloadError
 from ssm_reload.projection import Projector
 from ssm_reload.reconcile import Reconciler
+from ssm_reload.swarm_driver import SwarmDriver
+
+if TYPE_CHECKING:
+    from ssm_reload.driver import ReloadDriver
 
 logger = logging.getLogger("ssm_reload.runner")
 
@@ -48,7 +53,7 @@ class Runner:
     def __init__(
         self,
         settings: ReloadSettings,
-        driver: DockerDriver,
+        driver: "ReloadDriver",
         reconciler: Reconciler,
         *,
         host: str | None = None,
@@ -76,6 +81,13 @@ class Runner:
         with self._reconcile_lock:
             try:
                 self.reconciler.run(trigger)
+                # Swarm mode only: prune rotated secret/config objects no
+                # service references any more. Recomputed from live cluster
+                # state, so it is safe to run every pass -- see
+                # SwarmDriver.gc.
+                gc = getattr(self.driver, "gc", None)
+                if gc is not None:
+                    gc()
             except SsmReloadError as exc:
                 logger.warning("Reconcile pass skipped: %s", exc)
             except Exception as exc:  # keep the daemon alive on failure.
@@ -92,13 +104,27 @@ class Runner:
 
     def _event_loop(self) -> None:
         label = f"{ENABLE_LABEL}=true"
+        # DockerDriver watches container start/create; SwarmDriver watches
+        # service create/update (a service is never "started" itself -- its
+        # tasks are). Read off the driver rather than branching on its type,
+        # so a future driver just declares its own pair.
+        event_type = getattr(self.driver, "EVENT_TYPE", "container")
+        event_actions = getattr(
+            self.driver, "EVENT_ACTIONS", ["start", "create"]
+        )
         while not self._stop.is_set():
             try:
-                events = self.driver.client.events(
+                # `.client` (the underlying docker-py client) is a shared
+                # implementation detail of both Docker-based drivers, not
+                # part of the driver-agnostic `ReloadDriver` seam -- read via
+                # getattr so a future non-Docker driver isn't forced to grow
+                # a mismatched attribute just to satisfy this loop.
+                docker_client = getattr(self.driver, "client")
+                events = docker_client.events(
                     decode=True,
                     filters={
-                        "type": "container",
-                        "event": ["start", "create"],
+                        "type": event_type,
+                        "event": event_actions,
                         "label": label,
                     },
                 )
@@ -115,15 +141,19 @@ class Runner:
     def start(self) -> None:
         """Block running both triggers until interrupted."""
         logger.info(
-            "ssm-reload starting: host=%s poll=%ss projecting to %s",
+            "ssm-reload starting: host=%s poll=%ss",
             self.host,
             self.settings.poll_interval,
-            PROJECTION_DIR,
         )
-        # Best-effort: makes the volume a first-class Docker object that
-        # consumer stacks can declare `external: true`, and warns if an
-        # existing one would put projected secrets on the host's disk.
-        self.driver.ensure_volume(PROJECTION_VOLUME)
+        # Best-effort, and DockerDriver-only: makes the volume a first-class
+        # Docker object that consumer stacks can declare `external: true`,
+        # and warns if an existing one would put projected secrets on the
+        # host's disk. Swarm mode delivers via secret/config objects instead
+        # and has no local volume to create.
+        ensure_volume = getattr(self.driver, "ensure_volume", None)
+        if ensure_volume is not None:
+            ensure_volume(PROJECTION_VOLUME)
+            logger.info("Projecting to %s", PROJECTION_DIR)
         event_thread = threading.Thread(
             target=self._event_loop, name="ssm-reload-events", daemon=True
         )
@@ -139,15 +169,45 @@ def build_runner(settings: ReloadSettings) -> Runner:
     # injected, so nothing below reaches for its own dependencies.
     # The token is unwrapped only here, at its single point of use.
     client = SsmClient(settings.base_url, settings.token.get_secret_value())
-    driver = DockerDriver()
+    driver: "ReloadDriver"
+    sink: ProjectionSink
+    if settings.swarm_mode:
+        driver = SwarmDriver(
+            secret_kind=settings.swarm_secret_kind,
+            config_mount_dir=settings.swarm_config_mount_dir,
+        )
+        # Delivery IS the Swarm secret/config object in this mode; there is
+        # no local file for anything to read, so projecting one would only
+        # ever fail (no volume mounted) or mislead (a file nothing reads).
+        sink = _NullSink()
+    else:
+        driver = DockerDriver()
+        sink = DirectorySink(PROJECTION_DIR)
     reconciler = Reconciler(
         driver,
         client,
         socket.gethostname(),
-        Projector(DirectorySink(PROJECTION_DIR)),
+        Projector(sink),
         bootstrap_configs=settings.bootstrap_configs,
     )
     return Runner(settings, driver, reconciler, host=reconciler.host)
+
+
+class _NullSink:
+    """No-op :class:`ProjectionSink` for swarm mode.
+
+    ``exists`` reports true unconditionally, so :class:`Projector` never
+    forces an unconditional export chasing a "missing" file that was never
+    meant to be written; ``write`` does nothing and says so.
+    """
+
+    def write(
+        self, project: str, config: str, secrets: Mapping[str, str]
+    ) -> str:
+        return "swarm secret/config object (no local file projected)"
+
+    def exists(self, project: str, config: str) -> bool:
+        return True
 
 
 def main() -> int:

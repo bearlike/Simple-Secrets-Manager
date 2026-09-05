@@ -51,6 +51,9 @@ member_update_parser.add_argument(
 member_update_parser.add_argument(
     "disabled", type=bool, required=False, location="json"
 )
+member_update_parser.add_argument(
+    "password", type=str, required=False, location="json"
+)
 
 project_member_put_parser = api.parser()
 project_member_put_parser.add_argument(
@@ -177,6 +180,18 @@ def _update_member_disabled(username, payload):
     _, msg, code = conn.users.set_disabled(username, disabled)
     if code >= 400:
         api.abort(code, msg)
+
+
+def _update_member_password(username, payload):
+    if "password" not in payload:
+        return
+    password = payload.get("password")
+    if not password:
+        return
+    # Admin override: resets credentials directly, no current-password check.
+    status, code = conn.userpass.set_password(username, password)
+    if code >= 400:
+        api.abort(code, status)
 
 
 def _update_member_workspace_role(workspace_id, username, payload):
@@ -313,6 +328,7 @@ class WorkspaceMemberItemResource(Resource):
         payload = _parse_member_payload()
         _update_member_profile(username, payload)
         _update_member_disabled(username, payload)
+        _update_member_password(username, payload)
         _update_member_workspace_role(workspace_id, username, payload)
 
         user = conn.users.get(username)
@@ -334,19 +350,18 @@ class WorkspaceMemberItemResource(Resource):
         if not user:
             api.abort(404, "User not found")
 
-        _, msg, code = conn.users.set_disabled(username, True)
-        if code >= 400:
-            api.abort(code, msg)
-
-        membership = conn.memberships.get_workspace_membership(
-            workspace_id, username
+        # Hard delete: credentials, memberships, group membership, and the
+        # user document itself. Best-effort on the userpass entry since some
+        # legacy users may not have one.
+        conn.userpass.remove(username)
+        conn.memberships.remove_workspace_membership(workspace_id, username)
+        conn.memberships.remove_all_for_subject(
+            workspace_id, "user", username
         )
-        return {
-            "status": "OK",
-            "member": _serialize_member_row(
-                conn.users.get(username), membership
-            ),
-        }, 200
+        conn.groups.remove_user_from_all_groups(workspace_id, username)
+        conn.users.delete(username)
+
+        return {"status": "OK"}, 200
 
 
 @workspace_ns.route("/projects/<string:project_slug>/members")
