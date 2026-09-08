@@ -15,6 +15,14 @@ profile_update_parser.add_argument(
     "fullName", type=str, required=False, location="json"
 )
 
+password_update_parser = api.parser()
+password_update_parser.add_argument(
+    "currentPassword", type=str, required=True, location="json"
+)
+password_update_parser.add_argument(
+    "newPassword", type=str, required=True, location="json"
+)
+
 
 def _serialize_me(username):
     actor_context = conn.rbac.resolve_personal_actor(username)
@@ -70,3 +78,25 @@ class MeResource(Resource):
             api.abort(code, msg)
 
         return _serialize_me(username), 200
+
+
+@me_ns.route("/password")
+class MePasswordResource(Resource):
+    @api.doc(security=["Bearer", "Token"], parser=password_update_parser)
+    @with_token
+    def patch(self):
+        username = g.actor.get("subject_user")
+        if not username:
+            api.abort(403, "Service tokens do not have a user profile")
+
+        args = password_update_parser.parse_args()
+        if not conn.userpass.is_authorized(username, args["currentPassword"]):
+            api.abort(400, "Current password is incorrect")
+
+        status, code = conn.userpass.set_password(
+            username, args["newPassword"]
+        )
+        if code >= 400:
+            api.abort(code, status)
+
+        return {"status": "OK"}, 200

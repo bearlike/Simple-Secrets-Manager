@@ -33,4 +33,7 @@ source.
 | `SSM_RELOAD_LOG_LEVEL` |  | `INFO` | Log verbosity for the reloader's structured logs. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` |  | — | OTLP/HTTP endpoint to opt in to OpenTelemetry event export; unset disables telemetry entirely. |
 | `SSM_RELOAD_PROJECTION_CONFIGS` |  | (empty) | Comma-separated `project/config` pairs to project even when no container is bound to them yet — an `env_file` must exist BEFORE the first `compose up` that reads it. |
+| `SSM_RELOAD_SWARM_MODE` |  | `False` | Manage Docker Swarm services instead of local containers: deliver each config as a Swarm secret/config object and roll it out with `docker service update` on change. Requires the local Docker socket to belong to a swarm MANAGER node; run a single instance of ssm-reload per swarm, not one per node. |
+| `SSM_RELOAD_SWARM_SECRET_KIND` |  | `secret` | Swarm object kind used to deliver secrets when SSM_RELOAD_SWARM_MODE is set: `secret` (encrypted at rest, the default) or `config` (unencrypted). Ignored outside swarm mode. |
+| `SSM_RELOAD_SWARM_CONFIG_MOUNT_DIR` |  | `/run/ssm` | Absolute path a Swarm `config` object is mounted under when SSM_RELOAD_SWARM_SECRET_KIND=config; ignored for the `secret` kind, whose mount directory Swarm itself fixes at `/run/secrets`. Ignored outside swarm mode. |
 | `DOCKER_HOST` | | local Docker socket | Standard Docker endpoint override, honored directly by the Docker SDK's `docker.from_env()` — not a `ReloadSettings` field; `ssm-reload` never reads or validates it itself. |

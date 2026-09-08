@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { getMe, updateMe } from '../lib/api/me';
+import { changeMyPassword, getMe, updateMe } from '../lib/api/me';
 import { queryKeys } from '../lib/api/queryKeys';
 import { notifyApiError } from '../lib/api/errorToast';
 
@@ -17,6 +17,8 @@ export function AccountPage() {
 
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
     if (!me) return;
@@ -35,8 +37,20 @@ export function AccountPage() {
     }
   });
 
+  const changePasswordMutation = useMutation({
+    mutationFn: changeMyPassword,
+    onSuccess: () => {
+      setCurrentPassword('');
+      setNewPassword('');
+      toast.success('Password changed');
+    },
+    onError: (error) => {
+      notifyApiError(error, 'Failed to change password');
+    }
+  });
+
   return (
-    <div className="p-6 max-w-3xl">
+    <div className="p-6 max-w-3xl space-y-4">
       <Card>
         <CardHeader>
           <CardTitle>Account</CardTitle>
@@ -78,6 +92,35 @@ export function AccountPage() {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Change Password</CardTitle>
+          <CardDescription>Update your login password.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-2">
+            <label className="text-xs text-muted-foreground">Current Password</label>
+            <Input
+              type="password"
+              value={currentPassword}
+              onChange={(event) => setCurrentPassword(event.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <label className="text-xs text-muted-foreground">New Password</label>
+            <Input type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+          </div>
+          <div className="flex justify-end">
+            <Button
+              disabled={changePasswordMutation.isPending || !currentPassword || !newPassword}
+              onClick={() => changePasswordMutation.mutate({ currentPassword, newPassword })}
+            >
+              Change Password
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

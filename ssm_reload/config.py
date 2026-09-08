@@ -81,7 +81,15 @@ TMPFS_VOLUME_OPTS = {
     "o": "size=8m,mode=0750",
 }
 
+# Prefix for the Docker Swarm secret/config objects ssm-reload creates. Each
+# rotation mints a NEW object (Swarm objects are immutable once created), so
+# the name always carries a content hash; this is the fixed namespace for it,
+# same rationale as LABEL_PREFIX -- a knob here just lets a fleet's own
+# rotations collide with a hand-created object of the same short name.
+SWARM_OBJECT_PREFIX = "ssm"
+
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
+SwarmSecretKind = Literal["secret", "config"]
 
 
 class ReloadSettings(BaseSettings):
@@ -141,6 +149,36 @@ class ReloadSettings(BaseSettings):
             "BEFORE the first `compose up` that reads it."
         ),
     )
+    swarm_mode: bool = Field(
+        default=False,
+        validation_alias="SSM_RELOAD_SWARM_MODE",
+        description=(
+            "Manage Docker Swarm services instead of local containers: "
+            "deliver each config as a Swarm secret/config object and roll "
+            "it out with `docker service update` on change. Requires the "
+            "local Docker socket to belong to a swarm MANAGER node; run a "
+            "single instance of ssm-reload per swarm, not one per node."
+        ),
+    )
+    swarm_secret_kind: SwarmSecretKind = Field(
+        default="secret",
+        validation_alias="SSM_RELOAD_SWARM_SECRET_KIND",
+        description=(
+            "Swarm object kind used to deliver secrets when "
+            "SSM_RELOAD_SWARM_MODE is set: `secret` (encrypted at rest, the "
+            "default) or `config` (unencrypted). Ignored outside swarm mode."
+        ),
+    )
+    swarm_config_mount_dir: str = Field(
+        default="/run/ssm",
+        validation_alias="SSM_RELOAD_SWARM_CONFIG_MOUNT_DIR",
+        description=(
+            "Absolute path a Swarm `config` object is mounted under when "
+            "SSM_RELOAD_SWARM_SECRET_KIND=config; ignored for the `secret` "
+            "kind, whose mount directory Swarm itself fixes at "
+            "`/run/secrets`. Ignored outside swarm mode."
+        ),
+    )
 
     @property
     def bootstrap_configs(self) -> tuple[ConfigRef, ...]:
@@ -190,6 +228,24 @@ class ReloadSettings(BaseSettings):
         if isinstance(value, str):
             return value.strip().upper()
         return value
+
+    @field_validator("swarm_secret_kind", mode="before")
+    @classmethod
+    def _normalize_secret_kind(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().lower()
+        return value
+
+    @field_validator("swarm_config_mount_dir")
+    @classmethod
+    def _validate_mount_dir(cls, value: str) -> str:
+        # Fail fast: a relative path here would silently mount nowhere near
+        # what the operator expects once it reaches the Docker API.
+        if not value.startswith("/"):
+            raise ValueError(
+                f"{value!r} must be an absolute path (starting with '/')"
+            )
+        return value.rstrip("/") or "/"
 
     @classmethod
     def load(cls) -> "ReloadSettings":

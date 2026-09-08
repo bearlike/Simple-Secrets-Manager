@@ -104,3 +104,27 @@ def test_stray_whitespace_is_trimmed():
     settings = ReloadSettings(base_url="  http://ssm/api  ", token="  tok  ")
     assert settings.base_url == "http://ssm/api"
     assert settings.token.get_secret_value() == "tok"
+
+
+def test_swarm_config_mount_dir_defaults_to_run_ssm():
+    settings = ReloadSettings(base_url="http://ssm", token="t")
+    assert settings.swarm_config_mount_dir == "/run/ssm"
+
+
+def test_swarm_config_mount_dir_reads_override(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("SSM_BASE_URL", "http://ssm/api")
+    monkeypatch.setenv("SSM_TOKEN", "tok")
+    monkeypatch.setenv("SSM_RELOAD_SWARM_CONFIG_MOUNT_DIR", "/etc/ssm/")
+    settings = ReloadSettings.load()
+    # Trailing slash is normalized away so concatenation never double-slashes.
+    assert settings.swarm_config_mount_dir == "/etc/ssm"
+
+
+def test_swarm_config_mount_dir_must_be_absolute(monkeypatch):
+    _clear_env(monkeypatch)
+    monkeypatch.setenv("SSM_BASE_URL", "http://ssm/api")
+    monkeypatch.setenv("SSM_TOKEN", "tok")
+    monkeypatch.setenv("SSM_RELOAD_SWARM_CONFIG_MOUNT_DIR", "relative/path")
+    with pytest.raises(SsmReloadError):
+        ReloadSettings.load()

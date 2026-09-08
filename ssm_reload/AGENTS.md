@@ -11,7 +11,12 @@
 **delivery** (render every managed config to a dotenv file consumers read at
 create time) and **convergence** (recreate the containers it owns when those
 secrets change). It is an external service: it speaks only to the SSM HTTP API
-and the local Docker socket, and keeps no durable state of its own.
+and the local Docker socket, and keeps no durable state of its own. In
+**swarm mode** (`SSM_RELOAD_SWARM_MODE=true`) both jobs are reshaped around
+Docker Swarm services instead of containers: delivery becomes a Swarm
+secret/config object, and convergence becomes `docker service update`, which
+Swarm itself rolls out cluster-wide — see `swarm_driver.py` and the Session
+Lesson below.
 
 | Module | Answers |
 | --- | --- |
@@ -20,12 +25,13 @@ and the local Docker socket, and keeps no durable state of its own.
 | `projection.py` | `Projector` — the reloader's stateful wrapper over the stateless sink: which configs are already rendered (a MISSING file forces an unconditional export), and what revision was last rendered (so a config with no container bound still gets a 304 fast path). Rendering is best-effort. |
 | `driver.py` | The `ReloadDriver` Protocol — the seam the loop drives, so a Kubernetes driver can replace Docker without touching `reconcile`/`client`. |
 | `docker_driver.py` | The Docker implementation: `discover` (opt-in containers + their **lifecycle** facts), `read_binding`, `read_managed_keys`, `ensure_volume`, `apply` (non-destructive recreate + rollback + netns convergence), and the pure `build_recreate_spec` that clones a container's full runtime spec while MERGING fresh secrets into its env. |
+| `swarm_driver.py` | `SwarmDriver` — the Docker Swarm implementation of the same `ReloadDriver` seam, but for **services**, not containers: `discover` finds opted-in services (label lives in `Spec.Labels`, i.e. `deploy.labels`), `apply` mints an immutable secret/config object per revision and calls `service.update()` (`fetch_current_spec=True`, so untouched spec fields survive), and `gc()` prunes rotated objects nothing references any more, recomputed from live cluster state each pass. `read_env`/`read_managed_keys` are deliberately always-empty — see the Session Lesson below. |
 | `client.py` | The three-call SSM HTTP client: `conditional_export` (`If-None-Match` → 304 or 200+ETag), `report_reload` (`POST /reload/events`), and `report_status` (`POST /reload/report`, the per-cycle fleet heartbeat). Mirrors `ssm_cli/api.py` conventions but never imports `ssm_cli` (no `click`/`keyring` in a daemon). |
-| `config.py` | `ReloadSettings` — the ONE validated `pydantic-settings` class holding every env var the service reads; `.load()` fails fast on start-up (wrapping the pydantic error into `SsmReloadError`). Also everything that is deliberately NOT an env var: the `com.bearlike.ssm` label constants, the external-owner labels it reads but never writes, `PROJECTION_DIR`/`PROJECTION_VOLUME`, and the tmpfs volume options. `DOCKER_HOST` is honored by the Docker SDK itself, not parsed here. |
+| `config.py` | `ReloadSettings` — the ONE validated `pydantic-settings` class holding every env var the service reads; `.load()` fails fast on start-up (wrapping the pydantic error into `SsmReloadError`). Also everything that is deliberately NOT an env var: the `com.bearlike.ssm` label constants, the external-owner labels it reads but never writes, `PROJECTION_DIR`/`PROJECTION_VOLUME`, the tmpfs volume options, and `SWARM_OBJECT_PREFIX`. `DOCKER_HOST` is honored by the Docker SDK itself, not parsed here. |
 | `models.py` | The driver-agnostic types carried across the seam: `ConfigRef` (the ONE parser for `project/config`), `Unit` (`raw` is the driver's private handle), `Binding`, `Dependent`, and `Lifecycle` — whose fields are each a REASON TO REFUSE a recreate, and which answers the questions about them itself (`settling_reason`, `stranded_by_recreate`) rather than letting the loop reach into its state. |
 | `errors.py` | The `SsmReloadError` hierarchy; any one raised while talking to SSM means "do nothing for this config". |
 | `__main__.py` | Entry point for `python -m ssm_reload`. |
-| `Dockerfile` / `docker-compose.example.yml` | How the service is packaged and deployed alongside an opted-in workload (the example is the worked gluetun + netns-dependent stack). |
+| `Dockerfile` / `docker-compose.example.yml` / `docker-stack.swarm.example.yml` | How the service is packaged and deployed alongside an opted-in workload (the compose example is the worked gluetun + netns-dependent stack; the stack example is the swarm-mode equivalent). |
 
 ## Non-obvious decisions
 
@@ -378,3 +384,63 @@ and the local Docker socket, and keeps no durable state of its own.
   `docker run --rm <img>` reaching the `Configuration error:` /
   `ReloadSettings.load()` stage — a `ModuleNotFoundError` before that line
   means a dep is missing from the image.
+- **Swarm mode (`SSM_RELOAD_SWARM_MODE`) manages services, not containers —
+  and that forces a different delivery mechanism, not just a different
+  driver.** A container's env can be merged on recreate; a Swarm secret/config
+  cannot be merged into a service's literal env at all — Swarm only ever
+  mounts it as a FILE, so the workload's entrypoint must source it itself.
+  `SwarmDriver.read_env`/`read_managed_keys` are deliberately hard-coded empty
+  (never `{}`/`set()` from a real read) because there is nothing on the
+  service spec to compare a secret's *contents* against — the adopt-by-
+  comparison trick that lets container mode skip a redundant recreate simply
+  does not apply here; `held_revision == new_etag` (checked before adoption is
+  ever considered) is what keeps the steady state cheap instead. Swarm
+  secrets/configs are also immutable and cluster-wide (not per-host), which is
+  why rotation mints a brand-new object per revision instead of editing one in
+  place, and why exactly ONE `ssm-reload` instance — on a manager node — may
+  run per swarm: two instances would race to mint differently-named objects
+  for the same revision. Verified against docker-py 7.2.0:
+  `Service.update(secrets=[...], labels=...)` defaults
+  `fetch_current_spec=True` and merges at the FIELD level (only the keys you
+  pass override; everything else — image, command, mounts, healthcheck,
+  placement, networks — comes from the live spec), so passing only
+  `secrets`/`labels` is safe and does not need a hand-rolled full-spec clone
+  the way the container driver's `build_recreate_spec` does. Objects this
+  service minted are deleted only once `gc()` (called every pass, from live
+  `service.list()` state, never persisted) finds nothing still referencing
+  them — Swarm itself refuses to delete a secret still bound to a task, so
+  there is no safe way to prune eagerly.
+- **Two swarm-mode bugs, both from trusting a Docker asymmetry that isn't
+  obvious until you hit it.** (1) `docker service ls`'s own `label` filter
+  only ever inspects a service's OWN labels (`Spec.Labels`, i.e. Compose's
+  `deploy.labels`) — never its task template's container labels (Compose's
+  plain `labels:` under a service, without `deploy:`). Filtering `discover()`
+  server-side on that label silently dropped every service opted in the
+  "wrong" way, with NO error anywhere — it just looked like ssm-reload was
+  ignoring the labels entirely. Fix: fetch every service unfiltered and check
+  BOTH label sources in Python (`_labels()` merges them, service wins on
+  conflict since that's where ssm-reload writes its own). (2) A Swarm
+  **secret**'s mount directory is hard-fixed to `/run/secrets/` — `target`
+  only renames the file, it never relocates it — while a **config** has no
+  such restriction and accepts an arbitrary absolute path. Passing the same
+  bare filename for both kinds (as an early draft did) meant secrets landed
+  at the documented `/run/secrets/<file>` but configs landed at `/<file>`
+  (root), contradicting the docs' claimed `/run/ssm/<file>` parity with the
+  non-swarm mode. Fix: `_target()` branches on `secret_kind` — bare filename
+  for secrets, `SWARM_CONFIG_MOUNT_DIR`-prefixed for configs. Neither bug
+  raised an exception or showed up in logs; both were "nothing happens,
+  silently" failures, which is why `test_swarm_driver.py` now asserts
+  `discover()` finds a service via EITHER label placement, and asserts the
+  literal mount path for each `secret_kind`, not just that `apply()` ran.
+- **First-boot bootstrap for swarm mode: match by mount TARGET, not by our
+  own naming prefix, when deciding what to replace.** An operator can
+  pre-create a placeholder secret and reference it statically in the
+  service's `secrets:` block so the file exists before ssm-reload's first
+  pass (mirrors the non-swarm mode's `SSM_RELOAD_PROJECTION_CONFIGS`
+  bootstrap, but there is no equivalent env-var list here since a secret
+  can't be attached to a service that doesn't exist yet). For that hand-off
+  to be safe, `_update_service`'s "which existing reference do I replace"
+  check keys off `File.Name` (the mount target) rather than the
+  `ssm-<project>-<config>-` name prefix ssm-reload itself mints — Swarm
+  already forbids two references at one target, so this is also strictly
+  more correct for the steady state, not just the bootstrap case.

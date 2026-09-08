@@ -104,6 +104,27 @@ class User_Pass:
         result = {"status": "OK"}
         return result, 200
 
+    def set_password(self, username, password):
+        """Overwrite an existing user's password (admin/self reset).
+        Args:
+            username (str): Username
+            password (str): New plaintext password
+        Returns:
+            dict : Dictionary with operation status
+        """
+        finder = self._userpass.find_one({"username": username})
+        if not finder:
+            return "User does not exist", 400
+        if not self.p_pol.check(password):
+            return f"Password policy not met. {self.p_pol}", 400
+        password_hash = generate_password_hash(
+            password, method="pbkdf2:sha256"
+        )
+        self._userpass.update_one(
+            {"username": username}, {"$set": {"password": password_hash}}
+        )
+        return {"status": "OK"}, 200
+
     def is_authorized(self, username, password):
         """Check if a userpass is valid
         Args:

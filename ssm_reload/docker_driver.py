@@ -97,6 +97,10 @@ class RecreateSpec:
 class DockerDriver:
     """Manage local Docker containers opted in via ``<prefix>.enable=true``."""
 
+    # What the event stream watches to adopt a new/redeployed unit fast.
+    EVENT_TYPE = "container"
+    EVENT_ACTIONS = ["start", "create"]
+
     def __init__(self, *, client: Any = None) -> None:
         self._client = client
 

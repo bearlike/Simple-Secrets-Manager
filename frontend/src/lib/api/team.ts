@@ -62,11 +62,18 @@ export async function updateWorkspaceMember(
     fullName: string;
     workspaceRole: WorkspaceMember['workspaceRole'];
     disabled: boolean;
+    password: string;
   }>
 ) {
   await apiClient<WorkspaceMembersResponseDto>(`/workspace/members/${username}`, {
     method: 'PATCH',
     body: JSON.stringify(updates)
+  });
+}
+
+export async function deleteWorkspaceMember(username: string) {
+  await apiClient<{ status?: string }>(`/workspace/members/${username}`, {
+    method: 'DELETE'
   });
 }
 

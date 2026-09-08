@@ -15,3 +15,10 @@ export async function updateMe(input: { email?: string; fullName?: string }): Pr
   });
   return mapMeResponseDto(meResponseDtoSchema.parse(response));
 }
+
+export async function changeMyPassword(input: { currentPassword: string; newPassword: string }): Promise<void> {
+  await apiClient<unknown>('/me/password', {
+    method: 'PATCH',
+    body: JSON.stringify(input)
+  });
+}
