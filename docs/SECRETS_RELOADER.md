@@ -484,8 +484,6 @@ instead.
       secrets:
         - source: test-prod.env
           target: web-prod.env # matches env_filename(project, config)
-      entrypoint: ["sh", "-c", 'set -a; . /run/secrets/web-prod.env; set +a; exec "$0" "$@"']
-      command: ["/app/entrypoint.sh"]
   ```
 
   Create the placeholder once (`printf 'PLACEHOLDER="set me"\n' | docker secret
