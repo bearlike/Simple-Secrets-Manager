@@ -83,16 +83,6 @@ services:
       - source: test-prod.env
         target: web-prod.env
         mode: 0440
-    # Docker secrets are files, not env vars: source the mounted document
-    # before exec'ing the real entrypoint. `set -a` exports every variable
-    # `.` (source) defines, so the app sees them as normal env vars -- this
-    # is how the file's KEY="value" lines become literal env vars inside the
-    # process, exactly like `env_file:` does for the non-swarm mode.
-    entrypoint:
-      - sh
-      - -c
-      - 'set -a; . /run/secrets/web-prod.env; set +a; exec "$0" "$@"'
-    command: ["/app/entrypoint.sh"]
     environment: # app-native config, stays in git
       LOG_LEVEL: info
     deploy:
